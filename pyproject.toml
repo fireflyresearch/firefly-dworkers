@@ -69,8 +69,9 @@ cli = [
     "typer[all]>=0.15.0",
     "rich>=13.9.0",
 ]
+presentation = ["python-pptx>=1.0.0"]
 all = [
-    "firefly-dworkers[web,browser,sharepoint,google,confluence,jira,slack,teams,email,data,server,cli]",
+    "firefly-dworkers[web,browser,sharepoint,google,confluence,jira,slack,teams,email,data,server,cli,presentation]",
 ]
 dev = [
     "pytest>=8.3.0",

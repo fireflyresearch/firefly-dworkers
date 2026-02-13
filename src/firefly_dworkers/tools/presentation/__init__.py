@@ -13,10 +13,12 @@ from firefly_dworkers.tools.presentation.models import (
     SlideSpec,
     TableSpec,
 )
+from firefly_dworkers.tools.presentation.powerpoint import PowerPointTool
 
 __all__ = [
     "ChartSpec",
     "PlaceholderInfo",
+    "PowerPointTool",
     "PresentationData",
     "PresentationTool",
     "ShapeInfo",
