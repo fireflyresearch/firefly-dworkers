@@ -257,6 +257,339 @@ try_cmd() {
     return 1
 }
 
+# ── Banner + TUI display ────────────────────────────────────────────────────
+
+print_banner() {
+    printf "%s" "${BRIGHT_YELLOW}"
+    cat <<'BANNER'
+    .___                    __
+  __| _/_  _  _____________|  | __ ___________  ______
+ / __ |\ \/ \/ /  _ \_  __ \  |/ // __ \_  __ \/  ___/
+/ /_/ | \     (  <_> )  | \/    <\  ___/|  | \/\___ \
+\____ |  \/\_/ \____/|__|  |__|_ \\___  >__|  /____  >
+     \/                         \/    \/           \/
+BANNER
+    printf "%s\n" "${RESET}"
+    printf "  %s\n" "${CYAN}        dworkers — Digital Workers as a Service${RESET}"
+    printf "  %s\n" "${DIM}              Installer v${DWORKERS_VERSION}${RESET}"
+}
+
+print_welcome() {
+    print_banner
+    echo ""
+    printf "  %s\n" "Welcome! This will install dworkers v${DWORKERS_VERSION} on your system."
+}
+
+_menu_draw() {
+    local current="$1"
+    shift
+    local options=("$@")
+    local i=0
+    for opt in "${options[@]}"; do
+        if [[ $i -eq $current ]]; then
+            printf "  %s %s\n" "${BRIGHT_CYAN}›${RESET}" "${BOLD_WHITE}${opt}${RESET}"
+        else
+            printf "  %s %s\n" " " "${DIM}${opt}${RESET}"
+        fi
+        i=$((i + 1))
+    done
+}
+
+menu_select() {
+    local _result_var="$1"
+    shift
+    local options=("$@")
+    local count=${#options[@]}
+    local selected=0
+
+    # Non-interactive: return first option immediately
+    if [[ "${OPT_YES:-0}" == "1" ]] || ! [ -t 0 ]; then
+        eval "$_result_var=0"
+        return 0
+    fi
+
+    # Hide cursor
+    printf "\033[?25l"
+    # Ensure cursor is restored on exit
+    trap 'printf "\033[?25h"' RETURN 2>/dev/null || true
+
+    # Draw initial menu
+    _menu_draw "$selected" "${options[@]}"
+
+    while true; do
+        # Read a single character
+        local key=""
+        IFS= read -rsn1 key
+
+        if [[ "$key" == "" ]]; then
+            # Enter pressed
+            break
+        fi
+
+        if [[ "$key" == $'\033' ]]; then
+            # Escape sequence — read two more chars
+            local seq1="" seq2=""
+            IFS= read -rsn1 seq1
+            IFS= read -rsn1 seq2
+            if [[ "$seq1" == "[" ]]; then
+                case "$seq2" in
+                    A)  # Up arrow
+                        selected=$(( (selected - 1 + count) % count ))
+                        ;;
+                    B)  # Down arrow
+                        selected=$(( (selected + 1) % count ))
+                        ;;
+                esac
+            fi
+        fi
+
+        # Redraw: move cursor up by count lines, then redraw
+        printf "\033[%dA" "$count"
+        _menu_draw "$selected" "${options[@]}"
+    done
+
+    # Restore cursor
+    printf "\033[?25h"
+
+    eval "$_result_var=$selected"
+}
+
+_toggle_draw() {
+    local current="$1"
+    shift
+    # Remaining args: labels array then states array
+    # We pass them as: count label1 label2 ... state1 state2 ...
+    local count="$1"
+    shift
+    local labels=()
+    local descs=()
+    local i=0
+    while [[ $i -lt $count ]]; do
+        labels+=("$1")
+        shift
+        i=$((i + 1))
+    done
+    local states=()
+    i=0
+    while [[ $i -lt $count ]]; do
+        states+=("$1")
+        shift
+        i=$((i + 1))
+    done
+
+    local selected_count=0
+    for s in "${states[@]}"; do
+        if [[ "$s" == "1" ]]; then
+            selected_count=$((selected_count + 1))
+        fi
+    done
+
+    i=0
+    for label in "${labels[@]}"; do
+        local desc=""
+        if [[ $i -lt ${#descs[@]:-0} ]]; then
+            desc=""
+        fi
+        local marker=""
+        local color=""
+        if [[ "${states[$i]}" == "1" ]]; then
+            marker="${BRIGHT_GREEN}◉${RESET}"
+        else
+            marker="${DIM}○${RESET}"
+        fi
+        if [[ $i -eq $current ]]; then
+            printf "  %s %s\n" "$marker" "${BOLD_WHITE}${label}${RESET}"
+        else
+            printf "  %s %s\n" "$marker" "${DIM}${label}${RESET}"
+        fi
+        i=$((i + 1))
+    done
+    printf "  %s\n" "${DIM}${selected_count}/${count} selected  |  ↑↓ move  space toggle  a all  n none  enter confirm${RESET}"
+}
+
+toggle_picker() {
+    local _result_var="$1"
+    shift
+
+    # Parse "label:desc" items
+    local labels=()
+    local descs=()
+    local states=()
+    local count=0
+    for item in "$@"; do
+        local label="${item%%:*}"
+        local desc=""
+        if [[ "$item" == *":"* ]]; then
+            desc="${item#*:}"
+        fi
+        labels+=("$label")
+        descs+=("$desc")
+        states+=(0)
+        count=$((count + 1))
+    done
+
+    # Pre-select items via TOGGLE_PRESELECT
+    if [[ -n "${TOGGLE_PRESELECT:-}" ]]; then
+        for idx in $TOGGLE_PRESELECT; do
+            if [[ $idx -ge 0 ]] && [[ $idx -lt $count ]]; then
+                states[$idx]=1
+            fi
+        done
+    fi
+
+    # Non-interactive: return pre-selected items
+    if [[ "${OPT_YES:-0}" == "1" ]] || ! [ -t 0 ]; then
+        local result=""
+        local i=0
+        while [[ $i -lt $count ]]; do
+            if [[ "${states[$i]}" == "1" ]]; then
+                if [[ -n "$result" ]]; then
+                    result="${result},${labels[$i]}"
+                else
+                    result="${labels[$i]}"
+                fi
+            fi
+            i=$((i + 1))
+        done
+        eval "$_result_var=\"\$result\""
+        return 0
+    fi
+
+    local current=0
+
+    # Hide cursor
+    printf "\033[?25l"
+    trap 'printf "\033[?25h"' RETURN 2>/dev/null || true
+
+    # Initial draw (count lines + 1 for status bar)
+    _toggle_draw "$current" "$count" "${labels[@]}" "${states[@]}"
+
+    while true; do
+        local key=""
+        IFS= read -rsn1 key
+
+        if [[ "$key" == "" ]]; then
+            # Enter — confirm
+            break
+        fi
+
+        case "$key" in
+            " ")
+                # Toggle current item
+                if [[ "${states[$current]}" == "1" ]]; then
+                    states[$current]=0
+                else
+                    states[$current]=1
+                fi
+                ;;
+            a)
+                # Select all
+                local j=0
+                while [[ $j -lt $count ]]; do
+                    states[$j]=1
+                    j=$((j + 1))
+                done
+                ;;
+            n)
+                # Select none
+                local j=0
+                while [[ $j -lt $count ]]; do
+                    states[$j]=0
+                    j=$((j + 1))
+                done
+                ;;
+            $'\033')
+                # Escape sequence
+                local seq1="" seq2=""
+                IFS= read -rsn1 seq1
+                IFS= read -rsn1 seq2
+                if [[ "$seq1" == "[" ]]; then
+                    case "$seq2" in
+                        A) current=$(( (current - 1 + count) % count )) ;;
+                        B) current=$(( (current + 1) % count )) ;;
+                    esac
+                fi
+                ;;
+        esac
+
+        # Redraw: move up count+1 lines (options + status bar)
+        printf "\033[%dA" "$((count + 1))"
+        _toggle_draw "$current" "$count" "${labels[@]}" "${states[@]}"
+    done
+
+    # Restore cursor
+    printf "\033[?25h"
+
+    # Build comma-separated result of selected labels
+    local result=""
+    local i=0
+    while [[ $i -lt $count ]]; do
+        if [[ "${states[$i]}" == "1" ]]; then
+            if [[ -n "$result" ]]; then
+                result="${result},${labels[$i]}"
+            else
+                result="${labels[$i]}"
+            fi
+        fi
+        i=$((i + 1))
+    done
+    eval "$_result_var=\"\$result\""
+}
+
+confirm() {
+    local prompt="$1"
+    local default="${2:-n}"
+
+    # Skip if non-interactive
+    if [[ "${OPT_YES:-0}" == "1" ]]; then
+        return 0
+    fi
+
+    local hint=""
+    if [[ "$default" == "y" ]]; then
+        hint="(Y/n)"
+    else
+        hint="(y/N)"
+    fi
+
+    printf "  %s %s " "$prompt" "${DIM}${hint}${RESET}"
+
+    local answer=""
+    read -r answer
+
+    # Default on empty
+    if [[ -z "$answer" ]]; then
+        answer="$default"
+    fi
+
+    case "$answer" in
+        [yY]|[yY][eE][sS]) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+prompt_path() {
+    local title="$1"
+    local default_path="$2"
+    local _result_var="$3"
+
+    # Non-interactive: use default
+    if [[ "${OPT_YES:-0}" == "1" ]] || ! [ -t 0 ]; then
+        eval "$_result_var=\"\$default_path\""
+        return 0
+    fi
+
+    printf "  %s %s: " "$title" "${DIM}[${default_path}]${RESET}"
+    local answer=""
+    read -r answer
+
+    if [[ -z "$answer" ]]; then
+        answer="$default_path"
+    fi
+
+    eval "$_result_var=\"\$answer\""
+}
+
 # ── Test mode guard ──────────────────────────────────────────────────────────
 # When sourced with DWORKERS_TEST_MODE=1, stop here so tests can call
 # individual functions without triggering the main installer flow.

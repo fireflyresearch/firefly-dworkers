@@ -87,6 +87,16 @@ assert_nonzero "Arch detected" "$DETECTED_ARCH"
 
 echo ""
 
+# --- Banner ---
+echo "  Banner"
+echo "  ──────"
+
+banner_output="$(print_banner)"
+assert_contains "banner has dworkers" "dworkers" "$banner_output"
+assert_contains "banner has version" "$DWORKERS_VERSION" "$banner_output"
+
+echo ""
+
 # --- Summary ---
 echo "  ───────────────────────"
 printf "  %d passed, %d failed\n\n" "$PASS" "$FAIL"
