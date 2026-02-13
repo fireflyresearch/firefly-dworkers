@@ -36,6 +36,7 @@ import firefly_dworkers.tools.storage.confluence  # noqa: F401
 import firefly_dworkers.tools.storage.google_drive  # noqa: F401
 import firefly_dworkers.tools.storage.s3  # noqa: F401
 import firefly_dworkers.tools.storage.sharepoint  # noqa: F401
+import firefly_dworkers.tools.vision.analysis  # noqa: F401
 import firefly_dworkers.tools.web.browser  # noqa: F401
 import firefly_dworkers.tools.web.flybrowser  # noqa: F401
 import firefly_dworkers.tools.web.rss  # noqa: F401
