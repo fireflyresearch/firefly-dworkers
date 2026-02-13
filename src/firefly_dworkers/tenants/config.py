@@ -204,6 +204,19 @@ class DocumentConnectorConfig(BaseConnectorConfig):
     credentials_json: str = ""
 
 
+class SpreadsheetConnectorConfig(BaseConnectorConfig):
+    """Spreadsheet tool configuration.
+
+    Controls which spreadsheet backend is used:
+    ``"excel"`` for local .xlsx via openpyxl, or
+    ``"google_sheets_spreadsheet"`` for Google Sheets API.
+    """
+
+    provider: str = "excel"
+    service_account_key: str = ""
+    credentials_json: str = ""
+
+
 class ConnectorsConfig(BaseModel, extra="allow"):
     """Typed connector configuration registry.
 
@@ -227,6 +240,7 @@ class ConnectorsConfig(BaseModel, extra="allow"):
     api: APIConnectorConfig = Field(default_factory=APIConnectorConfig)
     presentation: PresentationConnectorConfig = Field(default_factory=PresentationConnectorConfig)
     document: DocumentConnectorConfig = Field(default_factory=DocumentConnectorConfig)
+    spreadsheet: SpreadsheetConnectorConfig = Field(default_factory=SpreadsheetConnectorConfig)
 
     def enabled_connectors(self) -> dict[str, BaseConnectorConfig]:
         """Return only connectors where ``enabled=True``."""

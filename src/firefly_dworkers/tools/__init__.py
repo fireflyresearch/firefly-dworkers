@@ -29,6 +29,8 @@ import firefly_dworkers.tools.presentation.google_slides  # noqa: F401
 import firefly_dworkers.tools.presentation.powerpoint  # noqa: F401
 import firefly_dworkers.tools.project.asana  # noqa: F401
 import firefly_dworkers.tools.project.jira  # noqa: F401
+import firefly_dworkers.tools.spreadsheet.excel  # noqa: F401
+import firefly_dworkers.tools.spreadsheet.google_sheets  # noqa: F401
 import firefly_dworkers.tools.storage.confluence  # noqa: F401
 import firefly_dworkers.tools.storage.google_drive  # noqa: F401
 import firefly_dworkers.tools.storage.s3  # noqa: F401
