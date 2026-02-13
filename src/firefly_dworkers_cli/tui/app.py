@@ -5,7 +5,7 @@ from __future__ import annotations
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
-from textual.widgets import Static, ContentSwitcher, Footer
+from textual.widgets import ContentSwitcher, Footer, Static
 
 from firefly_dworkers_cli.tui.theme import APP_CSS
 from firefly_dworkers_cli.tui.widgets.sidebar import NavigationSidebar

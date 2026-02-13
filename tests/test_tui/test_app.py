@@ -1,6 +1,5 @@
 """Test DworkersApp shell."""
 
-import pytest
 from firefly_dworkers_cli.tui.app import DworkersApp
 
 
