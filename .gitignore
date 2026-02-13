@@ -53,3 +53,6 @@ Thumbs.db
 # Build artifacts
 *.so
 *.dylib
+
+# Worktrees
+.worktrees/
