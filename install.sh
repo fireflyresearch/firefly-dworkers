@@ -44,6 +44,8 @@ else
     BRIGHT_RED=$'\033[1;31m'
 fi
 
+CURSOR_HIDDEN=0
+
 # ── Output helpers ────────────────────────────────────────────────────────────
 
 info() {
@@ -221,8 +223,6 @@ start_spinner() {
     fi
     _spin "$msg" &
     SPINNER_PID=$!
-    # Ensure spinner is cleaned up on unexpected exit
-    trap 'stop_spinner 2>/dev/null' EXIT
 }
 
 stop_spinner() {
@@ -232,29 +232,6 @@ stop_spinner() {
         SPINNER_PID=""
         printf "\r\033[2K"
     fi
-}
-
-# ── Command runner ───────────────────────────────────────────────────────────
-
-try_cmd() {
-    local max_attempts=3
-    local attempt=1
-    local backoff=1
-
-    while [[ $attempt -le $max_attempts ]]; do
-        if "$@"; then
-            return 0
-        fi
-        if [[ $attempt -lt $max_attempts ]]; then
-            warn "Attempt $attempt failed, retrying in ${backoff}s..."
-            sleep "$backoff"
-            backoff=$((backoff * 2))
-        fi
-        attempt=$((attempt + 1))
-    done
-
-    fail "Command failed after $max_attempts attempts: $*"
-    return 1
 }
 
 # ── Banner + TUI display ────────────────────────────────────────────────────
@@ -304,14 +281,13 @@ menu_select() {
 
     # Non-interactive: return first option immediately
     if [[ "${OPT_YES:-0}" == "1" ]] || ! [ -t 0 ]; then
-        eval "$_result_var=0"
+        eval "$_result_var=\"0\""
         return 0
     fi
 
     # Hide cursor
+    CURSOR_HIDDEN=1
     printf "\033[?25l"
-    # Ensure cursor is restored on exit
-    trap 'printf "\033[?25h"' RETURN 2>/dev/null || true
 
     # Draw initial menu
     _menu_draw "$selected" "${options[@]}"
@@ -350,8 +326,9 @@ menu_select() {
 
     # Restore cursor
     printf "\033[?25h"
+    CURSOR_HIDDEN=0
 
-    eval "$_result_var=$selected"
+    eval "$_result_var=\"\$selected\""
 }
 
 _toggle_draw() {
@@ -458,8 +435,8 @@ toggle_picker() {
     local current=0
 
     # Hide cursor
+    CURSOR_HIDDEN=1
     printf "\033[?25l"
-    trap 'printf "\033[?25h"' RETURN 2>/dev/null || true
 
     # Initial draw (count lines + 1 for status bar)
     _toggle_draw "$current" "$count" "${labels[@]}" "${states[@]}"
@@ -519,6 +496,7 @@ toggle_picker() {
 
     # Restore cursor
     printf "\033[?25h"
+    CURSOR_HIDDEN=0
 
     # Build comma-separated result of selected labels
     local result=""
@@ -586,6 +564,9 @@ prompt_path() {
     if [[ -z "$answer" ]]; then
         answer="$default_path"
     fi
+
+    # Expand leading tilde
+    answer="${answer/#\~/$HOME}"
 
     eval "$_result_var=\"\$answer\""
 }
@@ -879,12 +860,13 @@ print_success() {
     printf "  %s\n" "${CYAN}dworkers-uninstall${RESET}"
 
     echo ""
-    printf "  %s\n\n" "${DIM}Docs: https://docs.fireflyresearch.com/dworkers${RESET}"
+    printf "  %s\n\n" "${DIM}Docs: https://github.com/fireflyresearch/firefly-dworkers/tree/main/docs${RESET}"
 }
 
 # ── Uninstall flow ──────────────────────────────────────────────────────────
 
 run_uninstall() {
+    detect_platform
     print_banner
 
     # Find existing installation
@@ -934,7 +916,8 @@ run_uninstall() {
     echo ""
 
     if ! confirm "Proceed with uninstall?"; then
-        die "Uninstall cancelled."
+        printf "\n  Cancelled.\n\n"
+        exit 0
     fi
 
     # Remove symlinks
@@ -1049,7 +1032,9 @@ select_profile() {
 
 cleanup() {
     stop_spinner 2>/dev/null || true
-    printf "\033[?25h" 2>/dev/null || true
+    if [[ "$CURSOR_HIDDEN" == "1" ]]; then
+        printf "\033[?25h" 2>/dev/null || true
+    fi
 }
 trap cleanup EXIT
 
