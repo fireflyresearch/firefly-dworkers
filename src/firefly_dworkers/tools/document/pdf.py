@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import Sequence
 from typing import Any
 
@@ -71,6 +72,7 @@ class PDFTool(BaseTool):
             guards=guards,
         )
         self._default_css = default_css
+        self._last_artifact: bytes | None = None
 
     async def _execute(self, **kwargs: Any) -> dict[str, Any]:
         action = kwargs.get("action", "generate")
@@ -82,10 +84,31 @@ class PDFTool(BaseTool):
         css = kwargs.get("css", "") or self._default_css
 
         pdf_bytes = await asyncio.to_thread(self._generate_sync, content, content_type, css)
+        self._last_artifact = pdf_bytes
         return {
             "bytes_length": len(pdf_bytes),
             "success": True,
         }
+
+    @property
+    def artifact_bytes(self) -> bytes | None:
+        """Bytes from the last generate operation, or ``None``."""
+        return self._last_artifact
+
+    async def generate(self, content: str, *, content_type: str = "markdown", css: str = "") -> bytes:
+        """Generate a PDF and return the raw bytes."""
+        return await asyncio.to_thread(
+            self._generate_sync, content, content_type, css or self._default_css
+        )
+
+    async def generate_and_save(
+        self, output_path: str, content: str, *, content_type: str = "markdown", css: str = ""
+    ) -> str:
+        """Generate a PDF and save it to *output_path*. Returns the absolute path."""
+        data = await self.generate(content, content_type=content_type, css=css)
+        with open(output_path, "wb") as f:
+            f.write(data)
+        return os.path.abspath(output_path)
 
     def _generate_sync(self, content: str, content_type: str, css: str) -> bytes:
         _require_weasyprint()

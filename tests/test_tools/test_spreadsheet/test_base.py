@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from fireflyframework_genai.exceptions import ToolError
 from fireflyframework_genai.tools.base import BaseTool
@@ -95,6 +97,46 @@ class TestSpreadsheetPort:
         tool = FakeSpreadsheetTool()
         with pytest.raises(ToolError, match="Unknown action"):
             await tool.execute(action="unknown", source="test.xlsx")
+
+    async def test_artifact_bytes_none_initially(self) -> None:
+        assert FakeSpreadsheetTool().artifact_bytes is None
+
+    async def test_artifact_bytes_after_create(self) -> None:
+        tool = FakeSpreadsheetTool()
+        await tool.execute(action="create", sheets=[SheetSpec(name="S1").model_dump()])
+        assert tool.artifact_bytes == b"fake-xlsx-bytes"
+
+    async def test_artifact_bytes_none_after_read(self) -> None:
+        tool = FakeSpreadsheetTool()
+        await tool.execute(action="create", sheets=[SheetSpec(name="S1").model_dump()])
+        await tool.execute(action="read", source="test.xlsx")
+        assert tool.artifact_bytes is None
+
+    async def test_create_returns_bytes(self) -> None:
+        tool = FakeSpreadsheetTool()
+        result = await tool.create(sheets=[SheetSpec(name="S1")])
+        assert result == b"fake-xlsx-bytes"
+
+    async def test_create_and_save(self, tmp_path) -> None:
+        tool = FakeSpreadsheetTool()
+        out = str(tmp_path / "test.xlsx")
+        path = await tool.create_and_save(out, sheets=[SheetSpec(name="S1")])
+        assert os.path.exists(path)
+        with open(path, "rb") as f:
+            assert f.read() == b"fake-xlsx-bytes"
+
+    async def test_modify_returns_bytes(self) -> None:
+        tool = FakeSpreadsheetTool()
+        result = await tool.modify("src.xlsx")
+        assert result == b"modified-xlsx-bytes"
+
+    async def test_modify_and_save(self, tmp_path) -> None:
+        tool = FakeSpreadsheetTool()
+        out = str(tmp_path / "modified.xlsx")
+        path = await tool.modify_and_save("src.xlsx", out)
+        assert os.path.exists(path)
+        with open(path, "rb") as f:
+            assert f.read() == b"modified-xlsx-bytes"
 
 
 class TestSpreadsheetModels:

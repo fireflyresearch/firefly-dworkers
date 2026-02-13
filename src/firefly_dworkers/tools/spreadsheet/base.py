@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from abc import abstractmethod
 from collections.abc import Sequence
 from typing import Any
@@ -72,27 +73,62 @@ class SpreadsheetPort(BaseTool):
             timeout=timeout,
             guards=guards,
         )
+        self._last_artifact: bytes | None = None
 
     async def _execute(self, **kwargs: Any) -> dict[str, Any]:
         action = kwargs.get("action", "read")
         if action == "read":
             source = kwargs["source"]
             sheet_name = kwargs.get("sheet_name", "")
+            self._last_artifact = None
             result = await self._read_spreadsheet(source, sheet_name)
             return result.model_dump()
         elif action == "create":
             sheets_raw = kwargs.get("sheets", [])
             sheets = [SheetSpec.model_validate(s) for s in sheets_raw]
             data = await self._create_spreadsheet(sheets)
+            self._last_artifact = data
             return {"bytes_length": len(data), "success": True}
         elif action == "modify":
             source = kwargs["source"]
             ops_raw = kwargs.get("operations", [])
             ops = [SpreadsheetOperation.model_validate(o) for o in ops_raw]
             data = await self._modify_spreadsheet(source, ops)
+            self._last_artifact = data
             return {"bytes_length": len(data), "success": True}
         else:
             raise ValueError(f"Unknown action: {action}")
+
+    @property
+    def artifact_bytes(self) -> bytes | None:
+        """Bytes from the last create/modify operation, or ``None``."""
+        return self._last_artifact
+
+    async def create(self, *, sheets: list[SheetSpec] | None = None) -> bytes:
+        """Create a spreadsheet and return the raw file bytes."""
+        return await self._create_spreadsheet(sheets or [])
+
+    async def create_and_save(
+        self, output_path: str, *, sheets: list[SheetSpec] | None = None
+    ) -> str:
+        """Create a spreadsheet and save it to *output_path*. Returns the absolute path."""
+        data = await self.create(sheets=sheets)
+        with open(output_path, "wb") as f:
+            f.write(data)
+        return os.path.abspath(output_path)
+
+    async def modify(self, source: str, *, operations: list[SpreadsheetOperation] | None = None) -> bytes:
+        """Modify a spreadsheet and return the raw file bytes."""
+        return await self._modify_spreadsheet(source, operations or [])
+
+    async def modify_and_save(
+        self, source: str, output_path: str, *, operations: list[SpreadsheetOperation] | None = None
+    ) -> str:
+        """Modify a spreadsheet and save it to *output_path*. Returns the absolute path."""
+        data = await self.modify(source, operations=operations)
+        with open(output_path, "wb") as f:
+            f.write(data)
+        return os.path.abspath(output_path)
 
     @abstractmethod
     async def _read_spreadsheet(self, source: str, sheet_name: str = "") -> WorkbookData: ...

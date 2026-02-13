@@ -32,7 +32,7 @@ Q2-2025,1600000,28,0.03,57143
 
 worker = DataAnalystWorker(config)
 result = worker.run_sync(
-    f"Analyse the following quarterly performance data for a consulting "
+    f"Analyze the following quarterly performance data for a consulting "
     f"firm and identify key trends, anomalies, and actionable recommendations.\n\n"
     f"```csv\n{SAMPLE_CSV}```"
 )

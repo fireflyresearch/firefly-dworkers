@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from fireflyframework_genai.exceptions import ToolError
 from fireflyframework_genai.tools.base import BaseTool
@@ -126,3 +128,30 @@ class TestPDFToolGenerate:
         )
         assert result["success"] is True
         assert result["bytes_length"] > 0
+
+
+class TestPDFToolPublicAPI:
+    async def test_artifact_bytes_none_initially(self) -> None:
+        assert PDFTool().artifact_bytes is None
+
+    async def test_artifact_bytes_after_execute(self) -> None:
+        pytest.importorskip("weasyprint")
+        tool = PDFTool()
+        await tool.execute(action="generate", content="# Hello")
+        assert tool.artifact_bytes is not None
+        assert len(tool.artifact_bytes) > 0
+
+    async def test_generate_returns_bytes(self) -> None:
+        pytest.importorskip("weasyprint")
+        tool = PDFTool()
+        result = await tool.generate("# Hello")
+        assert isinstance(result, bytes)
+        assert len(result) > 0
+
+    async def test_generate_and_save(self, tmp_path) -> None:
+        pytest.importorskip("weasyprint")
+        tool = PDFTool()
+        out = str(tmp_path / "test.pdf")
+        path = await tool.generate_and_save(out, "# Hello")
+        assert os.path.exists(path)
+        assert os.path.getsize(path) > 0

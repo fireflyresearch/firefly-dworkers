@@ -31,7 +31,7 @@ async def main() -> None:
     # Phase 1 — generate content with the AnalystWorker
     worker = AnalystWorker(config)
     result = await worker.run(
-        "Produce exactly 4 bullet points summarising a strategy for "
+        "Produce exactly 4 bullet points summarizing a strategy for "
         "a consulting firm entering the AI advisory market. "
         "Keep each bullet under 20 words. Return ONLY the bullet "
         "points, one per line, no numbering."
@@ -63,16 +63,8 @@ async def main() -> None:
             speaker_notes="Key strategy pillars for market entry.",
         ),
     ]
-    # NOTE: We use the internal _create_presentation() helper to get raw bytes.
-    # The public execute() API returns metadata; a future release may expose a
-    # higher-level "create and save" interface.
-    pptx_bytes = await ppt._create_presentation(template="", slides=slides)
-
-    out_path = "strategy_deck.pptx"
-    with open(out_path, "wb") as f:
-        f.write(pptx_bytes)
-
-    print(f"\nPresentation saved to {out_path} ({len(pptx_bytes):,} bytes)")
+    out_path = await ppt.create_and_save("strategy_deck.pptx", slides=slides)
+    print(f"\nPresentation saved to {out_path}")
 
 
 asyncio.run(main())

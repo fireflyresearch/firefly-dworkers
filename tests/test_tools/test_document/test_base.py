@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from fireflyframework_genai.exceptions import ToolError
 from fireflyframework_genai.tools.base import BaseTool
@@ -88,6 +90,46 @@ class TestDocumentTool:
         tool = FakeDocumentTool()
         with pytest.raises(ToolError, match="Unknown action"):
             await tool.execute(action="unknown", source="test.docx")
+
+    async def test_artifact_bytes_none_initially(self) -> None:
+        assert FakeDocumentTool().artifact_bytes is None
+
+    async def test_artifact_bytes_after_create(self) -> None:
+        tool = FakeDocumentTool()
+        await tool.execute(action="create", sections=[SectionSpec(heading="Test").model_dump()])
+        assert tool.artifact_bytes == b"fake-docx-bytes"
+
+    async def test_artifact_bytes_none_after_read(self) -> None:
+        tool = FakeDocumentTool()
+        await tool.execute(action="create", sections=[SectionSpec(heading="Test").model_dump()])
+        await tool.execute(action="read", source="test.docx")
+        assert tool.artifact_bytes is None
+
+    async def test_create_returns_bytes(self) -> None:
+        tool = FakeDocumentTool()
+        result = await tool.create(sections=[SectionSpec(heading="Test")])
+        assert result == b"fake-docx-bytes"
+
+    async def test_create_and_save(self, tmp_path) -> None:
+        tool = FakeDocumentTool()
+        out = str(tmp_path / "test.docx")
+        path = await tool.create_and_save(out, sections=[SectionSpec(heading="Test")])
+        assert os.path.exists(path)
+        with open(path, "rb") as f:
+            assert f.read() == b"fake-docx-bytes"
+
+    async def test_modify_returns_bytes(self) -> None:
+        tool = FakeDocumentTool()
+        result = await tool.modify("src.docx")
+        assert result == b"modified-docx-bytes"
+
+    async def test_modify_and_save(self, tmp_path) -> None:
+        tool = FakeDocumentTool()
+        out = str(tmp_path / "modified.docx")
+        path = await tool.modify_and_save("src.docx", out)
+        assert os.path.exists(path)
+        with open(path, "rb") as f:
+            assert f.read() == b"modified-docx-bytes"
 
 
 class TestDocumentModels:

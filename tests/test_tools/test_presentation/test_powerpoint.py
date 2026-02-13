@@ -82,3 +82,27 @@ class TestPowerPointToolCreate:
         ]
         result = await tool.execute(action="create", slides=slides)
         assert result["success"] is True
+
+
+class TestPowerPointToolPublicAPI:
+    async def test_create_returns_bytes(self) -> None:
+        pytest.importorskip("pptx")
+        tool = PowerPointTool()
+        result = await tool.create(slides=[SlideSpec(title="Slide 1", content="Hello")])
+        assert isinstance(result, bytes)
+        assert len(result) > 0
+
+    async def test_create_and_save(self, tmp_path) -> None:
+        pytest.importorskip("pptx")
+        tool = PowerPointTool()
+        out = str(tmp_path / "test.pptx")
+        path = await tool.create_and_save(out, slides=[SlideSpec(title="Test")])
+        assert os.path.exists(path)
+        assert os.path.getsize(path) > 0
+
+    async def test_artifact_bytes_after_execute(self) -> None:
+        pytest.importorskip("pptx")
+        tool = PowerPointTool()
+        await tool.execute(action="create", slides=[SlideSpec(title="T").model_dump()])
+        assert tool.artifact_bytes is not None
+        assert len(tool.artifact_bytes) > 0
