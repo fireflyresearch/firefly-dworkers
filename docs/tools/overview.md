@@ -11,6 +11,10 @@
   - [Project Management](#project-management)
   - [Consulting](#consulting)
   - [Data](#data)
+  - [Presentation](#presentation)
+  - [Document](#document)
+  - [Spreadsheet](#spreadsheet)
+  - [Vision](#vision)
 - [Port / Adapter Pattern](#port--adapter-pattern)
   - [WebSearchTool](#websearchtool)
   - [WebBrowsingTool](#webbrowsingtool)
@@ -18,8 +22,12 @@
   - [MessageTool](#messagetool)
   - [ProjectManagementTool](#projectmanagementtool)
   - [ConsultingTool](#consultingtool)
+  - [PresentationTool](#presentationtool)
+  - [DocumentTool](#documenttool)
+  - [SpreadsheetPort](#spreadsheetport)
 - [Data Models](#data-models)
 - [Toolkits](#toolkits)
+- [Tool Resilience](#tool-resilience)
 - [Optional Dependencies](#optional-dependencies)
 - [Related Documentation](#related-documentation)
 
@@ -31,7 +39,7 @@ The tool system in firefly-dworkers provides pluggable connectors that digital w
 
 ## Tool Categories
 
-Tools are organized into seven categories:
+Tools are organized into eleven categories:
 
 | Category | Port (Abstract Base) | Module | Purpose |
 |----------|---------------------|--------|---------|
@@ -40,8 +48,12 @@ Tools are organized into seven categories:
 | Storage | `DocumentStorageTool` | `firefly_dworkers.tools.storage.base` | Document access (read, write, search, list) |
 | Communication | `MessageTool` | `firefly_dworkers.tools.communication.base` | Messaging (send, read, list channels) |
 | Project | `ProjectManagementTool` | `firefly_dworkers.tools.project.base` | Task management (create, list, update, get) |
-| Data | -- | `firefly_dworkers.tools.data` | Spreadsheet, API, and database access |
+| Data | -- | `firefly_dworkers.tools.data` | API and database access |
 | Consulting | `ConsultingTool` | `firefly_dworkers.tools.consulting.base` | Domain-specific consulting operations |
+| Presentation | `PresentationTool` | `firefly_dworkers.tools.presentation.base` | Slide deck creation and management |
+| Document | `DocumentTool` | `firefly_dworkers.tools.document.base` | Document creation and section management |
+| Spreadsheet | `SpreadsheetPort` | `firefly_dworkers.tools.spreadsheet.base` | Spreadsheet creation, reading, and management |
+| Vision | -- | `firefly_dworkers.tools.vision` | Image and visual content analysis |
 
 ---
 
@@ -100,9 +112,36 @@ Tools are organized into seven categories:
 
 | Adapter | Registry Key | Module | Dependencies |
 |---------|-------------|--------|--------------|
-| `SpreadsheetTool` | `spreadsheet` | `firefly_dworkers.tools.data.csv_excel` | openpyxl (for Excel) |
 | `SQLTool` | `sql` | `firefly_dworkers.tools.data.sql` | (driver-dependent) |
 | `APIClientTool` | `api_client` | `firefly_dworkers.tools.data.api_client` | httpx |
+
+### Presentation
+
+| Adapter | Registry Key | Module | Dependencies |
+|---------|-------------|--------|--------------|
+| `PowerPointTool` | `powerpoint` | `firefly_dworkers.tools.presentation.powerpoint` | python-pptx |
+| `GoogleSlidesTool` | `google_slides` | `firefly_dworkers.tools.presentation.google_slides` | google-api-python-client |
+
+### Document
+
+| Adapter | Registry Key | Module | Dependencies |
+|---------|-------------|--------|--------------|
+| `WordTool` | `word` | `firefly_dworkers.tools.document.word` | python-docx |
+| `GoogleDocsTool` | `google_docs` | `firefly_dworkers.tools.document.google_docs` | google-api-python-client |
+| `PDFTool` | `pdf` | `firefly_dworkers.tools.document.pdf` | weasyprint |
+
+### Spreadsheet
+
+| Adapter | Registry Key | Module | Dependencies |
+|---------|-------------|--------|--------------|
+| `ExcelTool` | `excel` | `firefly_dworkers.tools.spreadsheet.excel` | openpyxl |
+| `GoogleSheetsTool` | `google_sheets_spreadsheet` | `firefly_dworkers.tools.spreadsheet.google_sheets` | google-api-python-client |
+
+### Vision
+
+| Adapter | Registry Key | Module | Dependencies |
+|---------|-------------|--------|--------------|
+| `VisionAnalysisTool` | `vision_analysis` | `firefly_dworkers.tools.vision.analysis` | (none -- uses LLM) |
 
 ---
 
@@ -219,6 +258,66 @@ class ConsultingTool(BaseTool):
 
 **Adapters:** `ReportGenerationTool`, `RequirementGatheringTool`, `ProcessMappingTool`, `GapAnalysisTool`, `DocumentationTool`
 
+### PresentationTool
+
+**Module:** `firefly_dworkers.tools.presentation.base`
+
+**Abstract methods:**
+
+```python
+@abstractmethod
+async def _create(self, title: str, **kwargs) -> Any: ...
+
+@abstractmethod
+async def _add_slide(self, presentation: Any, slide_data: SlideData) -> Any: ...
+
+@abstractmethod
+async def _save(self, presentation: Any, path: str) -> str: ...
+```
+
+**Adapters:** `PowerPointTool`, `GoogleSlidesTool`
+
+### DocumentTool
+
+**Module:** `firefly_dworkers.tools.document.base`
+
+**Abstract methods:**
+
+```python
+@abstractmethod
+async def _create(self, title: str, **kwargs) -> Any: ...
+
+@abstractmethod
+async def _add_section(self, document: Any, section: DocumentSection) -> Any: ...
+
+@abstractmethod
+async def _save(self, document: Any, path: str) -> str: ...
+```
+
+**Adapters:** `WordTool`, `GoogleDocsTool`, `PDFTool`
+
+### SpreadsheetPort
+
+**Module:** `firefly_dworkers.tools.spreadsheet.base`
+
+**Abstract methods:**
+
+```python
+@abstractmethod
+async def _create(self, title: str, **kwargs) -> Any: ...
+
+@abstractmethod
+async def _add_sheet(self, workbook: Any, sheet_data: SheetData) -> Any: ...
+
+@abstractmethod
+async def _save(self, workbook: Any, path: str) -> str: ...
+
+@abstractmethod
+async def _read(self, path: str) -> SheetData: ...
+```
+
+**Adapters:** `ExcelTool`, `GoogleSheetsTool`
+
 ---
 
 ## Data Models
@@ -232,6 +331,9 @@ Each port defines Pydantic models for its return types:
 | `DocumentResult` | `DocumentStorageTool` | `id`, `name`, `path`, `content`, `content_type`, `size_bytes`, `modified_at`, `url` |
 | `Message` | `MessageTool` | `id`, `channel`, `sender`, `content`, `timestamp` |
 | `ProjectTask` | `ProjectManagementTool` | `id`, `title`, `description`, `status`, `assignee`, `priority`, `project` |
+| `SlideData` | `PresentationTool` | `title`, `content`, `layout`, `notes` |
+| `DocumentSection` | `DocumentTool` | `heading`, `content`, `level` |
+| `SheetData` | `SpreadsheetPort` | `name`, `headers`, `rows` |
 
 ---
 
@@ -254,6 +356,40 @@ Each toolkit function:
 1. Reads the tenant's `connectors` config to determine which providers are enabled.
 2. Creates tool instances from the `ToolRegistry` for enabled connectors.
 3. Bundles them into a `ToolKit` instance tagged for the worker role.
+
+---
+
+## Tool Resilience
+
+The toolkit factories use framework composition patterns for resilient tool chains:
+
+**FallbackComposer** wraps the primary web search provider with alternatives. If Tavily fails, SerpAPI is tried automatically:
+
+```python
+from __future__ import annotations
+
+from fireflyframework_genai.tools import FallbackComposer
+
+composer = FallbackComposer(
+    "web_search",
+    tools=[primary_search, fallback_search],
+    description="Resilient web search with fallbacks",
+)
+```
+
+**SequentialComposer** chains tools where output flows from one to the next. The researcher toolkit uses this for automated research workflows:
+
+```python
+from __future__ import annotations
+
+from fireflyframework_genai.tools import SequentialComposer
+
+chain = SequentialComposer(
+    "research_chain",
+    tools=[web_search, report_generation],
+    description="Search web then generate report",
+)
+```
 
 ---
 

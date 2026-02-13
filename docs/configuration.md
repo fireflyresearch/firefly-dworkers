@@ -267,6 +267,36 @@ connectors:
     auth_token: "${API_TOKEN}"
     timeout: 30.0
 
+  # -- Presentation ----------------------------------------------------------
+  presentation:
+    enabled: false
+    provider: "powerpoint"       # "powerpoint" or "google_slides"
+    service_account_key: ""
+    credentials_json: ""
+    timeout: 30.0
+
+  # -- Document --------------------------------------------------------------
+  document:
+    enabled: false
+    provider: "word"             # "word" or "google_docs"
+    service_account_key: ""
+    credentials_json: ""
+    timeout: 30.0
+
+  # -- Spreadsheet -----------------------------------------------------------
+  spreadsheet:
+    enabled: false
+    provider: "excel"            # "excel" or "google_sheets_spreadsheet"
+    service_account_key: ""
+    credentials_json: ""
+    timeout: 30.0
+
+  # -- Vision ----------------------------------------------------------------
+  vision:
+    enabled: false
+    provider: "vision_analysis"
+    timeout: 30.0
+
 # ============================================================================
 # KNOWLEDGE
 # ============================================================================
@@ -306,6 +336,32 @@ security:
 
   # Whether to enable encryption for stored data.
   encryption_enabled: false
+
+  # Guard configuration
+  guards:
+    prompt_guard_enabled: true
+    output_guard_enabled: true
+    sanitise_prompts: true          # Replace matches with [REDACTED] instead of rejecting
+    sanitise_outputs: true
+    output_block_categories:        # Categories to scan for in output
+      - secrets
+      - pii
+    custom_prompt_patterns: []      # Additional regex patterns for prompt guard
+    custom_output_patterns: {}      # Additional output patterns {name: regex}
+    custom_deny_patterns: []        # Patterns that always cause rejection
+    max_input_length: 0             # 0 = no limit
+    max_output_length: 0            # 0 = no limit
+
+# ============================================================================
+# OBSERVABILITY
+# ============================================================================
+
+observability:
+  cost_budget_usd: 0.0             # 0 = no budget limit
+  cost_warn_only: true             # Log warning instead of blocking when over budget
+  per_call_limit_usd: 0.0          # 0 = no per-call limit
+  enable_tracing: true             # Enable OpenTelemetry tracing
+  log_level: "INFO"                # Tenant-specific log level
 ```
 
 ---

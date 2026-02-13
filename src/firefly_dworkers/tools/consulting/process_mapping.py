@@ -12,8 +12,15 @@ from firefly_dworkers.tools.consulting.base import ConsultingTool
 from firefly_dworkers.tools.registry import tool_registry
 
 _DEFAULT_ACTOR_VERBS: tuple[str, ...] = (
-    "will", "does", "performs", "sends", "receives",
-    "reviews", "creates", "submits", "approves",
+    "will",
+    "does",
+    "performs",
+    "sends",
+    "receives",
+    "reviews",
+    "creates",
+    "submits",
+    "approves",
 )
 
 _DEFAULT_STEP_SPLIT_PATTERN = r"[\n.]"
@@ -92,13 +99,15 @@ class ProcessMappingTool(ConsultingTool):
             if actor:
                 actors.add(actor)
 
-            steps.append({
-                "number": i,
-                "description": step_text,
-                "actor": actor,
-                "inputs": [],
-                "outputs": [],
-            })
+            steps.append(
+                {
+                    "number": i,
+                    "description": step_text,
+                    "actor": actor,
+                    "inputs": [],
+                    "outputs": [],
+                }
+            )
 
         return {
             "process_name": process_name,

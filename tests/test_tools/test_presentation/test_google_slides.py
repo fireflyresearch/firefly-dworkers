@@ -58,20 +58,14 @@ class TestGoogleSlidesToolRead:
                         {
                             "shape": {
                                 "placeholder": {"type": "TITLE"},
-                                "text": {
-                                    "textElements": [
-                                        {"textRun": {"content": "Test Slide"}}
-                                    ]
-                                },
+                                "text": {"textElements": [{"textRun": {"content": "Test Slide"}}]},
                             }
                         }
                     ],
                     "slideProperties": {"layoutObjectId": "layout1"},
                 }
             ],
-            "layouts": [
-                {"layoutProperties": {"displayName": "Title Slide"}}
-            ],
+            "layouts": [{"layoutProperties": {"displayName": "Title Slide"}}],
             "pageSize": {
                 "width": {"magnitude": 9144000},
                 "height": {"magnitude": 6858000},

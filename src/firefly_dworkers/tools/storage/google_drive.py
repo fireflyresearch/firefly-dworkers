@@ -82,20 +82,14 @@ class GoogleDriveTool(DocumentStorageTool):
         self._ensure_deps()
 
         if self._service_account_key:
-            creds = _sa.Credentials.from_service_account_file(
-                self._service_account_key, scopes=self._scopes
-            )
+            creds = _sa.Credentials.from_service_account_file(self._service_account_key, scopes=self._scopes)
         elif self._credentials_json:
             import json
 
             info = json.loads(self._credentials_json)
-            creds = _sa.Credentials.from_service_account_info(
-                info, scopes=self._scopes
-            )
+            creds = _sa.Credentials.from_service_account_info(info, scopes=self._scopes)
         else:
-            raise ConnectorAuthError(
-                "GoogleDriveTool requires service_account_key or credentials_json"
-            )
+            raise ConnectorAuthError("GoogleDriveTool requires service_account_key or credentials_json")
 
         self._service = _build("drive", "v3", credentials=creds)
         return self._service
@@ -109,13 +103,15 @@ class GoogleDriveTool(DocumentStorageTool):
             q += f" and '{self._folder_id}' in parents"
 
         response = await asyncio.to_thread(
-            lambda: svc.files()
-            .list(
-                q=q,
-                fields="files(id, name, mimeType, size, modifiedTime, webViewLink, parents)",
-                pageSize=50,
+            lambda: (
+                svc.files()
+                .list(
+                    q=q,
+                    fields="files(id, name, mimeType, size, modifiedTime, webViewLink, parents)",
+                    pageSize=50,
+                )
+                .execute()
             )
-            .execute()
         )
         return [
             DocumentResult(
@@ -144,9 +140,9 @@ class GoogleDriveTool(DocumentStorageTool):
             raise ConnectorError("GoogleDrive read requires resource_id or path")
 
         meta = await asyncio.to_thread(
-            lambda: svc.files()
-            .get(fileId=file_id, fields="id, name, mimeType, size, modifiedTime, webViewLink")
-            .execute()
+            lambda: (
+                svc.files().get(fileId=file_id, fields="id, name, mimeType, size, modifiedTime, webViewLink").execute()
+            )
         )
 
         # Download content for exportable types
@@ -154,16 +150,10 @@ class GoogleDriveTool(DocumentStorageTool):
         mime = meta.get("mimeType", "")
         if mime.startswith("application/vnd.google-apps."):
             export_mime = "text/plain"
-            data = await asyncio.to_thread(
-                lambda: svc.files()
-                .export(fileId=file_id, mimeType=export_mime)
-                .execute()
-            )
+            data = await asyncio.to_thread(lambda: svc.files().export(fileId=file_id, mimeType=export_mime).execute())
             content = data.decode("utf-8") if isinstance(data, bytes) else str(data)
         else:
-            data = await asyncio.to_thread(
-                lambda: svc.files().get_media(fileId=file_id).execute()
-            )
+            data = await asyncio.to_thread(lambda: svc.files().get_media(fileId=file_id).execute())
             content = data.decode("utf-8", errors="replace") if isinstance(data, bytes) else str(data)
 
         return DocumentResult(
@@ -184,13 +174,15 @@ class GoogleDriveTool(DocumentStorageTool):
             q += f" and '{folder_id}' in parents"
 
         response = await asyncio.to_thread(
-            lambda: svc.files()
-            .list(
-                q=q,
-                fields="files(id, name, mimeType, size, modifiedTime, webViewLink)",
-                pageSize=100,
+            lambda: (
+                svc.files()
+                .list(
+                    q=q,
+                    fields="files(id, name, mimeType, size, modifiedTime, webViewLink)",
+                    pageSize=100,
+                )
+                .execute()
             )
-            .execute()
         )
         return [
             DocumentResult(

@@ -60,10 +60,7 @@ class SlackTool(MessageTool):
 
     def _ensure_deps(self) -> None:
         if not SLACK_AVAILABLE:
-            raise ImportError(
-                "slack-sdk is required for SlackTool. "
-                "Install with: pip install firefly-dworkers[slack]"
-            )
+            raise ImportError("slack-sdk is required for SlackTool. Install with: pip install firefly-dworkers[slack]")
 
     def _get_client(self) -> Any:
         if self._client is not None:
@@ -84,9 +81,7 @@ class SlackTool(MessageTool):
             raise ConnectorError("SlackTool send requires a channel")
 
         try:
-            resp = await asyncio.to_thread(
-                client.chat_postMessage, channel=target, text=content
-            )
+            resp = await asyncio.to_thread(client.chat_postMessage, channel=target, text=content)
         except _SlackApiError as exc:
             raise ConnectorError(f"Slack send failed: {exc.response['error']}") from exc
 

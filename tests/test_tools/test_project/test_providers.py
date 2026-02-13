@@ -78,7 +78,9 @@ class TestJiraTool:
         tool._client = mock_client
         tool._ensure_deps = MagicMock()  # type: ignore[method-assign]
 
-        result = await tool.execute(action="create_task", title="Fix bug", task_description="Fix login bug", project="PROJ")
+        result = await tool.execute(
+            action="create_task", title="Fix bug", task_description="Fix login bug", project="PROJ"
+        )
         assert result["id"] == "PROJ-1"
         assert result["title"] == "Fix bug"
         assert result["status"] == "To Do"
@@ -215,18 +217,22 @@ class TestAsanaTool:
 
     async def test_create_task_with_mocked_api(self):
         tool = AsanaTool(access_token="pat-test", workspace_gid="ws-1")
-        tool._api_post = AsyncMock(return_value={  # type: ignore[method-assign]
-            "data": {
-                "gid": "task-new",
-                "name": "Design review",
-                "notes": "Review mockups",
-                "assignee": None,
-                "projects": [{"name": "design"}],
+        tool._api_post = AsyncMock(
+            return_value={  # type: ignore[method-assign]
+                "data": {
+                    "gid": "task-new",
+                    "name": "Design review",
+                    "notes": "Review mockups",
+                    "assignee": None,
+                    "projects": [{"name": "design"}],
+                }
             }
-        })
+        )
         tool._ensure_deps = MagicMock()  # type: ignore[method-assign]
 
-        result = await tool.execute(action="create_task", title="Design review", task_description="Review mockups", project="proj-1")
+        result = await tool.execute(
+            action="create_task", title="Design review", task_description="Review mockups", project="proj-1"
+        )
         assert result["id"] == "task-new"
         assert result["title"] == "Design review"
         assert result["project"] == "design"
@@ -239,24 +245,26 @@ class TestAsanaTool:
 
     async def test_list_tasks_with_mocked_api(self):
         tool = AsanaTool(access_token="pat-test", workspace_gid="ws-1")
-        tool._api_get = AsyncMock(return_value={  # type: ignore[method-assign]
-            "data": [
-                {
-                    "gid": "task-1",
-                    "name": "Task A",
-                    "notes": "Do thing A",
-                    "assignee": {"name": "Alice"},
-                    "projects": [{"name": "marketing"}],
-                },
-                {
-                    "gid": "task-2",
-                    "name": "Task B",
-                    "notes": "Do thing B",
-                    "assignee": None,
-                    "projects": [],
-                },
-            ]
-        })
+        tool._api_get = AsyncMock(
+            return_value={  # type: ignore[method-assign]
+                "data": [
+                    {
+                        "gid": "task-1",
+                        "name": "Task A",
+                        "notes": "Do thing A",
+                        "assignee": {"name": "Alice"},
+                        "projects": [{"name": "marketing"}],
+                    },
+                    {
+                        "gid": "task-2",
+                        "name": "Task B",
+                        "notes": "Do thing B",
+                        "assignee": None,
+                        "projects": [],
+                    },
+                ]
+            }
+        )
         tool._ensure_deps = MagicMock()  # type: ignore[method-assign]
 
         result = await tool.execute(action="list_tasks", project="proj-1")
@@ -267,16 +275,18 @@ class TestAsanaTool:
 
     async def test_update_task_completes(self):
         tool = AsanaTool(access_token="pat-test")
-        tool._api_put = AsyncMock(return_value={  # type: ignore[method-assign]
-            "data": {
-                "gid": "task-789",
-                "name": "Updated task",
-                "notes": "",
-                "completed_at": "2025-01-01T00:00:00Z",
-                "assignee": None,
-                "projects": [],
+        tool._api_put = AsyncMock(
+            return_value={  # type: ignore[method-assign]
+                "data": {
+                    "gid": "task-789",
+                    "name": "Updated task",
+                    "notes": "",
+                    "completed_at": "2025-01-01T00:00:00Z",
+                    "assignee": None,
+                    "projects": [],
+                }
             }
-        })
+        )
         tool._ensure_deps = MagicMock()  # type: ignore[method-assign]
 
         result = await tool.execute(action="update_task", task_id="task-789", status="completed")
@@ -290,15 +300,17 @@ class TestAsanaTool:
 
     async def test_get_task_with_mocked_api(self):
         tool = AsanaTool(access_token="pat-test")
-        tool._api_get = AsyncMock(return_value={  # type: ignore[method-assign]
-            "data": {
-                "gid": "task-abc",
-                "name": "My Task",
-                "notes": "Details",
-                "assignee": {"name": "Bob"},
-                "projects": [{"name": "eng"}],
+        tool._api_get = AsyncMock(
+            return_value={  # type: ignore[method-assign]
+                "data": {
+                    "gid": "task-abc",
+                    "name": "My Task",
+                    "notes": "Details",
+                    "assignee": {"name": "Bob"},
+                    "projects": [{"name": "eng"}],
+                }
             }
-        })
+        )
         tool._ensure_deps = MagicMock()  # type: ignore[method-assign]
 
         result = await tool.execute(action="get_task", task_id="task-abc")

@@ -22,9 +22,7 @@ def register_vertical(config: VerticalConfig) -> None:
 
 def get_vertical(name: str) -> VerticalConfig:
     if name not in _REGISTRY:
-        raise VerticalNotFoundError(
-            f"Vertical '{name}' not found. Available: {list(_REGISTRY.keys())}"
-        )
+        raise VerticalNotFoundError(f"Vertical '{name}' not found. Available: {list(_REGISTRY.keys())}")
     return _REGISTRY[name]
 
 

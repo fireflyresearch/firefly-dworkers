@@ -193,15 +193,17 @@ class TestFlyBrowserTool:
 
     def test_require_flybrowser_raises_when_unavailable(self) -> None:
         tool = FlyBrowserTool()
-        with patch("firefly_dworkers.tools.web.flybrowser.FLYBROWSER_AVAILABLE", False), pytest.raises(
-            ImportError, match="flybrowser required"
+        with (
+            patch("firefly_dworkers.tools.web.flybrowser.FLYBROWSER_AVAILABLE", False),
+            pytest.raises(ImportError, match="flybrowser required"),
         ):
             tool._require_flybrowser()
 
     async def test_fetch_page_raises_when_unavailable(self) -> None:
         tool = FlyBrowserTool()
-        with patch("firefly_dworkers.tools.web.flybrowser.FLYBROWSER_AVAILABLE", False), pytest.raises(
-            ImportError, match="flybrowser required"
+        with (
+            patch("firefly_dworkers.tools.web.flybrowser.FLYBROWSER_AVAILABLE", False),
+            pytest.raises(ImportError, match="flybrowser required"),
         ):
             await tool._fetch_page("https://example.com")
 
@@ -231,8 +233,9 @@ class TestFlyBrowserTool:
         mock_browser.__aenter__ = AsyncMock(return_value=mock_browser)
         mock_browser.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("firefly_dworkers.tools.web.flybrowser.FLYBROWSER_AVAILABLE", True), patch(
-            "firefly_dworkers.tools.web.flybrowser.FlyBrowser", return_value=mock_browser
+        with (
+            patch("firefly_dworkers.tools.web.flybrowser.FLYBROWSER_AVAILABLE", True),
+            patch("firefly_dworkers.tools.web.flybrowser.FlyBrowser", return_value=mock_browser),
         ):
             result = await tool.execute(
                 url="https://example.com",
@@ -262,8 +265,9 @@ class TestFlyBrowserTool:
         mock_browser.__aenter__ = AsyncMock(return_value=mock_browser)
         mock_browser.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("firefly_dworkers.tools.web.flybrowser.FLYBROWSER_AVAILABLE", True), patch(
-            "firefly_dworkers.tools.web.flybrowser.FlyBrowser", return_value=mock_browser
+        with (
+            patch("firefly_dworkers.tools.web.flybrowser.FLYBROWSER_AVAILABLE", True),
+            patch("firefly_dworkers.tools.web.flybrowser.FlyBrowser", return_value=mock_browser),
         ):
             result = await tool.execute(
                 url="https://shop.example.com",
@@ -291,8 +295,9 @@ class TestFlyBrowserTool:
         mock_browser.__aenter__ = AsyncMock(return_value=mock_browser)
         mock_browser.__aexit__ = AsyncMock(return_value=False)
 
-        with patch("firefly_dworkers.tools.web.flybrowser.FLYBROWSER_AVAILABLE", True), patch(
-            "firefly_dworkers.tools.web.flybrowser.FlyBrowser", return_value=mock_browser
+        with (
+            patch("firefly_dworkers.tools.web.flybrowser.FLYBROWSER_AVAILABLE", True),
+            patch("firefly_dworkers.tools.web.flybrowser.FlyBrowser", return_value=mock_browser),
         ):
             result = await tool.execute(
                 url="https://example.com",

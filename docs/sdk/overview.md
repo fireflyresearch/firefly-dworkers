@@ -12,6 +12,7 @@
   - [ExecutePlanRequest](#executeplanrequest)
   - [IndexDocumentRequest](#indexdocumentrequest)
   - [SearchKnowledgeRequest](#searchknowledgerequest)
+  - [ProjectRequest](#projectrequest)
 - [Response Models](#response-models)
   - [WorkerResponse](#workerresponse)
   - [PlanResponse](#planresponse)
@@ -19,6 +20,9 @@
   - [SearchResponse](#searchresponse)
   - [KnowledgeChunkResponse](#knowledgechunkresponse)
   - [HealthResponse](#healthresponse)
+  - [StreamEvent](#streamevent)
+  - [ProjectEvent](#projectevent)
+  - [ProjectResponse](#projectresponse)
 - [Error Handling](#error-handling)
 - [Authentication](#authentication)
 - [Related Documentation](#related-documentation)
@@ -51,6 +55,10 @@ Key classes:
 | `SearchResponse` | Response from knowledge search |
 | `KnowledgeChunkResponse` | A single chunk in search results |
 | `HealthResponse` | Health check response |
+| `StreamEvent` | SSE streaming event |
+| `ProjectRequest` | Request for project orchestration |
+| `ProjectEvent` | SSE event from project orchestration |
+| `ProjectResponse` | Sync project response |
 
 ---
 
@@ -225,6 +233,30 @@ request = SearchKnowledgeRequest(
 )
 ```
 
+### ProjectRequest
+
+Request for multi-agent project orchestration.
+
+```python
+from __future__ import annotations
+
+from firefly_dworkers.sdk import ProjectRequest
+
+request = ProjectRequest(
+    brief="Analyze the competitive landscape for healthcare AI startups",
+    tenant_id="default",
+    project_id=None,            # Optional custom project ID (auto-generated if omitted)
+    worker_roles=[],            # Optional override of which worker roles to use
+)
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `brief` | `str` | (required) | Project brief/objective |
+| `tenant_id` | `str` | `"default"` | Tenant ID |
+| `project_id` | `str \| None` | `None` | Custom project ID |
+| `worker_roles` | `list[str]` | `[]` | Override which worker roles to use |
+
 ---
 
 ## Response Models
@@ -278,6 +310,43 @@ A single knowledge chunk returned as part of a `SearchResponse`.
 |-------|------|-------------|
 | `status` | `str` | Server status (e.g., `"ok"`) |
 | `version` | `str` | Server version |
+
+### StreamEvent
+
+An SSE streaming event returned during worker or plan execution.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `str` | Event type (e.g., `"token"`, `"complete"`, `"error"`) |
+| `content` | `str` | Event content/payload |
+| `metadata` | `dict[str, Any]` | Optional metadata attached to the event |
+
+Example:
+
+```json
+{"type": "token", "content": "Based on", "metadata": {}}
+```
+
+### ProjectEvent
+
+An SSE event returned during project orchestration.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `str` | Event type (e.g., `"project_start"`, `"task_assigned"`, `"task_complete"`, `"worker_output"`, `"project_complete"`, `"error"`) |
+| `content` | `str` | Event content/payload |
+| `metadata` | `dict[str, Any]` | Optional metadata (e.g., worker role, task ID) |
+
+### ProjectResponse
+
+Synchronous response from project orchestration.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `project_id` | `str` | Unique project identifier |
+| `success` | `bool` | Whether the project completed successfully |
+| `deliverables` | `dict[str, Any]` | Project deliverables keyed by worker role or task |
+| `duration_ms` | `float` | Total execution time in milliseconds |
 
 ---
 

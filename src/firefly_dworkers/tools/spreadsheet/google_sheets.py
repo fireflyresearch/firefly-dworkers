@@ -39,9 +39,7 @@ class GoogleSheetsTool(SpreadsheetPort):
         *,
         service_account_key: str = "",
         credentials_json: str = "",
-        scopes: Sequence[str] = (
-            "https://www.googleapis.com/auth/spreadsheets",
-        ),
+        scopes: Sequence[str] = ("https://www.googleapis.com/auth/spreadsheets",),
         timeout: float = 60.0,
         guards: Sequence[GuardProtocol] = (),
     ) -> None:
@@ -59,8 +57,7 @@ class GoogleSheetsTool(SpreadsheetPort):
     def _ensure_deps(self) -> None:
         if not GOOGLE_AVAILABLE:
             raise ImportError(
-                "google-api-python-client and google-auth required. "
-                "Install with: pip install firefly-dworkers[google]"
+                "google-api-python-client and google-auth required. Install with: pip install firefly-dworkers[google]"
             )
 
     def _get_service(self) -> Any:
@@ -69,50 +66,31 @@ class GoogleSheetsTool(SpreadsheetPort):
         self._ensure_deps()
 
         if self._service_account_key:
-            creds = _sa.Credentials.from_service_account_file(
-                self._service_account_key, scopes=self._scopes
-            )
+            creds = _sa.Credentials.from_service_account_file(self._service_account_key, scopes=self._scopes)
         elif self._credentials_json:
             import json
 
             info = json.loads(self._credentials_json)
-            creds = _sa.Credentials.from_service_account_info(
-                info, scopes=self._scopes
-            )
+            creds = _sa.Credentials.from_service_account_info(info, scopes=self._scopes)
         else:
-            raise ConnectorAuthError(
-                "GoogleSheetsTool requires service_account_key or credentials_json"
-            )
+            raise ConnectorAuthError("GoogleSheetsTool requires service_account_key or credentials_json")
 
         self._service = _build("sheets", "v4", credentials=creds)
         return self._service
 
     # -- port implementation ---------------------------------------------------
 
-    async def _read_spreadsheet(
-        self, source: str, sheet_name: str = ""
-    ) -> WorkbookData:
+    async def _read_spreadsheet(self, source: str, sheet_name: str = "") -> WorkbookData:
         svc = self._get_service()
         # Get spreadsheet metadata
-        meta = await asyncio.to_thread(
-            lambda: svc.spreadsheets().get(spreadsheetId=source).execute()
-        )
+        meta = await asyncio.to_thread(lambda: svc.spreadsheets().get(spreadsheetId=source).execute())
 
-        sheet_titles = [
-            s["properties"]["title"] for s in meta.get("sheets", [])
-        ]
-        target = (
-            sheet_name
-            if sheet_name in sheet_titles
-            else (sheet_titles[0] if sheet_titles else "Sheet1")
-        )
+        sheet_titles = [s["properties"]["title"] for s in meta.get("sheets", [])]
+        target = sheet_name if sheet_name in sheet_titles else (sheet_titles[0] if sheet_titles else "Sheet1")
 
         # Get values from target sheet
         result = await asyncio.to_thread(
-            lambda: svc.spreadsheets()
-            .values()
-            .get(spreadsheetId=source, range=target)
-            .execute()
+            lambda: svc.spreadsheets().values().get(spreadsheetId=source, range=target).execute()
         )
 
         values = result.get("values", [])
@@ -136,16 +114,10 @@ class GoogleSheetsTool(SpreadsheetPort):
         svc = self._get_service()
         body: dict[str, Any] = {
             "properties": {"title": "Untitled Spreadsheet"},
-            "sheets": (
-                [{"properties": {"title": spec.name}} for spec in sheets]
-                if sheets
-                else []
-            ),
+            "sheets": ([{"properties": {"title": spec.name}} for spec in sheets] if sheets else []),
         }
 
-        result = await asyncio.to_thread(
-            lambda: svc.spreadsheets().create(body=body).execute()
-        )
+        result = await asyncio.to_thread(lambda: svc.spreadsheets().create(body=body).execute())
         spreadsheet_id = result["spreadsheetId"]
 
         # Write data to sheets
@@ -156,22 +128,22 @@ class GoogleSheetsTool(SpreadsheetPort):
                     values.append(spec.headers)
                 values.extend(spec.rows)
                 await asyncio.to_thread(
-                    lambda _n=spec.name, _v=values: svc.spreadsheets()
-                    .values()
-                    .update(
-                        spreadsheetId=spreadsheet_id,
-                        range=f"{_n}!A1",
-                        valueInputOption="RAW",
-                        body={"values": _v},
+                    lambda _n=spec.name, _v=values: (
+                        svc.spreadsheets()
+                        .values()
+                        .update(
+                            spreadsheetId=spreadsheet_id,
+                            range=f"{_n}!A1",
+                            valueInputOption="RAW",
+                            body={"values": _v},
+                        )
+                        .execute()
                     )
-                    .execute()
                 )
 
         return spreadsheet_id.encode("utf-8")
 
-    async def _modify_spreadsheet(
-        self, source: str, operations: list[SpreadsheetOperation]
-    ) -> bytes:
+    async def _modify_spreadsheet(self, source: str, operations: list[SpreadsheetOperation]) -> bytes:
         svc = self._get_service()
 
         for op in operations:
@@ -179,33 +151,29 @@ class GoogleSheetsTool(SpreadsheetPort):
                 rows = op.data.get("rows", [])
                 if rows:
                     await asyncio.to_thread(
-                        lambda _sn=op.sheet_name, _r=rows: svc.spreadsheets()
-                        .values()
-                        .append(
-                            spreadsheetId=source,
-                            range=f"{_sn}!A1",
-                            valueInputOption="RAW",
-                            body={"values": _r},
+                        lambda _sn=op.sheet_name, _r=rows: (
+                            svc.spreadsheets()
+                            .values()
+                            .append(
+                                spreadsheetId=source,
+                                range=f"{_sn}!A1",
+                                valueInputOption="RAW",
+                                body={"values": _r},
+                            )
+                            .execute()
                         )
-                        .execute()
                     )
             elif op.operation == "add_sheet":
                 sheet_title = op.data.get("name", "New Sheet")
                 await asyncio.to_thread(
-                    lambda _t=sheet_title: svc.spreadsheets()
-                    .batchUpdate(
-                        spreadsheetId=source,
-                        body={
-                            "requests": [
-                                {
-                                    "addSheet": {
-                                        "properties": {"title": _t}
-                                    }
-                                }
-                            ]
-                        },
+                    lambda _t=sheet_title: (
+                        svc.spreadsheets()
+                        .batchUpdate(
+                            spreadsheetId=source,
+                            body={"requests": [{"addSheet": {"properties": {"title": _t}}}]},
+                        )
+                        .execute()
                     )
-                    .execute()
                 )
 
         return source.encode("utf-8")

@@ -70,8 +70,7 @@ class JiraTool(ProjectManagementTool):
     def _ensure_deps(self) -> None:
         if not JIRA_AVAILABLE:
             raise ImportError(
-                "atlassian-python-api is required for JiraTool. "
-                "Install with: pip install firefly-dworkers[jira]"
+                "atlassian-python-api is required for JiraTool. Install with: pip install firefly-dworkers[jira]"
             )
 
     def _get_client(self) -> Any:
@@ -79,9 +78,7 @@ class JiraTool(ProjectManagementTool):
             return self._client
         self._ensure_deps()
         if not self._base_url or not self._username or not self._api_token:
-            raise ConnectorAuthError(
-                "JiraTool requires base_url, username, and api_token"
-            )
+            raise ConnectorAuthError("JiraTool requires base_url, username, and api_token")
 
         self._client = _Jira(
             url=self._base_url,
@@ -128,13 +125,8 @@ class JiraTool(ProjectManagementTool):
         project_key = project or self._project_key
         jql = f"project = {project_key} ORDER BY updated DESC" if project_key else "ORDER BY updated DESC"
 
-        results = await asyncio.to_thread(
-            client.jql, jql, limit=50
-        )
-        return [
-            self._issue_to_task(issue)
-            for issue in results.get("issues", [])
-        ]
+        results = await asyncio.to_thread(client.jql, jql, limit=50)
+        return [self._issue_to_task(issue) for issue in results.get("issues", [])]
 
     async def _update_task(self, task_id: str, status: str) -> ProjectTask:
         client = self._get_client()
@@ -146,7 +138,10 @@ class JiraTool(ProjectManagementTool):
             transitions = await asyncio.to_thread(client.get_issue_transitions, task_id)
             target = None
             for t in transitions:
-                if t.get("name", "").lower() == status.lower() or t.get("to", {}).get("name", "").lower() == status.lower():
+                if (
+                    t.get("name", "").lower() == status.lower()
+                    or t.get("to", {}).get("name", "").lower() == status.lower()
+                ):
                     target = t["id"]
                     break
             if target:

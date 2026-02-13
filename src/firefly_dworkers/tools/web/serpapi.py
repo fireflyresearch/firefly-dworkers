@@ -70,7 +70,7 @@ class SerpAPISearchTool(WebSearchTool):
             SearchResult(
                 title=r.get("title", ""),
                 url=r.get("link", ""),
-                snippet=r.get("snippet", "")[:self._max_snippet_length],
+                snippet=r.get("snippet", "")[: self._max_snippet_length],
             )
             for r in data.get("organic_results", [])[:max_results]
         ]

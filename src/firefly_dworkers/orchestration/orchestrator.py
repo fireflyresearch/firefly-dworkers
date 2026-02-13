@@ -15,6 +15,24 @@ from firefly_dworkers.types import WorkerRole
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Lazy import helper for DelegationRouter (optional dependency)
+# ---------------------------------------------------------------------------
+
+
+def _import_delegation() -> tuple[Any, Any]:
+    """Lazily import DelegationRouter + ContentBasedStrategy.
+
+    Raises :class:`ImportError` when the framework module is not installed.
+    """
+    from fireflyframework_genai.agents.delegation import (
+        ContentBasedStrategy,
+        DelegationRouter,
+    )
+
+    return DelegationRouter, ContentBasedStrategy
+
+
 class ProjectOrchestrator:
     """Orchestrates multi-agent collaboration on consulting projects.
 
@@ -34,10 +52,13 @@ class ProjectOrchestrator:
         config: TenantConfig,
         *,
         project_id: str = "",
+        enable_delegation: bool = False,
     ) -> None:
         self._config = config
         self._project_id = project_id or "default"
         self._workspace = ProjectWorkspace(self._project_id)
+        self._enable_delegation = enable_delegation
+        self._router: Any | None = None
 
     # -- Public API -----------------------------------------------------------
 
@@ -196,7 +217,24 @@ class ProjectOrchestrator:
         return results
 
     async def _execute_single_task(self, role: str, task: str) -> str:
-        """Execute a single task using the appropriate worker."""
+        """Execute a single task using the appropriate worker.
+
+        Tries DelegationRouter first for intelligent routing, then falls
+        back to direct worker creation via the factory.
+        """
+        # Try DelegationRouter first
+        router = self._get_delegation_router()
+        if router:
+            try:
+                context = self._workspace.get_context()
+                prompt = f"{task}\n\nShared workspace context:\n{context}" if context else task
+                result = await router.route(prompt)
+                output = str(result.output) if hasattr(result, "output") else str(result)
+                return output
+            except Exception:
+                logger.debug("DelegationRouter failed, falling back to direct execution")
+
+        # Fallback: direct worker creation (existing behaviour)
         from firefly_dworkers.workers.factory import worker_factory
 
         try:
@@ -215,6 +253,43 @@ class ProjectOrchestrator:
         output = str(result.output) if hasattr(result, "output") else str(result)
         return output
 
+    def _get_delegation_router(self) -> Any | None:
+        """Create a DelegationRouter with specialist workers for task routing.
+
+        Returns ``None`` when delegation is disabled, the framework module
+        is not installed, or no specialist workers can be created.
+        """
+        if self._router is not None:
+            return self._router
+
+        if not self._enable_delegation:
+            return None
+
+        try:
+            router_cls, strategy_cls = _import_delegation()
+            from firefly_dworkers.workers.factory import worker_factory
+
+            specialists = []
+            for role in [WorkerRole.ANALYST, WorkerRole.RESEARCHER, WorkerRole.DATA_ANALYST]:
+                try:
+                    worker = worker_factory.create(role, self._config, name=f"{role.value}-{self._project_id}")
+                    worker.memory = self._workspace.memory
+                    specialists.append(worker)
+                except KeyError:
+                    pass
+
+            if specialists:
+                self._router = router_cls(
+                    agents=specialists,
+                    strategy=strategy_cls(),
+                    memory=self._workspace.memory,
+                )
+                return self._router
+        except (ImportError, Exception):
+            logger.debug("DelegationRouter not available, using keyword-based routing")
+
+        return None
+
     async def _synthesize(self, brief: str, task_results: dict[str, Any]) -> dict[str, Any]:
         """Synthesise final deliverables from task results."""
         from firefly_dworkers.workers.factory import worker_factory
@@ -229,10 +304,7 @@ class ProjectOrchestrator:
         # Build synthesis prompt with workspace context
         results_summary = "\n".join(f"Task {k}: {v}" for k, v in task_results.items())
         context = self._workspace.get_context()
-        prompt = (
-            f"Original brief: {brief}\n\n"
-            f"Task results:\n{results_summary}\n\n"
-        )
+        prompt = f"Original brief: {brief}\n\nTask results:\n{results_summary}\n\n"
         if context:
             prompt += f"Workspace context:\n{context}\n\n"
         prompt += "Please synthesize a final deliverable from these results."
@@ -250,10 +322,8 @@ class ProjectOrchestrator:
         """Map decomposition output to worker role-task pairs.
 
         Uses simple keyword matching to assign tasks to appropriate roles.
-
-        .. note::
-            Task 15 will replace this with DelegationRouter +
-            ContentBasedStrategy for intelligent LLM-based routing.
+        When DelegationRouter is available, :meth:`_execute_single_task`
+        uses it for intelligent LLM-based routing instead.
         """
         tasks: list[tuple[str, str]] = []
         lines = [line.strip() for line in decomposition_output.split("\n") if line.strip()]

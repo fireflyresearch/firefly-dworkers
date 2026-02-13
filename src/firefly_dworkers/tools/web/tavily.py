@@ -70,7 +70,7 @@ class TavilySearchTool(WebSearchTool):
             SearchResult(
                 title=r.get("title", ""),
                 url=r.get("url", ""),
-                snippet=r.get("content", "")[:self._max_snippet_length],
+                snippet=r.get("content", "")[: self._max_snippet_length],
             )
             for r in data.get("results", [])
         ]

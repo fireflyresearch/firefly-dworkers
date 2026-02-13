@@ -146,8 +146,7 @@ class SpreadsheetTool(BaseTool):
         """Parse an Excel file into rows."""
         if not OPENPYXL_AVAILABLE:
             raise ImportError(
-                "openpyxl is required for Excel support. "
-                "Install with: pip install firefly-dworkers[data]"
+                "openpyxl is required for Excel support. Install with: pip install firefly-dworkers[data]"
             )
         if not file_path:
             raise ValueError("parse_excel requires file_path")

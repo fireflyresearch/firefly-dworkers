@@ -81,9 +81,7 @@ class PDFTool(BaseTool):
         content_type = kwargs.get("content_type", "markdown")
         css = kwargs.get("css", "") or self._default_css
 
-        pdf_bytes = await asyncio.to_thread(
-            self._generate_sync, content, content_type, css
-        )
+        pdf_bytes = await asyncio.to_thread(self._generate_sync, content, content_type, css)
         return {
             "bytes_length": len(pdf_bytes),
             "success": True,

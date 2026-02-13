@@ -95,14 +95,10 @@ class SpreadsheetPort(BaseTool):
             raise ValueError(f"Unknown action: {action}")
 
     @abstractmethod
-    async def _read_spreadsheet(
-        self, source: str, sheet_name: str = ""
-    ) -> WorkbookData: ...
+    async def _read_spreadsheet(self, source: str, sheet_name: str = "") -> WorkbookData: ...
 
     @abstractmethod
     async def _create_spreadsheet(self, sheets: list[SheetSpec]) -> bytes: ...
 
     @abstractmethod
-    async def _modify_spreadsheet(
-        self, source: str, operations: list[SpreadsheetOperation]
-    ) -> bytes: ...
+    async def _modify_spreadsheet(self, source: str, operations: list[SpreadsheetOperation]) -> bytes: ...

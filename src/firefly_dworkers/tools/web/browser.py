@@ -75,8 +75,7 @@ class WebBrowserTool(WebBrowsingTool):
                 title = title_tag.get_text(strip=True)
             if extract_links:
                 links = [
-                    {"text": a.get_text(strip=True), "href": a.get("href", "")}
-                    for a in soup.find_all("a", href=True)
+                    {"text": a.get_text(strip=True), "href": a.get("href", "")} for a in soup.find_all("a", href=True)
                 ][:50]
 
         return BrowsingResult(

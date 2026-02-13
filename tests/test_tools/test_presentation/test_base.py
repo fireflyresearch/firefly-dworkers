@@ -61,9 +61,7 @@ class TestPresentationTool:
     async def test_execute_create(self) -> None:
         tool = FakePresentationTool()
         slides = [SlideSpec(title="Title", content="Body")]
-        result = await tool.execute(
-            action="create", slides=[s.model_dump() for s in slides]
-        )
+        result = await tool.execute(action="create", slides=[s.model_dump() for s in slides])
         assert "bytes_length" in result
 
     async def test_execute_unknown_action_raises(self) -> None:

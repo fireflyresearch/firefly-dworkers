@@ -158,10 +158,7 @@ class SQLClientTool(BaseTool):
 
     async def _execute_postgres(self, query: str, max_rows: int) -> dict[str, Any]:
         if not ASYNCPG_AVAILABLE:
-            raise ImportError(
-                "asyncpg is required for PostgreSQL support. "
-                "Install with: pip install asyncpg"
-            )
+            raise ImportError("asyncpg is required for PostgreSQL support. Install with: pip install asyncpg")
         try:
             conn = await asyncio.wait_for(
                 asyncpg.connect(self._connection_string),

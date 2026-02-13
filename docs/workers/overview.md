@@ -6,6 +6,8 @@
 - [Worker Architecture](#worker-architecture)
 - [BaseWorker](#baseworker)
 - [Instruction Building](#instruction-building)
+- [Guard and Cost Middleware](#guard-and-cost-middleware)
+- [Prompt Templates](#prompt-templates)
 - [Worker Toolkits](#worker-toolkits)
 - [WorkerFactory](#workerfactory)
 - [WorkerRegistry](#workerregistry)
@@ -183,16 +185,51 @@ Each built-in worker follows this same pattern with a different base prompt appr
 
 ---
 
+## Guard and Cost Middleware
+
+`BaseWorker` automatically wires guard and cost middleware from the tenant's security and observability configuration:
+
+1. **Guard middleware** -- Built from `tenant_config.security.guards`:
+   - `PromptGuardMiddleware` when `prompt_guard_enabled=True`
+   - `OutputGuardMiddleware` when `output_guard_enabled=True`
+2. **Cost middleware** -- Built from `tenant_config.observability`:
+   - `CostGuardMiddleware` when `cost_budget_usd > 0`
+3. **User middleware** -- Any middleware passed via the `middleware` kwarg.
+
+Middleware ordering: guard middleware -> cost middleware -> user middleware. The framework also auto-wires `LoggingMiddleware` and `ObservabilityMiddleware`.
+
+---
+
+## Prompt Templates
+
+Worker instructions are loaded from Jinja2 templates via the prompt management system:
+
+```python
+from __future__ import annotations
+
+from firefly_dworkers.prompts import get_worker_prompt
+
+prompt = get_worker_prompt(
+    "analyst",
+    company_name="Acme Corp",
+    verticals="banking, technology",
+)
+```
+
+Templates are located in `src/firefly_dworkers/prompts/workers/` and support Jinja2 variables for tenant-specific customization (company name, verticals, custom instructions).
+
+---
+
 ## Worker Toolkits
 
 Each worker receives a `ToolKit` assembled by functions in `firefly_dworkers.tools.toolkits`:
 
 | Worker | Toolkit Function | Tools Included |
 |--------|-----------------|----------------|
-| Analyst | `analyst_toolkit()` | Storage connectors, communication connectors, requirement gathering, process mapping, gap analysis, report generation, documentation |
-| Researcher | `researcher_toolkit()` | Web search/browsing, storage connectors, report generation, RSS feeds |
-| Data Analyst | `data_analyst_toolkit()` | Storage connectors, spreadsheet parsing, API client, report generation |
-| Manager | `manager_toolkit()` | Project management tools, communication connectors, report generation, documentation |
+| Analyst | `analyst_toolkit()` | Storage connectors, communication connectors, presentation tools, document tools, requirement gathering, process mapping, gap analysis, report generation, documentation |
+| Researcher | `researcher_toolkit()` | Web search/browsing (with FallbackComposer), storage connectors, report generation, RSS feeds, research chain (SequentialComposer) |
+| Data Analyst | `data_analyst_toolkit()` | Storage connectors, spreadsheet tools, data tools (SQL), vision analysis, spreadsheet parsing, API client, report generation |
+| Manager | `manager_toolkit()` | Project management tools (Jira, Asana), communication connectors, presentation tools, document tools, spreadsheet tools, vision analysis, report generation, documentation |
 
 The toolkits are assembled dynamically based on the tenant's enabled connectors. If SharePoint is disabled in the tenant config, no SharePoint tool is included in the toolkit.
 

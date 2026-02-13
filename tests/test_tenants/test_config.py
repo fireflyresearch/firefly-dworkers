@@ -35,7 +35,9 @@ class TestTenantConfig:
             ),
             connectors=ConnectorsConfig(
                 web_search=WebSearchConnectorConfig(
-                    enabled=True, provider="tavily", credential_ref="vault://acme/tavily",
+                    enabled=True,
+                    provider="tavily",
+                    credential_ref="vault://acme/tavily",
                 )
             ),
             branding=BrandingConfig(company_name="ACME Consulting"),

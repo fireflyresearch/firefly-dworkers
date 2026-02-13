@@ -12,13 +12,28 @@ from firefly_dworkers.tools.consulting.base import ConsultingTool
 from firefly_dworkers.tools.registry import tool_registry
 
 _DEFAULT_FUNCTIONAL_KEYWORDS: tuple[str, ...] = (
-    "must", "shall", "should", "need", "require", "want",
+    "must",
+    "shall",
+    "should",
+    "need",
+    "require",
+    "want",
 )
 _DEFAULT_NONFUNCTIONAL_KEYWORDS: tuple[str, ...] = (
-    "performance", "security", "scalab", "reliab", "availab", "uptime",
+    "performance",
+    "security",
+    "scalab",
+    "reliab",
+    "availab",
+    "uptime",
 )
 _DEFAULT_CONSTRAINT_KEYWORDS: tuple[str, ...] = (
-    "limit", "constraint", "budget", "deadline", "restrict", "cannot",
+    "limit",
+    "constraint",
+    "budget",
+    "deadline",
+    "restrict",
+    "cannot",
     "no more than",
 )
 
@@ -82,7 +97,9 @@ class RequirementGatheringTool(ConsultingTool):
         )
         self._default_categories = default_categories
         self._functional_kw = tuple(functional_keywords) if functional_keywords else _DEFAULT_FUNCTIONAL_KEYWORDS
-        self._nonfunctional_kw = tuple(nonfunctional_keywords) if nonfunctional_keywords else _DEFAULT_NONFUNCTIONAL_KEYWORDS
+        self._nonfunctional_kw = (
+            tuple(nonfunctional_keywords) if nonfunctional_keywords else _DEFAULT_NONFUNCTIONAL_KEYWORDS
+        )
         self._constraint_kw = tuple(constraint_keywords) if constraint_keywords else _DEFAULT_CONSTRAINT_KEYWORDS
         self._split_pattern = sentence_split_pattern
 

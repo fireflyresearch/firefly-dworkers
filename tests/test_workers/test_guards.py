@@ -355,9 +355,7 @@ class TestWorkerGuardIntegration:
 
         assert guard_indices, "Should have guard middleware"
         assert user_index is not None, "Should have user middleware"
-        assert all(
-            gi < user_index for gi in guard_indices
-        ), "Guards should come before user middleware"
+        assert all(gi < user_index for gi in guard_indices), "Guards should come before user middleware"
 
     def test_worker_has_guard_middleware(self) -> None:
         """Integration test: AnalystWorker gets guard middleware by default."""

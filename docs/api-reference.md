@@ -8,17 +8,25 @@
   - [GET /health](#get-health)
 - [Workers](#workers)
   - [GET /api/workers](#get-apiworkers)
-  - [POST /api/workers/run](#post-apiworkersrun)
+  - [POST /api/workers/run (Streaming)](#post-apiworkersrun-streaming)
+  - [POST /api/workers/run/sync](#post-apiworkersrunsync)
 - [Plans](#plans)
   - [GET /api/plans](#get-apiplans)
   - [GET /api/plans/{plan_name}](#get-apiplansplan_name)
-  - [POST /api/plans/execute](#post-apiplansexecute)
+  - [POST /api/plans/execute (Streaming)](#post-apiplansexecute-streaming)
+  - [POST /api/plans/execute/sync](#post-apiplansexecutesync)
+- [Projects](#projects)
+  - [POST /api/projects/run (Streaming)](#post-apiprojectsrun-streaming)
+  - [POST /api/projects/run/sync](#post-apiprojectsrunsync)
 - [Tenants](#tenants)
   - [GET /api/tenants](#get-apitenants)
   - [GET /api/tenants/{tenant_id}](#get-apitenantstenant_id)
 - [Knowledge](#knowledge)
   - [POST /api/knowledge/index](#post-apiknowledgeindex)
   - [POST /api/knowledge/search](#post-apiknowledgesearch)
+- [Observability](#observability)
+  - [GET /api/observability/usage](#get-apiobservabilityusage)
+  - [GET /api/observability/usage/{agent_name}](#get-apiobservabilityusageagent_name)
 - [Authentication](#authentication)
 - [Error Format](#error-format)
 - [OpenAPI Documentation](#openapi-documentation)
@@ -55,8 +63,10 @@ app = create_dworkers_app(title="Firefly Dworkers", version="0.1.0")
 |--------|--------|------|
 | Workers | `/api/workers` | `workers` |
 | Plans | `/api/plans` | `plans` |
+| Projects | `/api/projects` | `projects` |
 | Tenants | `/api/tenants` | `tenants` |
 | Knowledge | `/api/knowledge` | `knowledge` |
+| Observability | `/api/observability` | `observability` |
 
 Start the server:
 
@@ -82,8 +92,10 @@ All dworkers-specific endpoints are prefixed with `/api/`.
 ```
 http://localhost:8000/api/workers
 http://localhost:8000/api/plans
+http://localhost:8000/api/projects
 http://localhost:8000/api/tenants
 http://localhost:8000/api/knowledge
+http://localhost:8000/api/observability
 ```
 
 The health endpoint is at the root:
@@ -123,9 +135,9 @@ List registered worker names.
 ["analyst-acme-corp", "researcher-acme-corp", "data-analyst-acme-corp"]
 ```
 
-### POST /api/workers/run
+### POST /api/workers/run (Streaming)
 
-Run a digital worker with a prompt.
+Run a worker with SSE streaming. Returns token-by-token events.
 
 **Request body:**
 
@@ -149,7 +161,27 @@ Run a digital worker with a prompt.
 | `autonomy_level` | `string` | No | `null` | Override autonomy level |
 | `model` | `string` | No | `null` | Override model |
 
-**Response:**
+**Response:** Server-Sent Events (SSE) stream
+
+Event types:
+
+| Event Type | Description |
+|------------|-------------|
+| `token` | An incremental text token |
+| `complete` | Full output after all tokens streamed |
+| `error` | Error during execution |
+
+Each event is a JSON `StreamEvent`:
+
+```json
+{"type": "token", "content": "Based on", "metadata": {}}
+```
+
+### POST /api/workers/run/sync
+
+Run a worker synchronously (non-streaming). Same request body as /run.
+
+**Response:** `WorkerResponse` JSON.
 
 ```json
 {
@@ -221,9 +253,9 @@ Get plan details by name.
 |--------|-------------|
 | 404 | Plan not found |
 
-### POST /api/plans/execute
+### POST /api/plans/execute (Streaming)
 
-Execute a consulting plan.
+Execute a plan with SSE streaming. Streams pipeline progress events.
 
 **Request body:**
 
@@ -244,7 +276,30 @@ Execute a consulting plan.
 | `tenant_id` | `string` | No | `"default"` | Tenant ID |
 | `inputs` | `object` | No | `{}` | Input parameters for the plan |
 
-**Response:**
+**Response:** Server-Sent Events (SSE) stream
+
+Event types:
+
+| Event Type | Description |
+|------------|-------------|
+| `node_start` | A pipeline node has started |
+| `node_complete` | A pipeline node has completed |
+| `node_error` | A pipeline node failed |
+| `node_skip` | A pipeline node was skipped |
+| `pipeline_complete` | Pipeline execution finished |
+| `error` | General error |
+
+**Errors:**
+
+| Status | Description |
+|--------|-------------|
+| 404 | Plan not found |
+
+### POST /api/plans/execute/sync
+
+Execute a plan synchronously. Same request body as /execute.
+
+**Response:** `PlanResponse` JSON.
 
 ```json
 {
@@ -264,6 +319,58 @@ Execute a consulting plan.
 | Status | Description |
 |--------|-------------|
 | 404 | Plan not found |
+
+---
+
+## Projects
+
+### POST /api/projects/run (Streaming)
+
+Run a multi-agent project with SSE streaming.
+
+**Request body:**
+
+```json
+{
+  "brief": "Analyze the competitive landscape for healthcare AI startups",
+  "tenant_id": "default",
+  "project_id": null,
+  "worker_roles": []
+}
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `brief` | `string` | Yes | | Project brief/objective |
+| `tenant_id` | `string` | No | `"default"` | Tenant ID |
+| `project_id` | `string` | No | auto-generated | Custom project ID |
+| `worker_roles` | `array` | No | `[]` | Override which worker roles to use |
+
+**Response:** SSE stream of `ProjectEvent` objects:
+
+| Event Type | Description |
+|------------|-------------|
+| `project_start` | Orchestration has begun |
+| `task_assigned` | Task assigned to a worker |
+| `task_complete` | Worker completed a task |
+| `worker_output` | Incremental worker output |
+| `project_complete` | Project finished |
+| `error` | Error during orchestration |
+
+### POST /api/projects/run/sync
+
+Run a project synchronously.
+
+**Response:**
+
+```json
+{
+  "project_id": "uuid",
+  "success": true,
+  "deliverables": {},
+  "duration_ms": 12345.6
+}
+```
 
 ---
 
@@ -425,6 +532,54 @@ Search the knowledge base.
 | `results[].source` | `string` | Source document identifier |
 | `results[].content` | `string` | Chunk text content |
 | `results[].metadata` | `object` | Arbitrary metadata attached to the chunk |
+
+---
+
+## Observability
+
+### GET /api/observability/usage
+
+Get global usage metrics (tokens, cost, requests).
+
+**Response:**
+
+```json
+{
+  "total_tokens": 15000,
+  "total_cost_usd": 0.045,
+  "total_requests": 12,
+  "total_latency_ms": 8500.0,
+  "by_agent": {"analyst-worker": {}},
+  "by_model": {"openai:gpt-4o": {}}
+}
+```
+
+### GET /api/observability/usage/{agent_name}
+
+Get usage metrics for a specific agent/worker.
+
+**Path parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `agent_name` | `string` | Worker/agent name |
+
+**Response:**
+
+```json
+{
+  "total_tokens": 5000,
+  "total_cost_usd": 0.015,
+  "total_requests": 4,
+  "total_latency_ms": 3200.0
+}
+```
+
+**Errors:**
+
+| Status | Description |
+|--------|-------------|
+| 404 | Agent not found |
 
 ---
 

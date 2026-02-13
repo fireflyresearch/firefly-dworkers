@@ -65,54 +65,52 @@ class TestSharePointTool:
             await tool.execute(action="search", query="report")
 
     async def test_search_requires_site_or_drive(self):
-        tool = SharePointTool(
-            tenant_id="t", client_id="c", client_secret="s"
-        )
+        tool = SharePointTool(tenant_id="t", client_id="c", client_secret="s")
         tool._get_token = AsyncMock(return_value="fake-token")  # type: ignore[method-assign]
         tool._ensure_deps = MagicMock()  # type: ignore[method-assign]
         with pytest.raises(ToolError, match="site_url or drive_id"):
             await tool.execute(action="search", query="report")
 
     async def test_search_with_mocked_graph_api(self):
-        tool = SharePointTool(
-            tenant_id="t", client_id="c", client_secret="s", drive_id="drive-123"
-        )
+        tool = SharePointTool(tenant_id="t", client_id="c", client_secret="s", drive_id="drive-123")
         tool._get_token = AsyncMock(return_value="fake-token")  # type: ignore[method-assign]
         tool._ensure_deps = MagicMock()  # type: ignore[method-assign]
-        tool._graph_get = AsyncMock(return_value={  # type: ignore[method-assign]
-            "value": [
-                {
-                    "id": "item-1",
-                    "name": "report.docx",
-                    "parentReference": {"path": "/root/docs"},
-                    "file": {"mimeType": "application/docx"},
-                    "size": 1024,
-                    "lastModifiedDateTime": "2025-01-01T00:00:00Z",
-                    "webUrl": "https://example.sharepoint.com/docs/report.docx",
-                }
-            ]
-        })
+        tool._graph_get = AsyncMock(
+            return_value={  # type: ignore[method-assign]
+                "value": [
+                    {
+                        "id": "item-1",
+                        "name": "report.docx",
+                        "parentReference": {"path": "/root/docs"},
+                        "file": {"mimeType": "application/docx"},
+                        "size": 1024,
+                        "lastModifiedDateTime": "2025-01-01T00:00:00Z",
+                        "webUrl": "https://example.sharepoint.com/docs/report.docx",
+                    }
+                ]
+            }
+        )
         result = await tool.execute(action="search", query="report")
         assert len(result) == 1
         assert result[0]["id"] == "item-1"
         assert result[0]["name"] == "report.docx"
 
     async def test_read_with_mocked_graph_api(self):
-        tool = SharePointTool(
-            tenant_id="t", client_id="c", client_secret="s", drive_id="drive-123"
-        )
+        tool = SharePointTool(tenant_id="t", client_id="c", client_secret="s", drive_id="drive-123")
         tool._get_token = AsyncMock(return_value="fake-token")  # type: ignore[method-assign]
         tool._ensure_deps = MagicMock()  # type: ignore[method-assign]
-        tool._graph_get = AsyncMock(return_value={  # type: ignore[method-assign]
-            "id": "item-1",
-            "name": "readme.txt",
-            "parentReference": {"path": "/root"},
-            "file": {"mimeType": "text/plain"},
-            "size": 100,
-            "lastModifiedDateTime": "2025-01-01T00:00:00Z",
-            "webUrl": "https://example.sharepoint.com/readme.txt",
-            "@microsoft.graph.downloadUrl": "https://download.example.com/readme.txt",
-        })
+        tool._graph_get = AsyncMock(
+            return_value={  # type: ignore[method-assign]
+                "id": "item-1",
+                "name": "readme.txt",
+                "parentReference": {"path": "/root"},
+                "file": {"mimeType": "text/plain"},
+                "size": 100,
+                "lastModifiedDateTime": "2025-01-01T00:00:00Z",
+                "webUrl": "https://example.sharepoint.com/readme.txt",
+                "@microsoft.graph.downloadUrl": "https://download.example.com/readme.txt",
+            }
+        )
         # Mock httpx for download
         mock_resp = MagicMock()
         mock_resp.text = "Hello, World!"
@@ -129,34 +127,47 @@ class TestSharePointTool:
         assert result["content"] == "Hello, World!"
 
     async def test_list_with_mocked_graph_api(self):
-        tool = SharePointTool(
-            tenant_id="t", client_id="c", client_secret="s", drive_id="drive-123"
-        )
+        tool = SharePointTool(tenant_id="t", client_id="c", client_secret="s", drive_id="drive-123")
         tool._get_token = AsyncMock(return_value="fake-token")  # type: ignore[method-assign]
         tool._ensure_deps = MagicMock()  # type: ignore[method-assign]
-        tool._graph_get = AsyncMock(return_value={  # type: ignore[method-assign]
-            "value": [
-                {"id": "f1", "name": "folder1", "size": 0, "lastModifiedDateTime": "2025-01-01T00:00:00Z", "webUrl": "url1"},
-                {"id": "f2", "name": "file.txt", "file": {"mimeType": "text/plain"}, "size": 256, "lastModifiedDateTime": "2025-01-01T00:00:00Z", "webUrl": "url2"},
-            ]
-        })
+        tool._graph_get = AsyncMock(
+            return_value={  # type: ignore[method-assign]
+                "value": [
+                    {
+                        "id": "f1",
+                        "name": "folder1",
+                        "size": 0,
+                        "lastModifiedDateTime": "2025-01-01T00:00:00Z",
+                        "webUrl": "url1",
+                    },
+                    {
+                        "id": "f2",
+                        "name": "file.txt",
+                        "file": {"mimeType": "text/plain"},
+                        "size": 256,
+                        "lastModifiedDateTime": "2025-01-01T00:00:00Z",
+                        "webUrl": "url2",
+                    },
+                ]
+            }
+        )
         result = await tool.execute(action="list", path="/docs")
         assert len(result) == 2
         assert result[0]["name"] == "folder1"
         assert result[1]["name"] == "file.txt"
 
     async def test_write_with_mocked_graph_api(self):
-        tool = SharePointTool(
-            tenant_id="t", client_id="c", client_secret="s", drive_id="drive-123"
-        )
+        tool = SharePointTool(tenant_id="t", client_id="c", client_secret="s", drive_id="drive-123")
         tool._get_token = AsyncMock(return_value="fake-token")  # type: ignore[method-assign]
         tool._ensure_deps = MagicMock()  # type: ignore[method-assign]
-        tool._graph_put = AsyncMock(return_value={  # type: ignore[method-assign]
-            "id": "new-item",
-            "name": "new.txt",
-            "lastModifiedDateTime": "2025-01-01T00:00:00Z",
-            "webUrl": "https://example.sharepoint.com/new.txt",
-        })
+        tool._graph_put = AsyncMock(
+            return_value={  # type: ignore[method-assign]
+                "id": "new-item",
+                "name": "new.txt",
+                "lastModifiedDateTime": "2025-01-01T00:00:00Z",
+                "webUrl": "https://example.sharepoint.com/new.txt",
+            }
+        )
         result = await tool.execute(action="write", path="/docs/new.txt", content="Hello World")
         assert result["id"] == "new-item"
         assert result["content"] == "Hello World"
@@ -207,7 +218,15 @@ class TestGoogleDriveTool:
         mock_list = MagicMock()
         mock_list.execute.return_value = {
             "files": [
-                {"id": "f1", "name": "budget.xlsx", "mimeType": "application/xlsx", "size": "2048", "modifiedTime": "2025-01-01T00:00:00Z", "webViewLink": "https://drive.google.com/f1", "parents": ["root-folder"]},
+                {
+                    "id": "f1",
+                    "name": "budget.xlsx",
+                    "mimeType": "application/xlsx",
+                    "size": "2048",
+                    "modifiedTime": "2025-01-01T00:00:00Z",
+                    "webViewLink": "https://drive.google.com/f1",
+                    "parents": ["root-folder"],
+                },
             ]
         }
         mock_files.list.return_value = mock_list
@@ -228,8 +247,22 @@ class TestGoogleDriveTool:
         mock_list = MagicMock()
         mock_list.execute.return_value = {
             "files": [
-                {"id": "f1", "name": "doc.txt", "mimeType": "text/plain", "size": "100", "modifiedTime": "2025-01-01T00:00:00Z", "webViewLink": "url"},
-                {"id": "f2", "name": "img.png", "mimeType": "image/png", "size": "5000", "modifiedTime": "2025-01-01T00:00:00Z", "webViewLink": "url2"},
+                {
+                    "id": "f1",
+                    "name": "doc.txt",
+                    "mimeType": "text/plain",
+                    "size": "100",
+                    "modifiedTime": "2025-01-01T00:00:00Z",
+                    "webViewLink": "url",
+                },
+                {
+                    "id": "f2",
+                    "name": "img.png",
+                    "mimeType": "image/png",
+                    "size": "5000",
+                    "modifiedTime": "2025-01-01T00:00:00Z",
+                    "webViewLink": "url2",
+                },
             ]
         }
         mock_files.list.return_value = mock_list

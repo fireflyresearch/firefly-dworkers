@@ -84,8 +84,10 @@ class TestEmailTool:
             password="pass",
         )
         # Patch the module-level aiosmtplib reference and the availability flag
-        with patch("firefly_dworkers.tools.communication.email.AIOSMTPLIB_AVAILABLE", True), \
-             patch("firefly_dworkers.tools.communication.email.aiosmtplib") as mock_smtp:
+        with (
+            patch("firefly_dworkers.tools.communication.email.AIOSMTPLIB_AVAILABLE", True),
+            patch("firefly_dworkers.tools.communication.email.aiosmtplib") as mock_smtp,
+        ):
             mock_smtp.send = AsyncMock()
             result = await tool.execute(action="send", channel="to@example.com", content="Hello!")
         assert result["channel"] == "to@example.com"
@@ -265,11 +267,13 @@ class TestTeamsTool:
     async def test_send_with_mocked_graph(self):
         tool = TeamsTool(tenant_id="t", client_id="c", client_secret="s", team_id="team-1")
         tool._get_token = AsyncMock(return_value="fake-token")  # type: ignore[method-assign]
-        tool._graph_post = AsyncMock(return_value={  # type: ignore[method-assign]
-            "id": "msg-001",
-            "from": {"user": {"displayName": "Bot"}},
-            "createdDateTime": "2025-01-01T00:00:00Z",
-        })
+        tool._graph_post = AsyncMock(
+            return_value={  # type: ignore[method-assign]
+                "id": "msg-001",
+                "from": {"user": {"displayName": "Bot"}},
+                "createdDateTime": "2025-01-01T00:00:00Z",
+            }
+        )
         tool._ensure_deps = MagicMock()  # type: ignore[method-assign]
 
         result = await tool.execute(action="send", channel="ch-1", content="Update")
@@ -280,16 +284,18 @@ class TestTeamsTool:
     async def test_read_with_mocked_graph(self):
         tool = TeamsTool(tenant_id="t", client_id="c", client_secret="s", team_id="team-1")
         tool._get_token = AsyncMock(return_value="fake-token")  # type: ignore[method-assign]
-        tool._graph_get = AsyncMock(return_value={  # type: ignore[method-assign]
-            "value": [
-                {
-                    "id": "msg-001",
-                    "from": {"user": {"displayName": "Alice"}},
-                    "body": {"content": "Hello team"},
-                    "createdDateTime": "2025-01-01T00:00:00Z",
-                },
-            ]
-        })
+        tool._graph_get = AsyncMock(
+            return_value={  # type: ignore[method-assign]
+                "value": [
+                    {
+                        "id": "msg-001",
+                        "from": {"user": {"displayName": "Alice"}},
+                        "body": {"content": "Hello team"},
+                        "createdDateTime": "2025-01-01T00:00:00Z",
+                    },
+                ]
+            }
+        )
         tool._ensure_deps = MagicMock()  # type: ignore[method-assign]
 
         result = await tool.execute(action="read", channel="ch-1")
@@ -300,12 +306,14 @@ class TestTeamsTool:
     async def test_list_channels_with_mocked_graph(self):
         tool = TeamsTool(tenant_id="t", client_id="c", client_secret="s", team_id="team-1")
         tool._get_token = AsyncMock(return_value="fake-token")  # type: ignore[method-assign]
-        tool._graph_get = AsyncMock(return_value={  # type: ignore[method-assign]
-            "value": [
-                {"displayName": "General"},
-                {"displayName": "Engineering"},
-            ]
-        })
+        tool._graph_get = AsyncMock(
+            return_value={  # type: ignore[method-assign]
+                "value": [
+                    {"displayName": "General"},
+                    {"displayName": "Engineering"},
+                ]
+            }
+        )
         tool._ensure_deps = MagicMock()  # type: ignore[method-assign]
 
         result = await tool.execute(action="list_channels")

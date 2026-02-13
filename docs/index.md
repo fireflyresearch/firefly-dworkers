@@ -64,6 +64,8 @@
 | Tenants | `firefly_dworkers.tenants` | `TenantConfig`, `TenantRegistry` |
 | Verticals | `firefly_dworkers.verticals` | `VerticalConfig` |
 | Autonomy | `firefly_dworkers.autonomy` | `CheckpointStore`, `AutonomyConfig` |
+| Prompts | `firefly_dworkers.prompts` | `PromptLoader`, `get_worker_prompt`, `get_skill_prompt` |
+| Orchestration | `firefly_dworkers.orchestration` | `ProjectOrchestrator` |
 | SDK | `firefly_dworkers.sdk` | `DworkersClient`, `AsyncDworkersClient` |
 | Server | `firefly_dworkers_server` | `create_dworkers_app()` |
 | CLI | `firefly_dworkers_cli` | `dworkers` command |

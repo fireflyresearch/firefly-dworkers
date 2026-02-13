@@ -56,17 +56,13 @@ class TestGoogleDocsToolRead:
                 "content": [
                     {
                         "paragraph": {
-                            "elements": [
-                                {"textRun": {"content": "Introduction\n"}}
-                            ],
+                            "elements": [{"textRun": {"content": "Introduction\n"}}],
                             "paragraphStyle": {"namedStyleType": "HEADING_1"},
                         }
                     },
                     {
                         "paragraph": {
-                            "elements": [
-                                {"textRun": {"content": "This is a paragraph.\n"}}
-                            ],
+                            "elements": [{"textRun": {"content": "This is a paragraph.\n"}}],
                             "paragraphStyle": {"namedStyleType": "NORMAL_TEXT"},
                         }
                     },
@@ -94,17 +90,13 @@ class TestGoogleDocsToolRead:
                 "content": [
                     {
                         "paragraph": {
-                            "elements": [
-                                {"textRun": {"content": "\n"}}
-                            ],
+                            "elements": [{"textRun": {"content": "\n"}}],
                             "paragraphStyle": {"namedStyleType": "NORMAL_TEXT"},
                         }
                     },
                     {
                         "paragraph": {
-                            "elements": [
-                                {"textRun": {"content": "Actual content\n"}}
-                            ],
+                            "elements": [{"textRun": {"content": "Actual content\n"}}],
                             "paragraphStyle": {"namedStyleType": "NORMAL_TEXT"},
                         }
                     },
@@ -128,9 +120,7 @@ class TestGoogleDocsToolRead:
                     {"sectionBreak": {}},
                     {
                         "paragraph": {
-                            "elements": [
-                                {"textRun": {"content": "Hello\n"}}
-                            ],
+                            "elements": [{"textRun": {"content": "Hello\n"}}],
                             "paragraphStyle": {"namedStyleType": "NORMAL_TEXT"},
                         }
                     },

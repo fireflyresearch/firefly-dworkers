@@ -90,9 +90,7 @@ class SharePointTool(DocumentStorageTool):
                 "msal is required for SharePointTool. Install with: pip install firefly-dworkers[sharepoint]"
             )
         if not HTTPX_AVAILABLE:
-            raise ImportError(
-                "httpx is required for SharePointTool. Install with: pip install httpx"
-            )
+            raise ImportError("httpx is required for SharePointTool. Install with: pip install httpx")
 
     async def _get_token(self) -> str:
         """Acquire an OAuth2 access token via MSAL client credentials flow."""
@@ -101,9 +99,7 @@ class SharePointTool(DocumentStorageTool):
             return self._access_token
 
         if not self._tenant_id or not self._client_id or not self._client_secret:
-            raise ConnectorAuthError(
-                "SharePoint requires tenant_id, client_id, and client_secret"
-            )
+            raise ConnectorAuthError("SharePoint requires tenant_id, client_id, and client_secret")
 
         authority = f"https://login.microsoftonline.com/{self._tenant_id}"
         app = msal.ConfidentialClientApplication(
@@ -111,9 +107,7 @@ class SharePointTool(DocumentStorageTool):
             authority=authority,
             client_credential=self._client_secret,
         )
-        result = await asyncio.to_thread(
-            app.acquire_token_for_client, scopes=self._scopes
-        )
+        result = await asyncio.to_thread(app.acquire_token_for_client, scopes=self._scopes)
         if "access_token" not in result:
             raise ConnectorAuthError(
                 f"SharePoint auth failed: {result.get('error_description', result.get('error', 'unknown'))}"
@@ -134,7 +128,9 @@ class SharePointTool(DocumentStorageTool):
             resp.raise_for_status()
             return resp.json()
 
-    async def _graph_put(self, path: str, content: bytes, content_type: str = "application/octet-stream") -> dict[str, Any]:
+    async def _graph_put(
+        self, path: str, content: bytes, content_type: str = "application/octet-stream"
+    ) -> dict[str, Any]:
         token = await self._get_token()
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             resp = await client.put(
@@ -167,9 +163,7 @@ class SharePointTool(DocumentStorageTool):
     async def _search(self, query: str) -> list[DocumentResult]:
         self._ensure_deps()
         drive_id = await self._resolve_drive()
-        data = await self._graph_get(
-            f"/drives/{drive_id}/root/search(q='{query}')"
-        )
+        data = await self._graph_get(f"/drives/{drive_id}/root/search(q='{query}')")
         results = []
         for item in data.get("value", []):
             results.append(
@@ -191,9 +185,7 @@ class SharePointTool(DocumentStorageTool):
         if resource_id:
             item = await self._graph_get(f"/drives/{drive_id}/items/{resource_id}")
         elif path:
-            item = await self._graph_get(
-                f"/drives/{drive_id}/root:/{path.lstrip('/')}"
-            )
+            item = await self._graph_get(f"/drives/{drive_id}/root:/{path.lstrip('/')}")
         else:
             raise ConnectorError("SharePoint read requires resource_id or path")
 
@@ -204,7 +196,9 @@ class SharePointTool(DocumentStorageTool):
             token = await self._get_token()
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 dl = await client.get(
-                    item.get("@microsoft.graph.downloadUrl", f"{_GRAPH_BASE}/drives/{drive_id}/items/{item['id']}/content"),
+                    item.get(
+                        "@microsoft.graph.downloadUrl", f"{_GRAPH_BASE}/drives/{drive_id}/items/{item['id']}/content"
+                    ),
                     headers={"Authorization": f"Bearer {token}"},
                 )
                 dl.raise_for_status()
@@ -225,9 +219,7 @@ class SharePointTool(DocumentStorageTool):
         self._ensure_deps()
         drive_id = await self._resolve_drive()
         if path and path != "/":
-            data = await self._graph_get(
-                f"/drives/{drive_id}/root:/{path.lstrip('/')}:/children"
-            )
+            data = await self._graph_get(f"/drives/{drive_id}/root:/{path.lstrip('/')}:/children")
         else:
             data = await self._graph_get(f"/drives/{drive_id}/root/children")
 

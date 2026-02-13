@@ -61,9 +61,7 @@ class AsanaTool(ProjectManagementTool):
 
     def _ensure_deps(self) -> None:
         if not HTTPX_AVAILABLE:
-            raise ImportError(
-                "httpx is required for AsanaTool. Install with: pip install httpx"
-            )
+            raise ImportError("httpx is required for AsanaTool. Install with: pip install httpx")
 
     def _headers(self) -> dict[str, str]:
         if not self._access_token:

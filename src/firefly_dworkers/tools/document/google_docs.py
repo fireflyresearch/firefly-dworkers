@@ -63,8 +63,7 @@ class GoogleDocsTool(DocumentTool):
     def _ensure_deps(self) -> None:
         if not GOOGLE_AVAILABLE:
             raise ImportError(
-                "google-api-python-client and google-auth required. "
-                "Install with: pip install firefly-dworkers[google]"
+                "google-api-python-client and google-auth required. Install with: pip install firefly-dworkers[google]"
             )
 
     def _get_service(self) -> Any:
@@ -73,20 +72,14 @@ class GoogleDocsTool(DocumentTool):
         self._ensure_deps()
 
         if self._service_account_key:
-            creds = _sa.Credentials.from_service_account_file(
-                self._service_account_key, scopes=self._scopes
-            )
+            creds = _sa.Credentials.from_service_account_file(self._service_account_key, scopes=self._scopes)
         elif self._credentials_json:
             import json
 
             info = json.loads(self._credentials_json)
-            creds = _sa.Credentials.from_service_account_info(
-                info, scopes=self._scopes
-            )
+            creds = _sa.Credentials.from_service_account_info(info, scopes=self._scopes)
         else:
-            raise ConnectorAuthError(
-                "GoogleDocsTool requires service_account_key or credentials_json"
-            )
+            raise ConnectorAuthError("GoogleDocsTool requires service_account_key or credentials_json")
 
         self._service = _build("docs", "v1", credentials=creds)
         return self._service
@@ -96,9 +89,7 @@ class GoogleDocsTool(DocumentTool):
     async def _read_document(self, source: str) -> DocumentData:
         """Read a Google Doc by document ID."""
         svc = self._get_service()
-        doc = await asyncio.to_thread(
-            lambda: svc.documents().get(documentId=source).execute()
-        )
+        doc = await asyncio.to_thread(lambda: svc.documents().get(documentId=source).execute())
 
         title = doc.get("title", "")
         paragraphs = []
@@ -117,9 +108,7 @@ class GoogleDocsTool(DocumentTool):
             if not text:
                 continue
 
-            style = para.get("paragraphStyle", {}).get(
-                "namedStyleType", "NORMAL_TEXT"
-            )
+            style = para.get("paragraphStyle", {}).get("namedStyleType", "NORMAL_TEXT")
             is_heading = style.startswith("HEADING")
             heading_level = 0
             if is_heading:
@@ -142,16 +131,12 @@ class GoogleDocsTool(DocumentTool):
             paragraphs=paragraphs,
         )
 
-    async def _create_document(
-        self, title: str, sections: list[SectionSpec]
-    ) -> bytes:
+    async def _create_document(self, title: str, sections: list[SectionSpec]) -> bytes:
         """Create a new Google Doc. Returns document ID as bytes."""
         svc = self._get_service()
 
         body: dict[str, Any] = {"title": title or "Untitled Document"}
-        doc = await asyncio.to_thread(
-            lambda: svc.documents().create(body=body).execute()
-        )
+        doc = await asyncio.to_thread(lambda: svc.documents().create(body=body).execute())
         document_id = doc["documentId"]
 
         # Build batch update requests for content
@@ -174,13 +159,9 @@ class GoogleDocsTool(DocumentTool):
                             "updateParagraphStyle": {
                                 "range": {
                                     "startIndex": index,
-                                    "endIndex": index
-                                    + len(section.heading)
-                                    + 1,
+                                    "endIndex": index + len(section.heading) + 1,
                                 },
-                                "paragraphStyle": {
-                                    "namedStyleType": f"HEADING_{section.heading_level}"
-                                },
+                                "paragraphStyle": {"namedStyleType": f"HEADING_{section.heading_level}"},
                                 "fields": "namedStyleType",
                             }
                         }
@@ -211,19 +192,19 @@ class GoogleDocsTool(DocumentTool):
 
             if requests:
                 await asyncio.to_thread(
-                    lambda: svc.documents()
-                    .batchUpdate(
-                        documentId=document_id,
-                        body={"requests": requests},
+                    lambda: (
+                        svc.documents()
+                        .batchUpdate(
+                            documentId=document_id,
+                            body={"requests": requests},
+                        )
+                        .execute()
                     )
-                    .execute()
                 )
 
         return document_id.encode("utf-8")
 
-    async def _modify_document(
-        self, source: str, operations: list[DocumentOperation]
-    ) -> bytes:
+    async def _modify_document(self, source: str, operations: list[DocumentOperation]) -> bytes:
         """Modify a Google Doc by document ID."""
         svc = self._get_service()
 
@@ -247,12 +228,14 @@ class GoogleDocsTool(DocumentTool):
 
         if requests:
             await asyncio.to_thread(
-                lambda: svc.documents()
-                .batchUpdate(
-                    documentId=source,
-                    body={"requests": requests},
+                lambda: (
+                    svc.documents()
+                    .batchUpdate(
+                        documentId=source,
+                        body={"requests": requests},
+                    )
+                    .execute()
                 )
-                .execute()
             )
 
         return source.encode("utf-8")

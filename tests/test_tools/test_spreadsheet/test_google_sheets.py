@@ -168,11 +168,13 @@ class TestGoogleSheetsToolModify:
 
         from firefly_dworkers.tools.spreadsheet.models import SpreadsheetOperation
 
-        ops = [SpreadsheetOperation(
-            operation="add_rows",
-            sheet_name="Sheet1",
-            data={"rows": [["Charlie", 300]]},
-        )]
+        ops = [
+            SpreadsheetOperation(
+                operation="add_rows",
+                sheet_name="Sheet1",
+                data={"rows": [["Charlie", 300]]},
+            )
+        ]
         result = await tool._modify_spreadsheet("sheet-id", ops)
         assert result == b"sheet-id"
 
@@ -186,10 +188,12 @@ class TestGoogleSheetsToolModify:
 
         from firefly_dworkers.tools.spreadsheet.models import SpreadsheetOperation
 
-        ops = [SpreadsheetOperation(
-            operation="add_sheet",
-            data={"name": "New Sheet"},
-        )]
+        ops = [
+            SpreadsheetOperation(
+                operation="add_sheet",
+                data={"name": "New Sheet"},
+            )
+        ]
         result = await tool._modify_spreadsheet("sheet-id", ops)
         assert result == b"sheet-id"
 

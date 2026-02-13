@@ -105,6 +105,22 @@ import firefly_dworkers.tools.consulting.requirement_gathering   # registers "re
 import firefly_dworkers.tools.consulting.process_mapping         # registers "process_mapping"
 import firefly_dworkers.tools.consulting.gap_analysis            # registers "gap_analysis"
 import firefly_dworkers.tools.consulting.documentation           # registers "documentation"
+
+# Presentation
+import firefly_dworkers.tools.presentation.powerpoint       # registers "powerpoint"
+import firefly_dworkers.tools.presentation.google_slides     # registers "google_slides"
+
+# Document
+import firefly_dworkers.tools.document.word                  # registers "word"
+import firefly_dworkers.tools.document.google_docs           # registers "google_docs"
+import firefly_dworkers.tools.document.pdf                   # registers "pdf"
+
+# Spreadsheet
+import firefly_dworkers.tools.spreadsheet.excel              # registers "excel"
+import firefly_dworkers.tools.spreadsheet.google_sheets      # registers "google_sheets_spreadsheet"
+
+# Vision
+import firefly_dworkers.tools.vision.analysis                # registers "vision_analysis"
 ```
 
 ---
@@ -192,9 +208,13 @@ names = tool_registry.list_tools()
 # ["tavily", "serpapi", "web_browser", "flybrowser", "rss_feed",
 #  "sharepoint", "google_drive", "confluence", "s3",
 #  "slack", "teams", "email", "jira", "asana",
-#  "spreadsheet", "api_client", "sql",
+#  "api_client", "sql",
 #  "report_generation", "requirement_gathering",
-#  "process_mapping", "gap_analysis", "documentation"]
+#  "process_mapping", "gap_analysis", "documentation",
+#  "powerpoint", "google_slides",
+#  "word", "google_docs", "pdf",
+#  "excel", "google_sheets_spreadsheet",
+#  "vision_analysis"]
 ```
 
 **Returns:** `list[str]`
@@ -222,11 +242,23 @@ project_tools = tool_registry.list_by_category("project")
 # ["jira", "asana"]
 
 data_tools = tool_registry.list_by_category("data")
-# ["spreadsheet", "api_client", "sql"]
+# ["api_client", "sql"]
 
 consulting_tools = tool_registry.list_by_category("consulting")
 # ["report_generation", "requirement_gathering", "process_mapping",
 #  "gap_analysis", "documentation"]
+
+presentation_tools = tool_registry.list_by_category("presentation")
+# ["powerpoint", "google_slides"]
+
+document_tools = tool_registry.list_by_category("document")
+# ["word", "google_docs", "pdf"]
+
+spreadsheet_tools = tool_registry.list_by_category("spreadsheet")
+# ["excel", "google_sheets_spreadsheet"]
+
+vision_tools = tool_registry.list_by_category("vision")
+# ["vision_analysis"]
 ```
 
 **Returns:** `list[str]`
@@ -373,7 +405,11 @@ The built-in categories are:
 | `communication` | slack, teams, email |
 | `project` | jira, asana |
 | `consulting` | report_generation, process_mapping, gap_analysis, requirement_gathering, documentation |
-| `data` | spreadsheet, sql, api_client |
+| `data` | sql, api_client |
+| `presentation` | powerpoint, google_slides |
+| `document` | word, google_docs, pdf |
+| `spreadsheet` | excel, google_sheets_spreadsheet |
+| `vision` | vision_analysis |
 
 ---
 

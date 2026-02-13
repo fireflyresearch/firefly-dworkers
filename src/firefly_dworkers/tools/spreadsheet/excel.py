@@ -48,9 +48,7 @@ class ExcelTool(SpreadsheetPort):
             guards=guards,
         )
 
-    async def _read_spreadsheet(
-        self, source: str, sheet_name: str = ""
-    ) -> WorkbookData:
+    async def _read_spreadsheet(self, source: str, sheet_name: str = "") -> WorkbookData:
         _require_openpyxl()
         return await asyncio.to_thread(self._read_sync, source, sheet_name)
 
@@ -58,9 +56,7 @@ class ExcelTool(SpreadsheetPort):
         _require_openpyxl()
         return await asyncio.to_thread(self._create_sync, sheets)
 
-    async def _modify_spreadsheet(
-        self, source: str, operations: list[SpreadsheetOperation]
-    ) -> bytes:
+    async def _modify_spreadsheet(self, source: str, operations: list[SpreadsheetOperation]) -> bytes:
         _require_openpyxl()
         return await asyncio.to_thread(self._modify_sync, source, operations)
 
@@ -70,21 +66,14 @@ class ExcelTool(SpreadsheetPort):
         wb = openpyxl.load_workbook(source, read_only=True, data_only=True)
         sheets: list[SheetData] = []
 
-        target_sheets = (
-            [wb[sheet_name]]
-            if sheet_name and sheet_name in wb.sheetnames
-            else [wb.active]
-        )
+        target_sheets = [wb[sheet_name]] if sheet_name and sheet_name in wb.sheetnames else [wb.active]
 
         for ws in target_sheets:
             headers: list[str] = []
             rows: list[list[Any]] = []
             for i, row in enumerate(ws.iter_rows(values_only=True)):
                 if i == 0:
-                    headers = [
-                        str(c) if c is not None else f"col_{j}"
-                        for j, c in enumerate(row)
-                    ]
+                    headers = [str(c) if c is not None else f"col_{j}" for j, c in enumerate(row)]
                 else:
                     rows.append(list(row))
 
@@ -123,9 +112,7 @@ class ExcelTool(SpreadsheetPort):
         wb.save(buf)
         return buf.getvalue()
 
-    def _modify_sync(
-        self, source: str, operations: list[SpreadsheetOperation]
-    ) -> bytes:
+    def _modify_sync(self, source: str, operations: list[SpreadsheetOperation]) -> bytes:
         wb = openpyxl.load_workbook(source)
 
         for op in operations:
@@ -133,9 +120,7 @@ class ExcelTool(SpreadsheetPort):
                 name = op.data.get("name", "Sheet")
                 wb.create_sheet(title=name)
             elif op.operation == "add_rows":
-                ws_name = op.sheet_name or (
-                    wb.active.title if wb.active else ""
-                )
+                ws_name = op.sheet_name or (wb.active.title if wb.active else "")
                 ws = wb[ws_name]
                 for row in op.data.get("rows", []):
                     ws.append(row)

@@ -78,8 +78,7 @@ class EmailTool(MessageTool):
     async def _send(self, channel: str, content: str) -> Message:
         if not AIOSMTPLIB_AVAILABLE:
             raise ImportError(
-                "aiosmtplib is required for EmailTool send. "
-                "Install with: pip install firefly-dworkers[email]"
+                "aiosmtplib is required for EmailTool send. Install with: pip install firefly-dworkers[email]"
             )
         if not self._smtp_host:
             raise ConnectorError("EmailTool send requires smtp_host")

@@ -80,9 +80,7 @@ class ConfluenceTool(DocumentStorageTool):
         self._ensure_deps()
 
         if not self._base_url or not self._username or not self._api_token:
-            raise ConnectorAuthError(
-                "ConfluenceTool requires base_url, username, and api_token"
-            )
+            raise ConnectorAuthError("ConfluenceTool requires base_url, username, and api_token")
 
         self._client = _Confluence(
             url=self._base_url,
@@ -101,9 +99,7 @@ class ConfluenceTool(DocumentStorageTool):
         if self._space_key:
             cql += f' AND space = "{self._space_key}"'
 
-        results_data = await asyncio.to_thread(
-            client.cql, cql, limit=50
-        )
+        results_data = await asyncio.to_thread(client.cql, cql, limit=50)
         pages = results_data.get("results", [])
         return [
             DocumentResult(

@@ -110,10 +110,7 @@ class FlyBrowserTool(WebBrowsingTool):
 
     def _require_flybrowser(self) -> None:
         if not FLYBROWSER_AVAILABLE:
-            raise ImportError(
-                "flybrowser required for FlyBrowserTool. "
-                "Install with: pip install flybrowser"
-            )
+            raise ImportError("flybrowser required for FlyBrowserTool. Install with: pip install flybrowser")
 
     async def _execute(self, **kwargs: Any) -> dict[str, Any]:
         """Dispatch to the appropriate FlyBrowser method.
@@ -198,7 +195,13 @@ class FlyBrowserTool(WebBrowsingTool):
             if extract_links:
                 link_result = await browser.extract(
                     "Extract all hyperlinks as a list of objects with 'text' and 'href' fields",
-                    schema={"type": "array", "items": {"type": "object", "properties": {"text": {"type": "string"}, "href": {"type": "string"}}}},
+                    schema={
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"text": {"type": "string"}, "href": {"type": "string"}},
+                        },
+                    },
                     return_metadata=True,
                 )
                 if isinstance(link_result.data, list):

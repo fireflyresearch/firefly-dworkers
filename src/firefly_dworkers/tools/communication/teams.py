@@ -77,13 +77,9 @@ class TeamsTool(MessageTool):
 
     def _ensure_deps(self) -> None:
         if not MSAL_AVAILABLE:
-            raise ImportError(
-                "msal is required for TeamsTool. Install with: pip install msal"
-            )
+            raise ImportError("msal is required for TeamsTool. Install with: pip install msal")
         if not HTTPX_AVAILABLE:
-            raise ImportError(
-                "httpx is required for TeamsTool. Install with: pip install httpx"
-            )
+            raise ImportError("httpx is required for TeamsTool. Install with: pip install httpx")
 
     async def _get_token(self) -> str:
         self._ensure_deps()
@@ -91,9 +87,7 @@ class TeamsTool(MessageTool):
             return self._access_token
 
         if not self._tenant_id or not self._client_id or not self._client_secret:
-            raise ConnectorAuthError(
-                "TeamsTool requires tenant_id, client_id, and client_secret"
-            )
+            raise ConnectorAuthError("TeamsTool requires tenant_id, client_id, and client_secret")
 
         authority = f"https://login.microsoftonline.com/{self._tenant_id}"
         app = msal.ConfidentialClientApplication(
@@ -149,9 +143,7 @@ class TeamsTool(MessageTool):
         if not channel_id:
             raise ConnectorError("TeamsTool send requires a channel ID")
 
-        body = {
-            "body": {"contentType": "text", "content": content}
-        }
+        body = {"body": {"contentType": "text", "content": content}}
         result = await self._graph_post(
             f"/teams/{self._team_id}/channels/{channel_id}/messages",
             body,
@@ -173,14 +165,10 @@ class TeamsTool(MessageTool):
             raise ConnectorError("TeamsTool read requires a channel ID")
 
         if message_id:
-            data = await self._graph_get(
-                f"/teams/{self._team_id}/channels/{channel_id}/messages/{message_id}"
-            )
+            data = await self._graph_get(f"/teams/{self._team_id}/channels/{channel_id}/messages/{message_id}")
             msgs = [data]
         else:
-            data = await self._graph_get(
-                f"/teams/{self._team_id}/channels/{channel_id}/messages"
-            )
+            data = await self._graph_get(f"/teams/{self._team_id}/channels/{channel_id}/messages")
             msgs = data.get("value", [])
 
         return [

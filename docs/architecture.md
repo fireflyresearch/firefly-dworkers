@@ -11,6 +11,8 @@
 - [Knowledge Backend Protocol](#knowledge-backend-protocol)
 - [Plan DAG Execution](#plan-dag-execution)
 - [Tenant Configuration Flow](#tenant-configuration-flow)
+- [Prompt Management](#prompt-management)
+- [Guards and Observability](#guards-and-observability)
 - [Dependency on fireflyframework-genai](#dependency-on-fireflyframework-genai)
 - [Threading and Concurrency](#threading-and-concurrency)
 
@@ -91,6 +93,10 @@ graph LR
         MT["MessageTool"]
         PMT["ProjectManagementTool"]
         CT["ConsultingTool"]
+        PT["PresentationTool"]
+        DT["DocumentTool"]
+        SpT["SpreadsheetPort"]
+        VT["VisionAnalysisTool"]
     end
 
     subgraph "Adapters (Concrete)"
@@ -112,6 +118,13 @@ graph LR
         GA["GapAnalysisTool"]
         RQ["RequirementGatheringTool"]
         Doc["DocumentationTool"]
+        PPT["PowerPointTool"]
+        GSlides["GoogleSlidesTool"]
+        Word["WordTool"]
+        GDocs["GoogleDocsTool"]
+        PDF["PDFTool"]
+        Excel["ExcelTool"]
+        GSheets["GoogleSheetsTool"]
     end
 
     WST --> Tavily
@@ -132,6 +145,13 @@ graph LR
     CT --> GA
     CT --> RQ
     CT --> Doc
+    PT --> PPT
+    PT --> GSlides
+    DT --> Word
+    DT --> GDocs
+    DT --> PDF
+    SpT --> Excel
+    SpT --> GSheets
 ```
 
 ### Port Definitions
@@ -146,6 +166,9 @@ Each port extends `fireflyframework_genai.tools.base.BaseTool`:
 | `MessageTool` | `firefly_dworkers.tools.communication.base` | `_send`, `_read`, `_list_channels` |
 | `ProjectManagementTool` | `firefly_dworkers.tools.project.base` | `_create_task`, `_list_tasks`, `_update_task`, `_get_task` |
 | `ConsultingTool` | `firefly_dworkers.tools.consulting.base` | Varies per subclass (each implements `_execute`) |
+| `PresentationTool` | `firefly_dworkers.tools.presentation.base` | `_create`, `_add_slide`, `_save` |
+| `DocumentTool` | `firefly_dworkers.tools.document.base` | `_create`, `_add_section`, `_save` |
+| `SpreadsheetPort` | `firefly_dworkers.tools.spreadsheet.base` | `_create`, `_add_sheet`, `_save`, `_read` |
 
 ---
 
@@ -355,6 +378,37 @@ The `TenantConfig` model provides:
 
 ---
 
+## Prompt Management
+
+Worker instructions and skill prompts are managed via Jinja2 templates, auto-discovered by `PromptLoader`:
+
+```mermaid
+graph LR
+    Templates["Jinja2 Templates (.j2)"] --> Loader["PromptLoader"]
+    Loader --> Registry["PromptRegistry"]
+    Registry --> WorkerPrompt["get_worker_prompt()"]
+    Registry --> SkillPrompt["get_skill_prompt()"]
+    WorkerPrompt --> Worker["BaseWorker"]
+    SkillPrompt --> Tools["Productivity Tools"]
+```
+
+Template directories:
+- `prompts/workers/` -- Worker system prompts (prefixed `worker/`)
+- `prompts/skills/` -- Tool skill prompts (prefixed `skill/`)
+
+---
+
+## Guards and Observability
+
+BaseWorker automatically wires guard and cost middleware from tenant configuration:
+
+- **PromptGuardMiddleware** -- Scans prompts for injection patterns. Supports sanitisation mode (redacts matches) or rejection mode (raises error).
+- **OutputGuardMiddleware** -- Scans LLM output for PII, secrets, and harmful content. Blocks or sanitises based on configured categories.
+- **CostGuardMiddleware** -- Enforces per-call and total budget limits. Can warn-only or block.
+- **LoggingMiddleware** and **ObservabilityMiddleware** -- Auto-wired by the framework.
+
+---
+
 ## Dependency on fireflyframework-genai
 
 firefly-dworkers extends the following framework primitives:
@@ -362,11 +416,15 @@ firefly-dworkers extends the following framework primitives:
 | Framework Class | dworkers Extension |
 |----------------|-------------------|
 | `FireflyAgent` | `BaseWorker` (adds role, autonomy, tenant config) |
-| `BaseTool` | `WebSearchTool`, `WebBrowsingTool`, `DocumentStorageTool`, `MessageTool`, `ProjectManagementTool`, `ConsultingTool` |
+| `BaseTool` | `WebSearchTool`, `WebBrowsingTool`, `DocumentStorageTool`, `MessageTool`, `ProjectManagementTool`, `ConsultingTool`, `PresentationTool`, `DocumentTool`, `SpreadsheetPort` |
 | `ToolKit` | Per-worker toolkit factories in `toolkits.py` |
 | `PipelineBuilder` | `PlanBuilder` wraps it to create DAGs from plan templates |
 | `MemoryManager` | `InMemoryKnowledgeBackend` wraps it for document storage |
 | `create_genai_app()` | `create_dworkers_app()` extends it with dworkers-specific routes |
+| `PromptTemplate` / `PromptRegistry` | `PromptLoader` wraps template discovery and registration |
+| `FallbackComposer` / `SequentialComposer` | Resilient tool chains in toolkit factories |
+| `PromptGuardMiddleware` / `OutputGuardMiddleware` | Guard middleware wired by `BaseWorker` |
+| `CostGuardMiddleware` | Cost tracking middleware wired by `BaseWorker` |
 
 ---
 

@@ -22,13 +22,15 @@ class FakeSpreadsheetTool(SpreadsheetPort):
 
     async def _read_spreadsheet(self, source, sheet_name=""):
         return WorkbookData(
-            sheets=[SheetData(
-                name="Sheet1",
-                headers=["Name", "Value"],
-                rows=[["Alice", 1], ["Bob", 2]],
-                row_count=2,
-                col_count=2,
-            )],
+            sheets=[
+                SheetData(
+                    name="Sheet1",
+                    headers=["Name", "Value"],
+                    rows=[["Alice", 1], ["Bob", 2]],
+                    row_count=2,
+                    col_count=2,
+                )
+            ],
             active_sheet="Sheet1",
         )
 
@@ -74,9 +76,7 @@ class TestSpreadsheetPort:
     async def test_execute_create(self) -> None:
         tool = FakeSpreadsheetTool()
         sheets = [SheetSpec(name="Data", headers=["A", "B"], rows=[[1, 2]])]
-        result = await tool.execute(
-            action="create", sheets=[s.model_dump() for s in sheets]
-        )
+        result = await tool.execute(action="create", sheets=[s.model_dump() for s in sheets])
         assert result["success"] is True
         assert result["bytes_length"] > 0
 

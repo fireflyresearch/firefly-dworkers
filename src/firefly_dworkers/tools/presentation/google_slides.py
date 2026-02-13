@@ -63,8 +63,7 @@ class GoogleSlidesTool(PresentationTool):
     def _ensure_deps(self) -> None:
         if not GOOGLE_AVAILABLE:
             raise ImportError(
-                "google-api-python-client and google-auth required. "
-                "Install with: pip install firefly-dworkers[google]"
+                "google-api-python-client and google-auth required. Install with: pip install firefly-dworkers[google]"
             )
 
     def _get_service(self) -> Any:
@@ -73,20 +72,14 @@ class GoogleSlidesTool(PresentationTool):
         self._ensure_deps()
 
         if self._service_account_key:
-            creds = _sa.Credentials.from_service_account_file(
-                self._service_account_key, scopes=self._scopes
-            )
+            creds = _sa.Credentials.from_service_account_file(self._service_account_key, scopes=self._scopes)
         elif self._credentials_json:
             import json
 
             info = json.loads(self._credentials_json)
-            creds = _sa.Credentials.from_service_account_info(
-                info, scopes=self._scopes
-            )
+            creds = _sa.Credentials.from_service_account_info(info, scopes=self._scopes)
         else:
-            raise ConnectorAuthError(
-                "GoogleSlidesTool requires service_account_key or credentials_json"
-            )
+            raise ConnectorAuthError("GoogleSlidesTool requires service_account_key or credentials_json")
 
         self._service = _build("slides", "v1", credentials=creds)
         return self._service
@@ -96,9 +89,7 @@ class GoogleSlidesTool(PresentationTool):
     async def _read_presentation(self, source: str) -> PresentationData:
         """Read a Google Slides presentation by ID."""
         svc = self._get_service()
-        pres = await asyncio.to_thread(
-            lambda: svc.presentations().get(presentationId=source).execute()
-        )
+        pres = await asyncio.to_thread(lambda: svc.presentations().get(presentationId=source).execute())
 
         slides = []
         for i, slide in enumerate(pres.get("slides", [])):
@@ -107,10 +98,7 @@ class GoogleSlidesTool(PresentationTool):
             for element in slide.get("pageElements", []):
                 shape = element.get("shape", {})
                 text_elements = shape.get("text", {}).get("textElements", [])
-                text = "".join(
-                    te.get("textRun", {}).get("content", "")
-                    for te in text_elements
-                )
+                text = "".join(te.get("textRun", {}).get("content", "") for te in text_elements)
                 ph = shape.get("placeholder", {})
                 if ph.get("type") in ("TITLE", "CENTERED_TITLE"):
                     title = text.strip()
@@ -120,9 +108,7 @@ class GoogleSlidesTool(PresentationTool):
             slides.append(
                 SlideData(
                     index=i,
-                    layout=slide.get("slideProperties", {}).get(
-                        "layoutObjectId", ""
-                    ),
+                    layout=slide.get("slideProperties", {}).get("layoutObjectId", ""),
                     title=title,
                     content="\n".join(content_parts),
                 )
@@ -137,17 +123,11 @@ class GoogleSlidesTool(PresentationTool):
         return PresentationData(
             slides=slides,
             master_layouts=layouts,
-            slide_width=pres.get("pageSize", {})
-            .get("width", {})
-            .get("magnitude", 0),
-            slide_height=pres.get("pageSize", {})
-            .get("height", {})
-            .get("magnitude", 0),
+            slide_width=pres.get("pageSize", {}).get("width", {}).get("magnitude", 0),
+            slide_height=pres.get("pageSize", {}).get("height", {}).get("magnitude", 0),
         )
 
-    async def _create_presentation(
-        self, template: str, slides: list[SlideSpec]
-    ) -> bytes:
+    async def _create_presentation(self, template: str, slides: list[SlideSpec]) -> bytes:
         """Create a new Google Slides presentation. Returns presentation ID as bytes."""
         svc = self._get_service()
 
@@ -155,9 +135,7 @@ class GoogleSlidesTool(PresentationTool):
         if slides and slides[0].title:
             body["title"] = slides[0].title
 
-        pres = await asyncio.to_thread(
-            lambda: svc.presentations().create(body=body).execute()
-        )
+        pres = await asyncio.to_thread(lambda: svc.presentations().create(body=body).execute())
         presentation_id = pres["presentationId"]
 
         # Add slides via batch update
@@ -167,26 +145,24 @@ class GoogleSlidesTool(PresentationTool):
                 requests.append(
                     {
                         "createSlide": {
-                            "slideLayoutReference": {
-                                "predefinedLayout": "TITLE_AND_BODY"
-                            },
+                            "slideLayoutReference": {"predefinedLayout": "TITLE_AND_BODY"},
                         }
                     }
                 )
             await asyncio.to_thread(
-                lambda: svc.presentations()
-                .batchUpdate(
-                    presentationId=presentation_id,
-                    body={"requests": requests},
+                lambda: (
+                    svc.presentations()
+                    .batchUpdate(
+                        presentationId=presentation_id,
+                        body={"requests": requests},
+                    )
+                    .execute()
                 )
-                .execute()
             )
 
         return presentation_id.encode("utf-8")
 
-    async def _modify_presentation(
-        self, source: str, operations: list[SlideOperation]
-    ) -> bytes:
+    async def _modify_presentation(self, source: str, operations: list[SlideOperation]) -> bytes:
         """Modify a Google Slides presentation by ID."""
         svc = self._get_service()
 
@@ -208,12 +184,14 @@ class GoogleSlidesTool(PresentationTool):
 
         if requests:
             await asyncio.to_thread(
-                lambda: svc.presentations()
-                .batchUpdate(
-                    presentationId=source,
-                    body={"requests": requests},
+                lambda: (
+                    svc.presentations()
+                    .batchUpdate(
+                        presentationId=source,
+                        body={"requests": requests},
+                    )
+                    .execute()
                 )
-                .execute()
             )
 
         return source.encode("utf-8")

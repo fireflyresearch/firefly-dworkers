@@ -75,9 +75,7 @@ class S3Tool(DocumentStorageTool):
 
     def _ensure_deps(self) -> None:
         if not BOTO3_AVAILABLE:
-            raise ImportError(
-                "boto3 is required for S3Tool. Install with: pip install boto3"
-            )
+            raise ImportError("boto3 is required for S3Tool. Install with: pip install boto3")
 
     def _get_client(self) -> Any:
         if self._client is not None:
@@ -127,7 +125,9 @@ class S3Tool(DocumentStorageTool):
                 name=obj["Key"].split("/")[-1],
                 path=obj["Key"],
                 size_bytes=obj.get("Size", 0),
-                modified_at=obj.get("LastModified", "").isoformat() if hasattr(obj.get("LastModified", ""), "isoformat") else str(obj.get("LastModified", "")),
+                modified_at=obj.get("LastModified", "").isoformat()
+                if hasattr(obj.get("LastModified", ""), "isoformat")
+                else str(obj.get("LastModified", "")),
             )
             for obj in resp.get("Contents", [])
         ]
@@ -139,9 +139,7 @@ class S3Tool(DocumentStorageTool):
             raise ConnectorError("S3 read requires resource_id or path")
 
         try:
-            resp = await asyncio.to_thread(
-                s3.get_object, Bucket=self._bucket, Key=key
-            )
+            resp = await asyncio.to_thread(s3.get_object, Bucket=self._bucket, Key=key)
         except _ClientError as exc:
             raise ConnectorError(f"S3 read failed for '{key}': {exc}") from exc
 
@@ -155,7 +153,9 @@ class S3Tool(DocumentStorageTool):
             content=content[:100_000],
             content_type=resp.get("ContentType", ""),
             size_bytes=resp.get("ContentLength", 0),
-            modified_at=resp.get("LastModified", "").isoformat() if hasattr(resp.get("LastModified", ""), "isoformat") else "",
+            modified_at=resp.get("LastModified", "").isoformat()
+            if hasattr(resp.get("LastModified", ""), "isoformat")
+            else "",
         )
 
     async def _list(self, path: str) -> list[DocumentResult]:
@@ -194,7 +194,9 @@ class S3Tool(DocumentStorageTool):
                     name=obj["Key"].split("/")[-1],
                     path=obj["Key"],
                     size_bytes=obj.get("Size", 0),
-                    modified_at=obj.get("LastModified", "").isoformat() if hasattr(obj.get("LastModified", ""), "isoformat") else str(obj.get("LastModified", "")),
+                    modified_at=obj.get("LastModified", "").isoformat()
+                    if hasattr(obj.get("LastModified", ""), "isoformat")
+                    else str(obj.get("LastModified", "")),
                 )
             )
         return results

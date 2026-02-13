@@ -79,23 +79,27 @@ class PowerPointTool(PresentationTool):
                         content_parts.append(shape.text_frame.text)
 
                 if shape.placeholder_format is not None:
-                    placeholders.append(PlaceholderInfo(
-                        idx=shape.placeholder_format.idx,
-                        name=shape.name,
-                    ))
+                    placeholders.append(
+                        PlaceholderInfo(
+                            idx=shape.placeholder_format.idx,
+                            name=shape.name,
+                        )
+                    )
 
             notes = ""
             if slide.has_notes_slide and slide.notes_slide.notes_text_frame:
                 notes = slide.notes_slide.notes_text_frame.text
 
-            slides.append(SlideData(
-                index=i,
-                layout=slide.slide_layout.name,
-                title=title,
-                content="\n".join(content_parts),
-                placeholders=placeholders,
-                notes=notes,
-            ))
+            slides.append(
+                SlideData(
+                    index=i,
+                    layout=slide.slide_layout.name,
+                    title=title,
+                    content="\n".join(content_parts),
+                    placeholders=placeholders,
+                    notes=notes,
+                )
+            )
 
         layouts = [layout.name for layout in prs.slide_layouts]
         return PresentationData(
@@ -186,9 +190,7 @@ class PowerPointTool(PresentationTool):
         if n_cols == 0:
             return
 
-        table_shape = slide.shapes.add_table(
-            n_rows, n_cols, Inches(1), Inches(2), Inches(8), Inches(0.5 * n_rows)
-        )
+        table_shape = slide.shapes.add_table(n_rows, n_cols, Inches(1), Inches(2), Inches(8), Inches(0.5 * n_rows))
         table = table_shape.table
 
         for i, header in enumerate(headers):
