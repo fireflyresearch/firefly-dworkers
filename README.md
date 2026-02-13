@@ -1,3 +1,513 @@
-# firefly-dworkers
+```
+ _____ ___ ____  _____ _____ _  __   __
+|  ___|_ _|  _ \| ____|  ___| | \ \ / /
+| |_   | || |_) |  _| | |_  | |  \ V /
+|  _|  | ||  _ <| |___|  _| | |___| |
+|_|   |___|_| \_\_____|_|   |_____|_|
 
-Digital Workers as a Service (DWaaS) platform built on fireflyframework-genai for consulting firms.
+ ____  __        _____  ____  _  _______ ____  ____
+|  _ \ \ \      / / _ \|  _ \| |/ / ____|  _ \/ ___|
+| | | | \ \ /\ / / | | | |_) | ' /|  _| | |_) \___ \
+| |_| |  \ V  V /| |_| |  _ <| . \| |___|  _ < ___) |
+|____/    \_/\_/  \___/|_| \_\_|\_\_____|_| \_\____/
+
+        Digital Workers as a Service (DWaaS)
+```
+
+[![PyPI version](https://img.shields.io/pypi/v/firefly-dworkers.svg)](https://pypi.org/project/firefly-dworkers/)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)]()
+
+**AI-powered digital workers for consulting firms, built on fireflyframework-genai.**
+
+---
+
+## Table of Contents
+
+- [Why dworkers?](#why-dworkers)
+- [Architecture](#architecture)
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Installation](#installation)
+- [CLI Usage](#cli-usage)
+- [Configuration](#configuration)
+- [Development](#development)
+- [Project Structure](#project-structure)
+- [License](#license)
+
+---
+
+## Why dworkers?
+
+Consulting firms face a persistent challenge: scaling expertise without linearly scaling headcount. firefly-dworkers addresses this by providing **Digital Workers as a Service (DWaaS)** -- AI agents purpose-built for consulting workflows.
+
+- **36% productivity optimization** -- Turn 1 FTE into 1.26 FTE effective capacity through intelligent task execution.
+- **Four specialized worker roles** -- Analyst, Researcher, Data Analyst, and Manager, each with domain-tuned instructions and toolkits.
+- **Industry verticals** -- Pre-configured knowledge for banking, healthcare, technology, gaming, legal, and consumer sectors.
+- **DAG-based plan templates** -- Reusable multi-step workflows for common engagements (market analysis, customer segmentation, process improvement, technology assessment).
+- **Multi-tenant by design** -- Onboard new clients with a YAML file. No code changes required.
+- **Configurable autonomy** -- From fully manual (human approves every step) to fully autonomous, with semi-supervised as the default.
+- **Pluggable connectors** -- Swap Tavily for SerpAPI, SharePoint for Google Drive, or Slack for Teams through configuration alone.
+
+---
+
+## Architecture
+
+firefly-dworkers follows a **hexagonal architecture** (ports and adapters) layered on top of fireflyframework-genai:
+
+```mermaid
+graph TB
+    subgraph "Application Layer"
+        CLI["CLI (Typer + Rich)"]
+        API["REST API (FastAPI)"]
+        SDK["SDK (Sync + Async)"]
+    end
+
+    subgraph "Orchestration Layer"
+        Plans["Plans (DAG Templates)"]
+        PB["PlanBuilder"]
+        Autonomy["Autonomy + Checkpoints"]
+    end
+
+    subgraph "Worker Layer"
+        WF["WorkerFactory"]
+        Analyst["AnalystWorker"]
+        Researcher["ResearcherWorker"]
+        DataAnalyst["DataAnalystWorker"]
+        Manager["ManagerWorker"]
+    end
+
+    subgraph "Tool Layer (Ports)"
+        WST["WebSearchTool"]
+        WBT["WebBrowsingTool"]
+        DST["DocumentStorageTool"]
+        MT["MessageTool"]
+        PMT["ProjectManagementTool"]
+        CT["ConsultingTool"]
+    end
+
+    subgraph "Adapters"
+        Tavily["TavilySearchTool"]
+        SerpAPI["SerpAPISearchTool"]
+        WB["WebBrowserTool"]
+        FB["FlyBrowserTool"]
+        SP["SharePointTool"]
+        GD["GoogleDriveTool"]
+        Conf["ConfluenceTool"]
+        S3A["S3Tool"]
+        Slack["SlackTool"]
+        Teams["TeamsTool"]
+        Email["EmailTool"]
+        Jira["JiraTool"]
+        Asana["AsanaTool"]
+        RG["ReportGenerationTool"]
+        PM["ProcessMappingTool"]
+        GA["GapAnalysisTool"]
+        RQ["RequirementGatheringTool"]
+        Doc["DocumentationTool"]
+    end
+
+    subgraph "Cross-Cutting"
+        TR["ToolRegistry"]
+        Tenants["TenantConfig (YAML)"]
+        Knowledge["KnowledgeRepository"]
+        Verticals["Verticals"]
+    end
+
+    CLI --> Plans
+    API --> Plans
+    SDK --> API
+    Plans --> PB
+    PB --> WF
+    WF --> Analyst & Researcher & DataAnalyst & Manager
+    Analyst & Researcher & DataAnalyst & Manager --> WST & WBT & DST & MT & PMT & CT
+    WST --> Tavily & SerpAPI
+    WBT --> WB & FB
+    DST --> SP & GD & Conf & S3A
+    MT --> Slack & Teams & Email
+    PMT --> Jira & Asana
+    CT --> RG & PM & GA & RQ & Doc
+    TR --> Tavily & SerpAPI & WB & FB & SP & GD & Conf & S3A & Slack & Teams & Email & Jira & Asana & RG & PM & GA & RQ & Doc
+    Tenants --> WF
+    Knowledge --> Analyst & Researcher
+    Verticals --> Analyst & Researcher & DataAnalyst & Manager
+    Autonomy --> Plans
+```
+
+**Key patterns:**
+
+- **Ports** = Abstract base classes (`WebSearchTool`, `WebBrowsingTool`, `DocumentStorageTool`, `MessageTool`, `ProjectManagementTool`, `ConsultingTool`)
+- **Adapters** = Concrete implementations (`TavilySearchTool`, `SerpAPISearchTool`, `WebBrowserTool`, `FlyBrowserTool`, `SharePointTool`, `GoogleDriveTool`, `ConfluenceTool`, `S3Tool`, `SlackTool`, `TeamsTool`, `EmailTool`, `JiraTool`, `AsanaTool`, plus five consulting tools)
+- **Registry** = `ToolRegistry` with `@tool_registry.register()` decorators for self-registration
+- **Factory** = `WorkerFactory` with `@worker_factory.register()` decorators for worker class creation
+
+See [docs/architecture.md](docs/architecture.md) for a deep dive.
+
+---
+
+## Features
+
+- **Workers** -- Four specialized AI agents (Analyst, Researcher, Data Analyst, Manager) with vertical-aware instruction building
+- **Tools** -- 20+ pluggable connectors across web search, storage, communication, project management, and consulting domains
+- **Plans** -- DAG-based workflow templates with dependency resolution, retry policies, and timeout support
+- **Knowledge** -- Document indexing and retrieval with pluggable `KnowledgeBackend` protocol
+- **Tenants** -- Multi-tenant configuration via YAML/JSON with per-tenant models, connectors, and worker settings
+- **Verticals** -- Industry-specific system prompt fragments for six sectors
+- **Autonomy** -- Three levels (manual, semi_supervised, autonomous) with checkpoint handling
+- **SDK** -- Synchronous and asynchronous Python clients for programmatic access
+- **Server** -- FastAPI REST API with OpenAPI documentation
+- **CLI** -- `dworkers` command with `init`, `serve`, `install`, and `check` subcommands
+
+---
+
+## Quick Start
+
+```bash
+# 1. Install
+pip install firefly-dworkers[all]
+
+# 2. Initialize a new project
+dworkers init my-project
+
+# 3. Start the server
+dworkers serve
+```
+
+---
+
+## Installation
+
+Install the base package:
+
+```bash
+pip install firefly-dworkers
+```
+
+Or install with specific extras:
+
+| Extra | What it adds | Install command |
+|-------|-------------|-----------------|
+| `web` | httpx, beautifulsoup4, feedparser | `pip install firefly-dworkers[web]` |
+| `browser` | FlyBrowser integration | `pip install firefly-dworkers[browser]` |
+| `sharepoint` | msal, Office365 REST client | `pip install firefly-dworkers[sharepoint]` |
+| `google` | Google API client, auth libraries | `pip install firefly-dworkers[google]` |
+| `confluence` | Atlassian Python API | `pip install firefly-dworkers[confluence]` |
+| `jira` | Atlassian Python API | `pip install firefly-dworkers[jira]` |
+| `slack` | Slack SDK | `pip install firefly-dworkers[slack]` |
+| `teams` | Microsoft Graph SDK | `pip install firefly-dworkers[teams]` |
+| `email` | aiosmtplib | `pip install firefly-dworkers[email]` |
+| `data` | openpyxl, pandas | `pip install firefly-dworkers[data]` |
+| `server` | FastAPI, Uvicorn | `pip install firefly-dworkers[server]` |
+| `cli` | Typer, Rich | `pip install firefly-dworkers[cli]` |
+| `all` | All of the above | `pip install firefly-dworkers[all]` |
+| `dev` | pytest, ruff, pyright, coverage | `pip install firefly-dworkers[dev]` |
+
+---
+
+## CLI Usage
+
+The `dworkers` CLI is built with Typer and Rich.
+
+```bash
+# Show version and banner
+dworkers --version
+
+# Initialize a new project with tenant config scaffolding
+dworkers init my-project
+
+# Start the API server (default: http://0.0.0.0:8000)
+dworkers serve
+
+# Install optional dependencies for a connector
+dworkers install sharepoint
+
+# Check environment, dependencies, and configuration
+dworkers check
+```
+
+See [docs/cli-reference.md](docs/cli-reference.md) for the complete reference.
+
+---
+
+## Configuration
+
+Each tenant is configured via a YAML file in the tenant config directory:
+
+```yaml
+# config/tenants/acme-corp.yaml
+id: acme-corp
+name: Acme Corporation
+
+models:
+  default: openai:gpt-4o
+  research: anthropic:claude-sonnet-4-20250514
+
+verticals:
+  - banking
+  - technology
+
+workers:
+  analyst:
+    autonomy: semi_supervised
+    custom_instructions: "Focus on risk assessment and regulatory compliance."
+  researcher:
+    autonomy: autonomous
+  data_analyst:
+    autonomy: semi_supervised
+  manager:
+    autonomy: manual
+
+connectors:
+  web_search:
+    enabled: true
+    provider: tavily
+    api_key: "${TAVILY_API_KEY}"
+  sharepoint:
+    enabled: true
+    tenant_id: "${AZURE_TENANT_ID}"
+    client_id: "${SP_CLIENT_ID}"
+    client_secret: "${SP_CLIENT_SECRET}"
+    site_url: "https://acmecorp.sharepoint.com/sites/consulting"
+  slack:
+    enabled: true
+    bot_token: "${SLACK_BOT_TOKEN}"
+    default_channel: "#consulting-ops"
+  jira:
+    enabled: true
+    base_url: "https://acmecorp.atlassian.net"
+    username: "${JIRA_USERNAME}"
+    api_token: "${JIRA_API_TOKEN}"
+    project_key: CONSULT
+
+branding:
+  company_name: Acme Corporation
+  report_template: default
+
+security:
+  allowed_models:
+    - "openai:*"
+    - "anthropic:*"
+  data_residency: us-east-1
+```
+
+See [docs/configuration.md](docs/configuration.md) for the complete reference.
+
+---
+
+## Development
+
+### Setup
+
+```bash
+# Clone the repository
+git clone https://github.com/fireflyresearch/firefly-dworkers.git
+cd firefly-dworkers
+
+# Install with dev dependencies using uv
+uv sync --all-extras
+
+# Or with pip
+pip install -e ".[dev,all]"
+```
+
+### Testing
+
+```bash
+# Run all tests
+uv run pytest tests/ -v
+
+# Run with coverage
+uv run pytest tests/ --cov=firefly_dworkers --cov=firefly_dworkers_server
+
+# Run a specific test module
+uv run pytest tests/test_workers/test_factory.py -v
+```
+
+### Linting and Type Checking
+
+```bash
+# Lint with ruff
+uv run ruff check src/ tests/
+
+# Format with ruff
+uv run ruff format src/ tests/
+
+# Type check with pyright
+uv run pyright
+```
+
+---
+
+## Project Structure
+
+```
+firefly-dworkers/
+|-- pyproject.toml
+|-- README.md
+|-- docs/
+|   |-- index.md
+|   |-- architecture.md
+|   |-- getting-started.md
+|   |-- configuration.md
+|   |-- cli-reference.md
+|   |-- api-reference.md
+|   |-- contributing.md
+|   |-- workers/          (overview, custom-workers)
+|   |-- tools/            (overview, registry)
+|   |-- plans/            (overview, custom-plans, templates)
+|   |-- knowledge/        (overview)
+|   |-- verticals/        (overview)
+|   |-- sdk/              (overview)
+|   |-- tenants/          (overview)
+|   |-- autonomy/         (overview)
+|-- src/
+|   |-- firefly_dworkers/
+|   |   |-- __init__.py
+|   |   |-- _version.py
+|   |   |-- config.py
+|   |   |-- exceptions.py
+|   |   |-- types.py
+|   |   |-- autonomy/
+|   |   |   |-- __init__.py
+|   |   |   |-- checkpoint.py
+|   |   |   |-- levels.py
+|   |   |   |-- reviewer.py
+|   |   |-- knowledge/
+|   |   |   |-- __init__.py
+|   |   |   |-- backends.py
+|   |   |   |-- indexer.py
+|   |   |   |-- repository.py
+|   |   |   |-- retriever.py
+|   |   |-- plans/
+|   |   |   |-- __init__.py
+|   |   |   |-- base.py
+|   |   |   |-- builder.py
+|   |   |   |-- registry.py
+|   |   |   |-- templates/
+|   |   |       |-- __init__.py
+|   |   |       |-- customer_segmentation.py
+|   |   |       |-- market_analysis.py
+|   |   |       |-- process_improvement.py
+|   |   |       |-- technology_assessment.py
+|   |   |-- sdk/
+|   |   |   |-- __init__.py
+|   |   |   |-- async_client.py
+|   |   |   |-- client.py
+|   |   |   |-- models.py
+|   |   |-- tenants/
+|   |   |   |-- __init__.py
+|   |   |   |-- config.py
+|   |   |   |-- context.py
+|   |   |   |-- loader.py
+|   |   |   |-- registry.py
+|   |   |-- tools/
+|   |   |   |-- __init__.py
+|   |   |   |-- registry.py
+|   |   |   |-- toolkits.py
+|   |   |   |-- communication/
+|   |   |   |   |-- __init__.py
+|   |   |   |   |-- base.py
+|   |   |   |   |-- slack.py
+|   |   |   |   |-- teams.py
+|   |   |   |   |-- email.py
+|   |   |   |-- consulting/
+|   |   |   |   |-- __init__.py
+|   |   |   |   |-- base.py
+|   |   |   |   |-- report_generation.py
+|   |   |   |   |-- process_mapping.py
+|   |   |   |   |-- gap_analysis.py
+|   |   |   |   |-- requirement_gathering.py
+|   |   |   |   |-- documentation.py
+|   |   |   |-- data/
+|   |   |   |   |-- __init__.py
+|   |   |   |   |-- csv_excel.py
+|   |   |   |   |-- sql.py
+|   |   |   |   |-- api_client.py
+|   |   |   |-- project/
+|   |   |   |   |-- __init__.py
+|   |   |   |   |-- base.py
+|   |   |   |   |-- jira.py
+|   |   |   |   |-- asana.py
+|   |   |   |-- storage/
+|   |   |   |   |-- __init__.py
+|   |   |   |   |-- base.py
+|   |   |   |   |-- sharepoint.py
+|   |   |   |   |-- google_drive.py
+|   |   |   |   |-- confluence.py
+|   |   |   |   |-- s3.py
+|   |   |   |-- web/
+|   |   |       |-- __init__.py
+|   |   |       |-- search.py
+|   |   |       |-- browsing.py
+|   |   |       |-- tavily.py
+|   |   |       |-- serpapi.py
+|   |   |       |-- browser.py
+|   |   |       |-- flybrowser.py
+|   |   |       |-- rss.py
+|   |   |-- verticals/
+|   |   |   |-- __init__.py
+|   |   |   |-- base.py
+|   |   |   |-- banking.py
+|   |   |   |-- healthcare.py
+|   |   |   |-- technology.py
+|   |   |   |-- gaming.py
+|   |   |   |-- legal.py
+|   |   |   |-- consumer.py
+|   |   |-- workers/
+|   |       |-- __init__.py
+|   |       |-- base.py
+|   |       |-- factory.py
+|   |       |-- registry.py
+|   |       |-- analyst.py
+|   |       |-- researcher.py
+|   |       |-- data_analyst.py
+|   |       |-- manager.py
+|   |-- firefly_dworkers_server/
+|   |   |-- __init__.py
+|   |   |-- __main__.py
+|   |   |-- app.py
+|   |   |-- api/
+|   |       |-- __init__.py
+|   |       |-- workers.py
+|   |       |-- plans.py
+|   |       |-- tenants.py
+|   |       |-- knowledge.py
+|   |-- firefly_dworkers_cli/
+|       |-- __init__.py
+|       |-- __main__.py
+|       |-- app.py
+|       |-- commands/
+|       |   |-- __init__.py
+|       |   |-- init.py
+|       |   |-- serve.py
+|       |   |-- install.py
+|       |   |-- check.py
+|       |-- ui/
+|           |-- __init__.py
+|           |-- banner.py
+|           |-- panels.py
+|-- tests/
+    |-- conftest.py
+    |-- test_config.py
+    |-- test_types.py
+    |-- test_workers/
+    |-- test_tools/
+    |-- test_plans/
+    |-- test_tenants/
+    |-- test_knowledge/
+    |-- test_sdk/
+    |-- test_server/
+    |-- test_cli/
+    |-- test_autonomy/
+    |-- test_verticals/
+    |-- test_integration/
+```
+
+---
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).
+
+Copyright 2026 Firefly Research.
