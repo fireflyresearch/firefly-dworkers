@@ -26,6 +26,7 @@ class WorkerConfig(BaseModel):
     researcher: WorkerSettings = Field(default_factory=WorkerSettings)
     data_analyst: WorkerSettings = Field(default_factory=WorkerSettings)
     manager: WorkerSettings = Field(default_factory=WorkerSettings)
+    designer: WorkerSettings = Field(default_factory=WorkerSettings)
 
     def settings_for(self, role: str) -> WorkerSettings:
         return getattr(self, role)
@@ -223,6 +224,24 @@ class VisionConnectorConfig(BaseConnectorConfig):
     provider: str = "vision_analysis"
 
 
+class ImageGenerationConnectorConfig(BaseModel):
+    """Configuration for AI image generation (DALL-E, etc.)."""
+
+    enabled: bool = False
+    provider: str = "openai"
+    api_key: str = ""
+    credential_ref: str = ""
+
+
+class StockImageConnectorConfig(BaseModel):
+    """Configuration for stock image APIs (Unsplash, etc.)."""
+
+    enabled: bool = False
+    provider: str = "unsplash"
+    api_key: str = ""
+    credential_ref: str = ""
+
+
 class ConnectorsConfig(BaseModel, extra="allow"):
     """Typed connector configuration registry.
 
@@ -248,6 +267,8 @@ class ConnectorsConfig(BaseModel, extra="allow"):
     document: DocumentConnectorConfig = Field(default_factory=DocumentConnectorConfig)
     spreadsheet: SpreadsheetConnectorConfig = Field(default_factory=SpreadsheetConnectorConfig)
     vision: VisionConnectorConfig = Field(default_factory=VisionConnectorConfig)
+    image_generation: ImageGenerationConnectorConfig = Field(default_factory=ImageGenerationConnectorConfig)
+    stock_images: StockImageConnectorConfig = Field(default_factory=StockImageConnectorConfig)
 
     def enabled_connectors(self) -> dict[str, BaseConnectorConfig]:
         """Return only connectors where ``enabled=True``."""

@@ -9,6 +9,7 @@ class WorkerRole(StrEnum):
     RESEARCHER = "researcher"
     DATA_ANALYST = "data_analyst"
     MANAGER = "manager"
+    DESIGNER = "designer"
 
 
 class AutonomyLevel(StrEnum):
