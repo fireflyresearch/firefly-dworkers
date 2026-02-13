@@ -5,12 +5,13 @@ from __future__ import annotations
 import pytest
 from fireflyframework_genai.prompts.registry import prompt_registry
 
-from firefly_dworkers.prompts import get_worker_prompt, load_prompts
+from firefly_dworkers.prompts import _loader, get_worker_prompt, load_prompts
 
 
 class TestPromptLoader:
     def setup_method(self) -> None:
         prompt_registry.clear()
+        _loader._loaded = False
 
     def test_load_prompts_registers_worker_templates(self) -> None:
         load_prompts()

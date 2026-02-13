@@ -59,3 +59,17 @@ class TestWorkerPromptIntegration:
         config = _make_config()
         worker = ManagerWorker(config, model=TestModel(), auto_register=False)
         assert "project manager" in worker._instructions_text.lower()
+
+    def test_worker_with_no_custom_instructions(self) -> None:
+        """Worker should still have base prompt when no custom instructions."""
+        load_prompts()
+        config = _make_config(custom_instructions="")
+        worker = AnalystWorker(config, model=TestModel(), auto_register=False)
+        assert "analyst" in worker._instructions_text.lower()
+
+    def test_worker_with_invalid_vertical_still_works(self) -> None:
+        """Unknown verticals should be skipped without error."""
+        load_prompts()
+        config = _make_config(verticals=["nonexistent_vertical_xyz"])
+        worker = AnalystWorker(config, model=TestModel(), auto_register=False)
+        assert "analyst" in worker._instructions_text.lower()

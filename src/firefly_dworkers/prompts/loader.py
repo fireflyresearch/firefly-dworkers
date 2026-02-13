@@ -47,9 +47,14 @@ class PromptLoader:
 
     def __init__(self, prompts_dir: Path | None = None) -> None:
         self._prompts_dir = prompts_dir or _PROMPTS_DIR
+        self._loaded = False
+        self._keys: list[str] = []
 
     def load(self) -> list[str]:
         """Scan for .j2 files, register each as a PromptTemplate, and return the keys."""
+        if self._loaded:
+            return list(self._keys)
+
         registered: list[str] = []
 
         for j2_path in sorted(self._prompts_dir.rglob("*.j2")):
@@ -68,5 +73,7 @@ class PromptLoader:
             registered.append(key)
             logger.debug("Registered prompt template '%s' from %s", key, j2_path)
 
+        self._keys = registered
+        self._loaded = True
         logger.info("Loaded %d prompt templates", len(registered))
         return registered
