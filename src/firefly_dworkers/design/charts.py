@@ -11,7 +11,7 @@ import io
 import logging
 from typing import Any
 
-from firefly_dworkers.design.models import ResolvedChart
+from firefly_dworkers.design.models import DesignProfile, ResolvedChart
 
 # ── Lazy library imports ────────────────────────────────────────────────────
 
@@ -28,8 +28,9 @@ except ImportError:
 try:
     import pptx
     from pptx.chart.data import CategoryChartData, XyChartData
+    from pptx.dml.color import RGBColor
     from pptx.enum.chart import XL_CHART_TYPE
-    from pptx.util import Emu
+    from pptx.util import Emu, Pt
 
     PPTX_AVAILABLE = True
 except ImportError:
@@ -240,10 +241,13 @@ class ChartRenderer:
         top: float = 1524000,
         width: float = 7315200,
         height: float = 4572000,
+        profile: DesignProfile | None = None,
     ) -> None:
         """Add a native chart to a python-pptx *slide*.
 
         Positional arguments are in EMU (English Metric Units).
+        When *profile* is provided, consulting-quality styling is applied
+        (series colors, axis formatting, data labels, font choices).
         """
         if not PPTX_AVAILABLE:
             raise ImportError("python-pptx required: pip install firefly-dworkers[presentation]")
@@ -288,6 +292,139 @@ class ChartRenderer:
         if chart.title:
             chart_obj.has_title = True
             chart_obj.chart_title.text_frame.text = chart.title
+
+        # Apply professional styling
+        self._style_pptx_chart(chart_obj, chart, profile)
+
+    # ── PPTX professional styling helpers ────────────────────────────────────
+
+    def _style_pptx_chart(
+        self,
+        chart_obj: Any,
+        chart: ResolvedChart,
+        profile: DesignProfile | None,
+    ) -> None:
+        """Apply consulting-quality styling to a python-pptx chart object."""
+        chart_type = chart.chart_type.lower()
+        is_pie_family = chart_type in ("pie", "doughnut")
+
+        self._apply_series_colors(chart_obj, chart, chart_type)
+        self._apply_data_labels(chart_obj, chart, profile, is_pie_family)
+        if not is_pie_family:
+            self._apply_axis_formatting(chart_obj, profile)
+        self._apply_title_font(chart_obj, profile)
+        self._apply_legend_font(chart_obj, profile)
+
+    @staticmethod
+    def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
+        """Convert '#RRGGBB' or 'RRGGBB' to (r, g, b) ints."""
+        h = hex_color.lstrip("#")
+        return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+    def _apply_series_colors(
+        self, chart_obj: Any, chart: ResolvedChart, chart_type: str
+    ) -> None:
+        """Apply chart.colors to each series fill (and line for line charts)."""
+        if not chart.colors:
+            return
+        try:
+            for plot in chart_obj.plots:
+                for i, series in enumerate(plot.series):
+                    color_hex = chart.colors[i % len(chart.colors)]
+                    r, g, b = self._hex_to_rgb(color_hex)
+                    series.format.fill.solid()
+                    series.format.fill.fore_color.rgb = RGBColor(r, g, b)
+                    if chart_type == "line":
+                        series.format.line.color.rgb = RGBColor(r, g, b)
+        except Exception:
+            logger.debug("Could not apply series colors", exc_info=True)
+
+    @staticmethod
+    def _apply_data_labels(
+        chart_obj: Any,
+        chart: ResolvedChart,
+        profile: DesignProfile | None,
+        is_pie_family: bool,
+    ) -> None:
+        """Show data labels when chart.show_data_labels is True."""
+        if not chart.show_data_labels:
+            return
+        try:
+            for plot in chart_obj.plots:
+                plot.has_data_labels = True
+                data_labels = plot.data_labels
+                data_labels.font.size = Pt(8)
+                if profile and profile.body_font:
+                    data_labels.font.name = profile.body_font
+                if is_pie_family:
+                    data_labels.show_percentage = True
+                    data_labels.show_value = False
+                else:
+                    data_labels.show_value = True
+        except Exception:
+            logger.debug("Could not apply data labels", exc_info=True)
+
+    @staticmethod
+    def _apply_axis_formatting(
+        chart_obj: Any, profile: DesignProfile | None
+    ) -> None:
+        """Style category and value axes with clean, professional formatting."""
+        try:
+            cat_axis = chart_obj.category_axis
+            cat_axis.tick_labels.font.size = Pt(9)
+            cat_axis.tick_labels.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+            cat_axis.has_major_gridlines = False
+            if profile and profile.body_font:
+                cat_axis.tick_labels.font.name = profile.body_font
+        except Exception:
+            logger.debug("Could not style category axis", exc_info=True)
+
+        try:
+            val_axis = chart_obj.value_axis
+            val_axis.tick_labels.font.size = Pt(9)
+            val_axis.tick_labels.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+            val_axis.has_major_gridlines = True
+            val_axis.major_gridlines.format.line.color.rgb = RGBColor(0xE0, 0xE0, 0xE0)
+            val_axis.major_gridlines.format.line.width = Pt(0.5)
+            if profile and profile.body_font:
+                val_axis.tick_labels.font.name = profile.body_font
+        except Exception:
+            logger.debug("Could not style value axis", exc_info=True)
+
+    @staticmethod
+    def _apply_title_font(
+        chart_obj: Any, profile: DesignProfile | None
+    ) -> None:
+        """Style chart title with profile heading font."""
+        if not profile or not chart_obj.has_title:
+            return
+        try:
+            title_tf = chart_obj.chart_title.text_frame
+            for paragraph in title_tf.paragraphs:
+                for run in paragraph.runs:
+                    if profile.heading_font:
+                        run.font.name = profile.heading_font
+                    run.font.size = Pt(11)
+                    run.font.bold = True
+                    run.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
+        except Exception:
+            logger.debug("Could not style chart title", exc_info=True)
+
+    @staticmethod
+    def _apply_legend_font(
+        chart_obj: Any, profile: DesignProfile | None
+    ) -> None:
+        """Style legend font for consistency."""
+        if not chart_obj.has_legend:
+            return
+        try:
+            legend = chart_obj.legend
+            legend.font.size = Pt(8)
+            if profile and profile.body_font:
+                legend.font.name = profile.body_font
+            legend.font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+        except Exception:
+            logger.debug("Could not style legend", exc_info=True)
 
     # ── openpyxl (native worksheet chart) ────────────────────────────────────
 

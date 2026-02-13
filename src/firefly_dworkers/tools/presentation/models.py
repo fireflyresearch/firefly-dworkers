@@ -10,10 +10,23 @@ from firefly_dworkers.design.models import ContentBlock, ImagePlacement, TextSty
 
 
 class TableSpec(BaseModel):
-    """Specification for a table in a slide or document."""
+    """Specification for a table in a slide or document.
+
+    All styling fields are optional with sensible defaults, so existing
+    code passing ``{"headers": [...], "rows": [...]}`` dicts works unchanged.
+    """
 
     headers: list[str]
     rows: list[list[str]]
+    header_bg_color: str = ""  # hex, e.g. "#1a3c6d"
+    header_text_color: str = "#FFFFFF"
+    alternating_rows: bool = True
+    alt_row_color: str = "#F5F5F5"
+    border_color: str = "#CCCCCC"
+    font_name: str = ""
+    header_font_size: float = 10.0
+    cell_font_size: float = 9.0
+    column_widths: list[float] = Field(default_factory=list)  # inches
 
 
 class ChartSpec(BaseModel):

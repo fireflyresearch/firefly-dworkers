@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from firefly_dworkers.design.charts import ChartRenderer
-from firefly_dworkers.design.models import DataSeries, ResolvedChart
+from firefly_dworkers.design.models import DataSeries, DesignProfile, ResolvedChart
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -321,6 +321,105 @@ class TestChartRendererPptx:
 
         chart_shapes = [s for s in slide.shapes if s.has_chart]
         assert len(chart_shapes) == 1
+
+
+# ── render_for_pptx professional styling ──────────────────────────────────────
+
+
+class TestChartRendererPptxStyling:
+    """Tests for consulting-quality chart styling."""
+
+    def test_render_chart_with_colors_applied(self) -> None:
+        pptx_mod = pytest.importorskip("pptx")
+        from pptx.dml.color import RGBColor
+
+        renderer = ChartRenderer()
+        prs = pptx_mod.Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        chart = _bar_chart(colors=["#1a3c6d", "#e74c3c", "#27ae60"])
+        renderer.render_for_pptx(chart, slide)
+
+        chart_obj = [s for s in slide.shapes if s.has_chart][0].chart
+        series_0 = chart_obj.plots[0].series[0]
+        assert series_0.format.fill.fore_color.rgb == RGBColor(0x1A, 0x3C, 0x6D)
+
+    def test_render_chart_with_data_labels(self) -> None:
+        pptx_mod = pytest.importorskip("pptx")
+        renderer = ChartRenderer()
+        prs = pptx_mod.Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        chart = _bar_chart(show_data_labels=True)
+        renderer.render_for_pptx(chart, slide)
+
+        chart_obj = [s for s in slide.shapes if s.has_chart][0].chart
+        assert chart_obj.plots[0].has_data_labels is True
+
+    def test_render_chart_with_profile_axes(self) -> None:
+        pptx_mod = pytest.importorskip("pptx")
+        from pptx.util import Pt
+
+        renderer = ChartRenderer()
+        prs = pptx_mod.Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        profile = DesignProfile(heading_font="Georgia", body_font="Calibri")
+        renderer.render_for_pptx(_bar_chart(), slide, profile=profile)
+
+        chart_obj = [s for s in slide.shapes if s.has_chart][0].chart
+        assert chart_obj.category_axis.tick_labels.font.size == Pt(9)
+
+    def test_render_chart_profile_none_safe(self) -> None:
+        """No error when profile is None — backward compatible."""
+        pptx_mod = pytest.importorskip("pptx")
+        renderer = ChartRenderer()
+        prs = pptx_mod.Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        renderer.render_for_pptx(_bar_chart(), slide, profile=None)
+
+        chart_shapes = [s for s in slide.shapes if s.has_chart]
+        assert len(chart_shapes) == 1
+
+    def test_pie_chart_skips_axes(self) -> None:
+        """Pie charts should not attempt axis formatting."""
+        pptx_mod = pytest.importorskip("pptx")
+        renderer = ChartRenderer()
+        prs = pptx_mod.Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        profile = DesignProfile(body_font="Arial")
+        chart = _pie_chart()
+        chart.colors = ["#ff0000", "#00ff00", "#0000ff"]
+        chart.show_data_labels = True
+        renderer.render_for_pptx(chart, slide, profile=profile)
+
+        chart_obj = [s for s in slide.shapes if s.has_chart][0].chart
+        assert chart_obj.plots[0].has_data_labels is True
+
+    def test_legend_font_styled(self) -> None:
+        pptx_mod = pytest.importorskip("pptx")
+        from pptx.util import Pt
+
+        renderer = ChartRenderer()
+        prs = pptx_mod.Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        profile = DesignProfile(body_font="Calibri")
+        renderer.render_for_pptx(_bar_chart(show_legend=True), slide, profile=profile)
+
+        chart_obj = [s for s in slide.shapes if s.has_chart][0].chart
+        assert chart_obj.legend.font.size == Pt(8)
+
+    def test_line_chart_colors_set_line(self) -> None:
+        pptx_mod = pytest.importorskip("pptx")
+        from pptx.dml.color import RGBColor
+
+        renderer = ChartRenderer()
+        prs = pptx_mod.Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        chart = _line_chart()
+        chart.colors = ["#e74c3c"]
+        renderer.render_for_pptx(chart, slide)
+
+        chart_obj = [s for s in slide.shapes if s.has_chart][0].chart
+        series_0 = chart_obj.plots[0].series[0]
+        assert series_0.format.line.color.rgb == RGBColor(0xE7, 0x4C, 0x3C)
 
 
 # ── render_for_xlsx (native openpyxl charts) ────────────────────────────────

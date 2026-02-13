@@ -13,7 +13,7 @@ from fireflyframework_genai.tools.base import BaseTool
 
 from firefly_dworkers.design.models import TextStyle
 from firefly_dworkers.tools.presentation.base import PresentationTool
-from firefly_dworkers.tools.presentation.models import ChartSpec, SlideSpec
+from firefly_dworkers.tools.presentation.models import ChartSpec, SlideSpec, TableSpec
 from firefly_dworkers.tools.presentation.powerpoint import PowerPointTool
 from firefly_dworkers.tools.registry import tool_registry
 
@@ -554,3 +554,167 @@ class TestPowerPointToolCombined:
         result = await tool.execute(action="create", slides=slides)
         assert result["success"] is True
         assert result["bytes_length"] > 0
+
+
+class TestPowerPointTextAlignment:
+    """Tests for text alignment support."""
+
+    async def test_text_alignment_center(self) -> None:
+        pptx_mod = pytest.importorskip("pptx")
+        from pptx.enum.text import PP_ALIGN
+
+        tool = PowerPointTool()
+        slides = [
+            SlideSpec(
+                title="Centered",
+                content="Center me",
+                body_style=TextStyle(alignment="center"),
+            ).model_dump(),
+        ]
+        result = await tool.execute(action="create", slides=slides)
+        assert result["success"] is True
+        data = tool.artifact_bytes
+        assert data is not None
+        prs = pptx_mod.Presentation(io.BytesIO(data))
+        body_ph = None
+        for shape in prs.slides[0].placeholders:
+            if shape.placeholder_format.idx == 1:
+                body_ph = shape
+                break
+        assert body_ph is not None
+        assert body_ph.text_frame.paragraphs[0].alignment == PP_ALIGN.CENTER
+
+    async def test_text_alignment_default_left(self) -> None:
+        pptx_mod = pytest.importorskip("pptx")
+        from pptx.enum.text import PP_ALIGN
+
+        tool = PowerPointTool()
+        slides = [
+            SlideSpec(
+                title="Left Aligned",
+                content="Default left",
+                body_style=TextStyle(alignment="left"),
+            ).model_dump(),
+        ]
+        result = await tool.execute(action="create", slides=slides)
+        assert result["success"] is True
+        data = tool.artifact_bytes
+        assert data is not None
+        prs = pptx_mod.Presentation(io.BytesIO(data))
+        body_ph = None
+        for shape in prs.slides[0].placeholders:
+            if shape.placeholder_format.idx == 1:
+                body_ph = shape
+                break
+        assert body_ph is not None
+        assert body_ph.text_frame.paragraphs[0].alignment == PP_ALIGN.LEFT
+
+    async def test_bullet_spacing(self) -> None:
+        pptx_mod = pytest.importorskip("pptx")
+        from pptx.util import Pt
+
+        tool = PowerPointTool()
+        slides = [
+            SlideSpec(
+                title="Bullets",
+                bullet_points=["Point A", "Point B"],
+            ).model_dump(),
+        ]
+        result = await tool.execute(action="create", slides=slides)
+        assert result["success"] is True
+        data = tool.artifact_bytes
+        assert data is not None
+        prs = pptx_mod.Presentation(io.BytesIO(data))
+        body_ph = None
+        for shape in prs.slides[0].placeholders:
+            if shape.placeholder_format.idx == 1:
+                body_ph = shape
+                break
+        assert body_ph is not None
+        p = body_ph.text_frame.paragraphs[0]
+        assert p.space_before == Pt(4)
+        assert p.space_after == Pt(2)
+
+
+class TestPowerPointTableStyling:
+    """Tests for consulting-quality table styling."""
+
+    def _make_table_slide(self, table_spec):
+        """Helper: create a single-slide presentation with a table and return the table."""
+        pptx_mod = pytest.importorskip("pptx")
+        prs = pptx_mod.Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank
+        PowerPointTool._add_table(slide, table_spec)
+        table_shapes = [s for s in slide.shapes if s.has_table]
+        assert len(table_shapes) == 1
+        return table_shapes[0].table
+
+    def test_table_header_background(self) -> None:
+        """Verify header cells have solid fill XML when header_bg_color set."""
+        table = self._make_table_slide(
+            TableSpec(
+                headers=["A", "B"],
+                rows=[["1", "2"]],
+                header_bg_color="#1a3c6d",
+            )
+        )
+        header_cell = table.cell(0, 0)
+        xml = header_cell._tc.xml
+        assert "solidFill" in xml
+        assert "1A3C6D" in xml
+
+    def test_table_alternating_rows(self) -> None:
+        """Verify even/odd data rows differ when alternating_rows=True."""
+        table = self._make_table_slide(
+            TableSpec(
+                headers=["Col"],
+                rows=[["r0"], ["r1"], ["r2"], ["r3"]],
+                alternating_rows=True,
+                alt_row_color="#F5F5F5",
+            )
+        )
+        # Row 1 (index 0, even) should have fill, row 2 (index 1, odd) should not
+        even_xml = table.cell(1, 0)._tc.xml  # data row 0
+        odd_xml = table.cell(2, 0)._tc.xml  # data row 1
+        assert "F5F5F5" in even_xml
+        assert "F5F5F5" not in odd_xml
+
+    def test_table_borders_present(self) -> None:
+        """Verify cell XML contains border elements."""
+        table = self._make_table_slide(
+            TableSpec(
+                headers=["X"],
+                rows=[["y"]],
+                border_color="#CCCCCC",
+            )
+        )
+        xml = table.cell(0, 0)._tc.xml
+        assert "lnT" in xml
+        assert "lnB" in xml
+        assert "lnL" in xml
+        assert "lnR" in xml
+
+    def test_table_default_styling(self) -> None:
+        """Minimal TableSpec with no styling overrides still works."""
+        table = self._make_table_slide(
+            TableSpec(headers=["Name", "Value"], rows=[["A", "1"]])
+        )
+        assert table.cell(0, 0).text == "Name"
+        assert table.cell(1, 0).text == "A"
+
+    def test_table_dict_input_backward_compat(self) -> None:
+        """Raw dict input (legacy API) still works."""
+        table = self._make_table_slide(
+            {"headers": ["H1", "H2"], "rows": [["v1", "v2"]]}
+        )
+        assert table.cell(0, 0).text == "H1"
+        assert table.cell(1, 1).text == "v2"
+
+    def test_table_cell_margins_set(self) -> None:
+        """Verify cell padding margins are set in XML."""
+        table = self._make_table_slide(
+            TableSpec(headers=["A"], rows=[["b"]])
+        )
+        xml = table.cell(0, 0)._tc.xml
+        assert "marL" in xml
+        assert "marT" in xml

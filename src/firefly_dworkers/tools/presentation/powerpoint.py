@@ -21,10 +21,67 @@ from firefly_dworkers.tools.registry import tool_registry
 
 try:
     import pptx
+    from lxml import etree
 
     PPTX_AVAILABLE = True
 except ImportError:
     PPTX_AVAILABLE = False
+
+
+# ── Table styling helpers (module-level, private) ──────────────────────────
+
+_DRAWINGML_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+
+
+def _hex_to_srgb(hex_color: str) -> str:
+    """Strip '#' and return uppercase 6-char hex for XML ``srgbClr``."""
+    return hex_color.lstrip("#").upper()
+
+
+def _set_cell_fill(cell: Any, hex_color: str) -> None:
+    """Set solid fill on a table cell via XML manipulation."""
+    tc_pr = cell._tc.get_or_add_tcPr()
+    # Remove any existing fill
+    for old_fill in tc_pr.findall(f"{{{_DRAWINGML_NS}}}solidFill"):
+        tc_pr.remove(old_fill)
+    solid_fill = etree.SubElement(tc_pr, f"{{{_DRAWINGML_NS}}}solidFill")
+    etree.SubElement(solid_fill, f"{{{_DRAWINGML_NS}}}srgbClr", val=_hex_to_srgb(hex_color))
+
+
+def _set_cell_borders(cell: Any, hex_color: str, width_pt: float = 0.5) -> None:
+    """Set thin borders on all four sides of a table cell via XML."""
+    width_emu = int(width_pt * 12700)  # 1 pt = 12700 EMU
+    tc_pr = cell._tc.get_or_add_tcPr()
+    for side in ("lnL", "lnR", "lnT", "lnB"):
+        # Remove existing
+        for old in tc_pr.findall(f"{{{_DRAWINGML_NS}}}{side}"):
+            tc_pr.remove(old)
+        ln = etree.SubElement(tc_pr, f"{{{_DRAWINGML_NS}}}{side}", w=str(width_emu))
+        solid_fill = etree.SubElement(ln, f"{{{_DRAWINGML_NS}}}solidFill")
+        etree.SubElement(solid_fill, f"{{{_DRAWINGML_NS}}}srgbClr", val=_hex_to_srgb(hex_color))
+
+
+def _set_cell_margins(
+    cell: Any,
+    left: int = 91440,
+    top: int = 45720,
+    right: int = 91440,
+    bottom: int = 45720,
+) -> None:
+    """Set cell padding via tcPr margin attributes (values in EMU)."""
+    tc_pr = cell._tc.get_or_add_tcPr()
+    tc_pr.set("marL", str(left))
+    tc_pr.set("marT", str(top))
+    tc_pr.set("marR", str(right))
+    tc_pr.set("marB", str(bottom))
+
+
+def _set_run_font_color(run: Any, hex_color: str) -> None:
+    """Set the font color on a python-pptx run from a hex string."""
+    from pptx.dml.color import RGBColor
+
+    h = hex_color.lstrip("#")
+    run.font.color.rgb = RGBColor(int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
 
 
 def _require_pptx() -> None:
@@ -124,14 +181,20 @@ class PowerPointTool(PresentationTool):
             body_ph = self._find_body_placeholder(slide)
             if body_ph:
                 if spec.bullet_points:
+                    from pptx.util import Pt as _Pt
+
                     tf = body_ph.text_frame
                     tf.clear()
                     for j, point in enumerate(spec.bullet_points):
                         if j == 0:
                             tf.text = point
+                            p = tf.paragraphs[0]
                         else:
                             p = tf.add_paragraph()
                             p.text = point
+                        p.level = 0
+                        p.space_before = _Pt(4)
+                        p.space_after = _Pt(2)
                 elif spec.content:
                     body_ph.text_frame.text = spec.content
 
@@ -191,7 +254,8 @@ class PowerPointTool(PresentationTool):
 
     @staticmethod
     def _add_table(slide: Any, table_spec: Any) -> None:
-        from pptx.util import Inches
+        from pptx.enum.text import PP_ALIGN
+        from pptx.util import Inches, Pt
 
         if hasattr(table_spec, "headers"):
             headers = table_spec.headers
@@ -205,16 +269,72 @@ class PowerPointTool(PresentationTool):
         if n_cols == 0:
             return
 
-        table_shape = slide.shapes.add_table(n_rows, n_cols, Inches(1), Inches(2), Inches(8), Inches(0.5 * n_rows))
+        # Extract styling fields with fallback defaults
+        _attr = lambda name, default: getattr(table_spec, name, None) or (table_spec.get(name) if isinstance(table_spec, dict) else None) or default  # noqa: E731
+        header_bg = _attr("header_bg_color", "")
+        header_text_color = _attr("header_text_color", "#FFFFFF")
+        alternating = _attr("alternating_rows", True)
+        alt_color = _attr("alt_row_color", "#F5F5F5")
+        border_color = _attr("border_color", "#CCCCCC")
+        font_name = _attr("font_name", "")
+        header_font_size = float(_attr("header_font_size", 10.0))
+        cell_font_size = float(_attr("cell_font_size", 9.0))
+
+        row_height = Inches(0.35)
+        table_shape = slide.shapes.add_table(
+            n_rows, n_cols, Inches(1), Inches(2), Inches(8), row_height * n_rows
+        )
         table = table_shape.table
 
-        for i, header in enumerate(headers):
-            table.cell(0, i).text = header
+        # Disable built-in banding so we control row colors manually
+        tbl = table._tbl
+        tbl_pr = tbl.tblPr
+        if tbl_pr is not None:
+            tbl_pr.set("bandRow", "0")
+            tbl_pr.set("bandCol", "0")
+            tbl_pr.set("firstRow", "0")
+            tbl_pr.set("lastRow", "0")
 
+        # ── Header row ──
+        for i, header in enumerate(headers):
+            cell = table.cell(0, i)
+            cell.text = header
+            tf = cell.text_frame
+            tf.paragraphs[0].alignment = PP_ALIGN.LEFT
+            for run in tf.paragraphs[0].runs:
+                run.font.bold = True
+                run.font.size = Pt(header_font_size)
+                if font_name:
+                    run.font.name = font_name
+                if header_bg:
+                    _set_run_font_color(run, header_text_color)
+
+            if header_bg:
+                _set_cell_fill(cell, header_bg)
+            _set_cell_borders(cell, border_color)
+            _set_cell_margins(cell)
+
+        # ── Data rows ──
         for r, row in enumerate(rows_data):
+            is_even = r % 2 == 0
             for c, val in enumerate(row):
-                if c < n_cols:
-                    table.cell(r + 1, c).text = str(val)
+                if c >= n_cols:
+                    continue
+                cell = table.cell(r + 1, c)
+                cell.text = str(val)
+                tf = cell.text_frame
+                tf.paragraphs[0].alignment = PP_ALIGN.LEFT
+                for run in tf.paragraphs[0].runs:
+                    run.font.size = Pt(cell_font_size)
+                    if font_name:
+                        run.font.name = font_name
+                    _set_run_font_color(run, "#333333")
+
+                # Alternating row fill
+                if alternating and is_even:
+                    _set_cell_fill(cell, alt_color)
+                _set_cell_borders(cell, border_color)
+                _set_cell_margins(cell)
 
     @staticmethod
     def _add_chart(slide: Any, chart_spec: Any) -> None:
@@ -257,13 +377,31 @@ class PowerPointTool(PresentationTool):
 
     @staticmethod
     def _apply_text_style(text_frame: Any, style: Any) -> None:
-        """Apply TextStyle to all runs in a text frame."""
+        """Apply TextStyle to all runs in a text frame.
+
+        Handles both paragraph-level properties (alignment) and
+        run-level properties (font, size, bold, italic, color).
+        """
         from pptx.dml.color import RGBColor
+        from pptx.enum.text import PP_ALIGN
         from pptx.util import Pt
 
         if style is None:
             return
+
+        alignment_map = {
+            "left": PP_ALIGN.LEFT,
+            "center": PP_ALIGN.CENTER,
+            "right": PP_ALIGN.RIGHT,
+            "justify": PP_ALIGN.JUSTIFY,
+        }
+
         for paragraph in text_frame.paragraphs:
+            # Paragraph-level: alignment
+            if hasattr(style, "alignment") and style.alignment in alignment_map:
+                paragraph.alignment = alignment_map[style.alignment]
+
+            # Run-level: font properties
             for run in paragraph.runs:
                 if style.font_name:
                     run.font.name = style.font_name
