@@ -19,7 +19,11 @@ class TestLoadTenantConfig:
         assert config.models.default == "openai:gpt-4o"
         assert "technology" in config.verticals
         assert config.workers.analyst.autonomy == "semi_supervised"
-        assert config.connectors.web_search["provider"] == "tavily"
+        assert config.connectors.web_search.provider == "tavily"
+        assert config.connectors.web_search.enabled is True
+        assert config.connectors.sharepoint.tenant_id == "acme.onmicrosoft.com"
+        assert config.connectors.jira.base_url == "https://acme.atlassian.net"
+        assert len(config.connectors.enabled_connectors()) == 3
 
     def test_missing_file(self):
         with pytest.raises(TenantError, match="not found"):

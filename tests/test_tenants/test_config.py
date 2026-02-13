@@ -6,6 +6,7 @@ from firefly_dworkers.tenants.config import (
     ModelsConfig,
     SecurityConfig,
     TenantConfig,
+    WebSearchConnectorConfig,
     WorkerConfig,
 )
 
@@ -33,7 +34,9 @@ class TestTenantConfig:
                 )
             ),
             connectors=ConnectorsConfig(
-                web_search={"enabled": True, "provider": "tavily", "credential_ref": "vault://acme/tavily"}
+                web_search=WebSearchConnectorConfig(
+                    enabled=True, provider="tavily", credential_ref="vault://acme/tavily",
+                )
             ),
             branding=BrandingConfig(company_name="ACME Consulting"),
             security=SecurityConfig(allowed_models=["openai:*"], data_residency="eu"),
@@ -41,7 +44,7 @@ class TestTenantConfig:
         assert config.id == "acme"
         assert config.models.research == "anthropic:claude-sonnet-4-5-20250929"
         assert config.workers.analyst.custom_instructions == "Focus on Agile"
-        assert config.connectors.web_search["provider"] == "tavily"
+        assert config.connectors.web_search.provider == "tavily"
         assert config.security.data_residency == "eu"
 
     def test_worker_defaults(self):
