@@ -14,6 +14,9 @@ self-register when their modules are imported (triggered by
 
 from __future__ import annotations
 
+import contextlib
+from typing import Any
+
 from fireflyframework_genai.tools.base import BaseTool
 from fireflyframework_genai.tools.toolkit import ToolKit
 
@@ -24,10 +27,76 @@ from firefly_dworkers.tools.registry import tool_registry
 # Internal builder helpers
 # ---------------------------------------------------------------------------
 
+# Known web-search provider keys (in preferred fallback order).
+_WEB_SEARCH_PROVIDERS = ("tavily", "serpapi")
 
-def _build_web_tools(config: TenantConfig) -> list[BaseTool]:
+
+def _build_resilient_search(primary_provider: str, api_key: str) -> BaseTool | Any | None:
+    """Build a resilient web search tool with fallback.
+
+    Creates the primary provider and wraps it with a
+    :class:`~fireflyframework_genai.tools.FallbackComposer` that includes
+    alternative providers as fallbacks.
+    """
+    if not tool_registry.has(primary_provider):
+        return None
+
+    primary = tool_registry.create(primary_provider, api_key=api_key)
+
+    # Build fallback chain: primary provider + all other web_search providers
+    fallbacks: list[Any] = []
+    for p in _WEB_SEARCH_PROVIDERS:
+        if p != primary_provider and tool_registry.has(p):
+            with contextlib.suppress(Exception):
+                fallbacks.append(tool_registry.create(p, api_key=api_key))
+
+    if not fallbacks:
+        return primary  # No fallbacks available, return primary alone
+
+    try:
+        from fireflyframework_genai.tools import FallbackComposer
+
+        return FallbackComposer(
+            "web_search",
+            tools=[primary, *fallbacks],
+            description=f"Resilient web search ({primary_provider} with fallbacks)",
+        )
+    except ImportError:
+        return primary  # FallbackComposer not available, use primary
+
+
+def _build_research_chain(config: TenantConfig) -> BaseTool | Any | None:
+    """Build a sequential search-then-report chain.
+
+    Chains web search with report generation for automated research workflows
+    using :class:`~fireflyframework_genai.tools.SequentialComposer`.
+    """
+    search_tools = _build_web_tools(config)
+    search = next((t for t in search_tools if t.name == "web_search"), None)
+
+    if search is None:
+        return None
+
+    if not tool_registry.has("report_generation"):
+        return None
+
+    report = tool_registry.create("report_generation")
+
+    try:
+        from fireflyframework_genai.tools import SequentialComposer
+
+        return SequentialComposer(
+            "research_chain",
+            tools=[search, report],
+            description="Search web then generate report from results",
+        )
+    except ImportError:
+        return None
+
+
+def _build_web_tools(config: TenantConfig) -> list[Any]:
     """Build web tools from tenant connector config."""
-    tools: list[BaseTool] = []
+    tools: list[Any] = []
 
     # -- Search tool (Tavily, SerpAPI, etc.) ---------------------------------
     ws_cfg = config.connectors.web_search
@@ -35,8 +104,10 @@ def _build_web_tools(config: TenantConfig) -> list[BaseTool]:
     provider = getattr(ws_cfg, "provider", "tavily")
     api_key = getattr(ws_cfg, "api_key", "") or getattr(ws_cfg, "credential_ref", "")
 
-    if enabled and tool_registry.has(provider):
-        tools.append(tool_registry.create(provider, api_key=api_key))
+    if enabled:
+        search_tool = _build_resilient_search(provider, api_key)
+        if search_tool is not None:
+            tools.append(search_tool)
 
     # -- Browser tool (web_browser or flybrowser) ----------------------------
     wb_cfg = config.connectors.web_browser
@@ -110,14 +181,20 @@ def researcher_toolkit(config: TenantConfig) -> ToolKit:
     """Build a ToolKit for the *researcher* worker role.
 
     Includes web search/browsing, storage connectors, report generation,
-    and RSS feed tools.
+    RSS feed tools, and a research chain (search -> report) when the
+    :class:`~fireflyframework_genai.tools.SequentialComposer` is available.
     """
-    tools: list[BaseTool] = []
+    tools: list[Any] = []
     tools.extend(_build_web_tools(config))
     tools.extend(_build_storage_tools(config))
 
     tools.append(tool_registry.create("report_generation"))
     tools.append(tool_registry.create("rss_feed"))
+
+    # Add research chain (search -> report) if composer is available
+    chain = _build_research_chain(config)
+    if chain is not None:
+        tools.append(chain)
 
     return ToolKit(
         f"researcher-{config.id}",
@@ -165,11 +242,13 @@ def data_analyst_toolkit(config: TenantConfig) -> ToolKit:
     tools: list[BaseTool] = []
     tools.extend(_build_storage_tools(config))
 
-    tools.extend([
-        tool_registry.create("spreadsheet"),
-        tool_registry.create("api_client"),
-        tool_registry.create("report_generation"),
-    ])
+    tools.extend(
+        [
+            tool_registry.create("spreadsheet"),
+            tool_registry.create("api_client"),
+            tool_registry.create("report_generation"),
+        ]
+    )
 
     return ToolKit(
         f"data-analyst-{config.id}",
@@ -189,10 +268,12 @@ def manager_toolkit(config: TenantConfig) -> ToolKit:
     tools.extend(_build_project_tools(config))
     tools.extend(_build_communication_tools(config))
 
-    tools.extend([
-        tool_registry.create("report_generation"),
-        tool_registry.create("documentation"),
-    ])
+    tools.extend(
+        [
+            tool_registry.create("report_generation"),
+            tool_registry.create("documentation"),
+        ]
+    )
 
     return ToolKit(
         f"manager-{config.id}",

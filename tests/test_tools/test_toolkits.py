@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
+from fireflyframework_genai.tools import FallbackComposer, SequentialComposer
 from fireflyframework_genai.tools.toolkit import ToolKit
 
 from firefly_dworkers.tenants.config import TenantConfig
 from firefly_dworkers.tools.toolkits import (
+    _build_research_chain,
+    _build_resilient_search,
+    _build_web_tools,
     analyst_toolkit,
     data_analyst_toolkit,
     manager_toolkit,
@@ -192,3 +198,99 @@ class TestToolkitFactories:
     def test_manager_toolkit_tags(self) -> None:
         kit = manager_toolkit(self._make_config())
         assert "manager" in kit.tags
+
+
+class TestToolResilience:
+    """Tests for FallbackComposer and SequentialComposer integration."""
+
+    def _make_config(self, **connector_overrides: dict) -> TenantConfig:
+        """Build a TenantConfig with optional connector overrides."""
+        connectors = {
+            "web_search": {"enabled": True, "provider": "tavily", "api_key": "test-key"},
+            **connector_overrides,
+        }
+        return TenantConfig(id="test", name="Test", connectors=connectors)
+
+    # -- FallbackComposer tests -----------------------------------------------
+
+    def test_web_search_uses_fallback_composer(self) -> None:
+        """When web search is enabled, _build_resilient_search returns a FallbackComposer."""
+        result = _build_resilient_search("tavily", "test-key")
+        assert isinstance(result, FallbackComposer)
+
+    def test_fallback_composer_has_primary_first(self) -> None:
+        """Primary provider is the first tool in the fallback chain."""
+        result = _build_resilient_search("tavily", "test-key")
+        assert isinstance(result, FallbackComposer)
+        # First tool should be from the primary provider (Tavily)
+        assert result._tools[0].name == "web_search"
+        # Verify it's actually TavilySearchTool by checking type name
+        assert "Tavily" in type(result._tools[0]).__name__
+
+    def test_fallback_has_alternative_provider(self) -> None:
+        """Alternative provider is included as a fallback."""
+        result = _build_resilient_search("tavily", "test-key")
+        assert isinstance(result, FallbackComposer)
+        assert len(result._tools) >= 2
+        # Second tool should be SerpAPI
+        assert "SerpAPI" in type(result._tools[1]).__name__
+
+    def test_no_fallback_when_single_provider(self) -> None:
+        """When only one provider is available, returns it directly (no FallbackComposer)."""
+        from firefly_dworkers.tools.registry import tool_registry
+
+        # Temporarily pretend serpapi does not exist
+        with patch.object(tool_registry, "has", side_effect=lambda n: n == "tavily"):
+            result = _build_resilient_search("tavily", "test-key")
+        # Should be a plain tool, not a FallbackComposer
+        assert not isinstance(result, FallbackComposer)
+        assert result is not None
+        assert result.name == "web_search"
+
+    def test_fallback_import_error_returns_primary(self) -> None:
+        """When FallbackComposer can't be imported, returns the primary tool."""
+        with patch.dict("sys.modules", {"fireflyframework_genai.tools": None}):
+            # The lazy import inside _build_resilient_search should fail
+            result = _build_resilient_search("tavily", "test-key")
+        # Should still get a tool back (the primary)
+        assert result is not None
+        assert result.name == "web_search"
+
+    def test_disabled_search_no_fallback(self) -> None:
+        """Disabled web search produces no search tool at all."""
+        cfg = self._make_config(
+            web_search={"enabled": False, "provider": "tavily", "api_key": "key"},
+        )
+        tools = _build_web_tools(cfg)
+        tool_names = [t.name for t in tools]
+        assert "web_search" not in tool_names
+
+    def test_fallback_composer_name(self) -> None:
+        """Composed tool has name 'web_search'."""
+        result = _build_resilient_search("tavily", "test-key")
+        assert result is not None
+        assert result.name == "web_search"
+
+    def test_fallback_composer_description(self) -> None:
+        """Composed tool has a descriptive description."""
+        result = _build_resilient_search("tavily", "test-key")
+        assert result is not None
+        assert "tavily" in result.description.lower()
+        assert "fallback" in result.description.lower()
+
+    # -- SequentialComposer / research chain tests ----------------------------
+
+    def test_research_chain_created(self) -> None:
+        """SequentialComposer chain exists in researcher toolkit when available."""
+        cfg = self._make_config()
+        chain = _build_research_chain(cfg)
+        assert chain is not None
+        assert isinstance(chain, SequentialComposer)
+        assert chain.name == "research_chain"
+
+    def test_research_chain_import_fallback(self) -> None:
+        """When SequentialComposer is unavailable, chain is not added."""
+        cfg = self._make_config()
+        with patch.dict("sys.modules", {"fireflyframework_genai.tools": None}):
+            chain = _build_research_chain(cfg)
+        assert chain is None
