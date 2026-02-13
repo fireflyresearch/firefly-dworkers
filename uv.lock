@@ -1106,7 +1106,7 @@ provides-extras = ["web", "sharepoint", "google", "confluence", "jira", "slack",
 
 [[package]]
 name = "fireflyframework-genai"
-version = "26.2.1"
+version = "26.2.6"
 source = { directory = "../../fireflyframework/fireflyframework-genai" }
 dependencies = [
     { name = "jinja2" },
@@ -1173,7 +1173,7 @@ provides-extras = ["rest", "kafka", "rabbitmq", "redis", "queues", "postgres", "
 
 [[package]]
 name = "flybrowser"
-version = "26.2.1"
+version = "26.2.6"
 source = { directory = "../flybrowser" }
 dependencies = [
     { name = "aiohttp" },
@@ -1207,7 +1207,7 @@ requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = ">=23.0.0" },
     { name = "cryptography", specifier = ">=41.0.0" },
     { name = "fastapi", specifier = ">=0.104.0" },
-    { name = "fireflyframework-genai", specifier = ">=0.1.0" },
+    { name = "fireflyframework-genai", specifier = ">=26.2.6" },
     { name = "grpcio", specifier = ">=1.59.0" },
     { name = "grpcio-tools", specifier = ">=1.59.0" },
     { name = "ipython", marker = "extra == 'jupyter'", specifier = ">=8.0.0" },

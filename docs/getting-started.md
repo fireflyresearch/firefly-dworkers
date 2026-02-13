@@ -250,6 +250,7 @@ with DworkersClient(base_url="http://localhost:8000") as client:
 
 ## Next Steps
 
+- [Working Examples](../examples/) -- Six runnable scripts demonstrating workers, plans, streaming, and tool usage
 - [Architecture](architecture.md) -- Understand the hexagonal architecture
 - [Workers](workers/overview.md) -- Deep dive into worker roles
 - [Tools](tools/overview.md) -- Explore the tool system

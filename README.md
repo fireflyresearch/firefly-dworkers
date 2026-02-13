@@ -169,6 +169,18 @@ dworkers init my-project
 dworkers serve
 ```
 
+### Try the Examples
+
+If you have an Anthropic API key, you can run the working examples directly:
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+uv run python examples/01_basic_analyst.py
+```
+
+See the [examples/](examples/) directory for six runnable scripts covering
+workers, plans, streaming, and tool usage (including PowerPoint generation).
+
 ---
 
 ## Installation
@@ -340,6 +352,7 @@ uv run pyright
 firefly-dworkers/
 |-- pyproject.toml
 |-- README.md
+|-- examples/           (runnable scripts with Anthropic Claude API)
 |-- docs/
 |   |-- index.md
 |   |-- architecture.md
