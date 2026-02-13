@@ -39,10 +39,9 @@ def main(
 ) -> None:
     """Firefly Dworkers -- Digital Workers as a Service CLI."""
     if ctx.invoked_subcommand is None:
-        from firefly_dworkers_cli.ui.banner import show_banner
+        from firefly_dworkers_cli.tui import DworkersApp
 
-        show_banner()
-        raise typer.Exit
+        DworkersApp().run()
 
 
 app.command(name="init")(init)
