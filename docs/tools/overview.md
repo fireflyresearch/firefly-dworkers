@@ -446,6 +446,30 @@ async def _search(self, query: str, max_results: int) -> list[SearchResult]:
 
 ---
 
+## Design Intelligence Layer
+
+The `design/` package provides LLM-powered creative reasoning for document generation.
+
+### DesignEngine
+
+**Module:** `firefly_dworkers.design.engine`
+
+Takes a `ContentBrief` and optional `DesignProfile`, uses an LLM to produce a complete `DesignSpec`.
+
+### TemplateAnalyzer
+
+**Module:** `firefly_dworkers.design.analyzer`
+
+Extracts design DNA (colors, fonts, layouts) from existing documents (PPTX, DOCX, XLSX).
+
+### ChartRenderer
+
+**Module:** `firefly_dworkers.design.charts`
+
+Renders charts as native objects (PPTX, XLSX) or PNG images (DOCX, PDF).
+
+---
+
 ## Related Documentation
 
 - [Tool Registry](registry.md) -- Creating and registering custom tools

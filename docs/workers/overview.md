@@ -324,6 +324,25 @@ This is separate from `WorkerFactory` (which stores classes) and provides instan
 
 ---
 
+### DocumentDesignerWorker
+
+**Role:** `WorkerRole.DESIGNER`
+
+The designer worker transforms structured content into polished deliverables.
+It makes all design decisions: layout selection, color schemes, typography,
+chart types, image placement, and visual hierarchy.
+
+**Capabilities:**
+- Analyze reference templates for design DNA (colors, fonts, layouts)
+- Generate autonomous design profiles when no reference is provided
+- Create presentations, documents, spreadsheets, and PDFs
+- Embed charts, images, and diagrams
+- Apply consistent styling across all pages
+
+**Toolkit:** `designer_toolkit` — includes presentation, document, spreadsheet, vision, and storage tools.
+
+---
+
 ## Related Documentation
 
 - [Custom Workers](custom-workers.md) -- How to create custom worker classes
