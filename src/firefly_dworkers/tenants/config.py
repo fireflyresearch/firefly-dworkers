@@ -191,6 +191,19 @@ class PresentationConnectorConfig(BaseConnectorConfig):
     credentials_json: str = ""
 
 
+class DocumentConnectorConfig(BaseConnectorConfig):
+    """Document tool configuration.
+
+    Controls which document backend is used:
+    ``"word"`` for local .docx via python-docx, or
+    ``"google_docs"`` for Google Docs API.
+    """
+
+    provider: str = "word"
+    service_account_key: str = ""
+    credentials_json: str = ""
+
+
 class ConnectorsConfig(BaseModel, extra="allow"):
     """Typed connector configuration registry.
 
@@ -213,6 +226,7 @@ class ConnectorsConfig(BaseModel, extra="allow"):
     sql: SQLConnectorConfig = Field(default_factory=SQLConnectorConfig)
     api: APIConnectorConfig = Field(default_factory=APIConnectorConfig)
     presentation: PresentationConnectorConfig = Field(default_factory=PresentationConnectorConfig)
+    document: DocumentConnectorConfig = Field(default_factory=DocumentConnectorConfig)
 
     def enabled_connectors(self) -> dict[str, BaseConnectorConfig]:
         """Return only connectors where ``enabled=True``."""

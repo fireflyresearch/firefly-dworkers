@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from firefly_dworkers.tools.document.base import DocumentTool
+from firefly_dworkers.tools.document.google_docs import GoogleDocsTool
 from firefly_dworkers.tools.document.models import (
     DocumentData,
     DocumentOperation,
@@ -16,6 +17,7 @@ __all__ = [
     "DocumentData",
     "DocumentOperation",
     "DocumentTool",
+    "GoogleDocsTool",
     "ParagraphData",
     "SectionSpec",
     "TableData",
