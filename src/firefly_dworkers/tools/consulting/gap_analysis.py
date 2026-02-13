@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -14,9 +15,29 @@ class GapAnalysisTool(BaseTool):
     Produces a structured list of gaps with severity and recommendations.
     This tool structures and organises information — it does not call external
     APIs.
+
+    Configuration parameters:
+
+    * ``default_severity`` -- Severity label assigned to detected gaps.
+    * ``default_domain`` -- Fallback domain label when not specified at call
+      time.
+    * ``recommendation_template`` -- Python format string for gap
+      recommendations (receives ``{item}``).
+    * ``item_split_pattern`` -- Regex pattern used to split state descriptions
+      into individual items.
+    * ``case_sensitive`` -- If ``True``, gap comparison is case-sensitive.
     """
 
-    def __init__(self, *, guards: Sequence[GuardProtocol] = ()):
+    def __init__(
+        self,
+        *,
+        default_severity: str = "medium",
+        default_domain: str = "general",
+        recommendation_template: str = "Address gap: {item}",
+        item_split_pattern: str = r"[\n.]",
+        case_sensitive: bool = False,
+        guards: Sequence[GuardProtocol] = (),
+    ):
         super().__init__(
             "gap_analysis",
             description="Identify gaps between current state and desired state",
@@ -40,19 +61,30 @@ class GapAnalysisTool(BaseTool):
                     type_annotation="str",
                     description="Domain or area being analysed",
                     required=False,
-                    default="general",
+                    default=default_domain,
                 ),
             ],
         )
+        self._default_severity = default_severity
+        self._default_domain = default_domain
+        self._recommendation_template = recommendation_template
+        self._split_pattern = item_split_pattern
+        self._case_sensitive = case_sensitive
+
+    def _extract_items(self, text: str) -> set[str]:
+        """Split text into a set of trimmed items."""
+        items = {s.strip() for s in re.split(self._split_pattern, text) if s.strip()}
+        if not self._case_sensitive:
+            items = {s.lower() for s in items}
+        return items
 
     async def _execute(self, **kwargs: Any) -> dict[str, Any]:
         current_state = kwargs["current_state"]
         desired_state = kwargs["desired_state"]
-        domain = kwargs.get("domain", "general")
+        domain = kwargs.get("domain", self._default_domain)
 
-        # Extract key items from each state description
-        current_items = {s.strip().lower() for s in current_state.replace(".", "\n").split("\n") if s.strip()}
-        desired_items = {s.strip().lower() for s in desired_state.replace(".", "\n").split("\n") if s.strip()}
+        current_items = self._extract_items(current_state)
+        desired_items = self._extract_items(desired_state)
 
         # Items in desired but not in current are gaps
         gap_items = desired_items - current_items
@@ -64,8 +96,8 @@ class GapAnalysisTool(BaseTool):
         gaps = [
             {
                 "description": item,
-                "severity": "medium",
-                "recommendation": f"Address gap: {item}",
+                "severity": self._default_severity,
+                "recommendation": self._recommendation_template.format(item=item),
             }
             for item in sorted(gap_items)
         ]

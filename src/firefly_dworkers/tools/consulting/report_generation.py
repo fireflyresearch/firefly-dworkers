@@ -14,9 +14,24 @@ class ReportGenerationTool(BaseTool):
     Supports markdown, plain text, and JSON output formats.
     This tool structures and organises information — it does not call external
     APIs.
+
+    Configuration parameters:
+
+    * ``default_format`` -- Default output format (``markdown``, ``text``,
+      ``json``).
+    * ``markdown_heading_level`` -- Heading level for markdown output (1-6).
+    * ``text_underline_char`` -- Character used for text-format title
+      underlines.
     """
 
-    def __init__(self, *, guards: Sequence[GuardProtocol] = ()):
+    def __init__(
+        self,
+        *,
+        default_format: str = "markdown",
+        markdown_heading_level: int = 2,
+        text_underline_char: str = "=",
+        guards: Sequence[GuardProtocol] = (),
+    ):
         super().__init__(
             "report_generation",
             description="Generate structured report sections from data and analysis results",
@@ -40,18 +55,23 @@ class ReportGenerationTool(BaseTool):
                     type_annotation="str",
                     description="Output format: markdown, text, or json",
                     required=False,
-                    default="markdown",
+                    default=default_format,
                 ),
             ],
         )
+        self._default_format = default_format
+        self._md_heading_level = max(1, min(6, markdown_heading_level))
+        self._text_underline_char = text_underline_char
 
     async def _execute(self, **kwargs: Any) -> dict[str, Any]:
         title = kwargs["title"]
         data = kwargs["data"]
-        fmt = kwargs.get("format", "markdown")
+        fmt = kwargs.get("format", self._default_format)
 
         if fmt == "markdown":
-            return {"content": f"## {title}\n\n{data}\n", "format": "markdown"}
+            prefix = "#" * self._md_heading_level
+            return {"content": f"{prefix} {title}\n\n{data}\n", "format": "markdown"}
         if fmt == "json":
             return {"content": {"title": title, "body": data}, "format": "json"}
-        return {"content": f"{title}\n{'=' * len(title)}\n\n{data}\n", "format": "text"}
+        underline = self._text_underline_char * len(title)
+        return {"content": f"{title}\n{underline}\n\n{data}\n", "format": "text"}
