@@ -49,28 +49,27 @@ class AnalystWorker(BaseWorker):
 
     @staticmethod
     def _build_instructions(config: TenantConfig) -> str:
-        """Build role-specific system prompt with vertical fragments."""
+        """Build role-specific system prompt using Jinja2 template."""
+        from firefly_dworkers.prompts import get_worker_prompt, load_prompts
         from firefly_dworkers.verticals import get_vertical
 
-        parts: list[str] = [
-            "You are an expert consulting analyst. Your role is to analyze "
-            "business processes, gather requirements, identify gaps, and "
-            "produce actionable recommendations.",
-        ]
+        load_prompts()
 
-        # Add vertical-specific fragments
+        # Build verticals string from fragments
+        vertical_parts: list[str] = []
         for v_name in config.verticals:
             try:
                 v = get_vertical(v_name)
-                parts.append(v.system_prompt_fragment)
+                vertical_parts.append(v.system_prompt_fragment)
             except VerticalNotFoundError:
                 logger.debug("Skipping unknown vertical '%s'", v_name)
             except Exception:
                 logger.warning("Failed to load vertical '%s'", v_name, exc_info=True)
 
-        # Add custom instructions from tenant config
         settings = config.workers.settings_for("analyst")
-        if settings.custom_instructions:
-            parts.append(settings.custom_instructions)
-
-        return "\n\n".join(parts)
+        return get_worker_prompt(
+            "analyst",
+            company_name=config.branding.company_name,
+            verticals="\n".join(vertical_parts),
+            custom_instructions=settings.custom_instructions,
+        )
