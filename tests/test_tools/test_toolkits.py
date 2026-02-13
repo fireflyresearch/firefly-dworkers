@@ -349,12 +349,19 @@ class TestProductivityTools:
         tool_names = [t.name for t in kit.tools]
         assert "excel" in tool_names
 
-    def test_data_analyst_has_vision_tools(self) -> None:
-        """Vision tools always included in data_analyst toolkit."""
-        cfg = self._make_config()
+    def test_data_analyst_has_vision_tools_when_enabled(self) -> None:
+        """Vision enabled -> vision_analysis in data_analyst toolkit."""
+        cfg = self._make_config(vision={"enabled": True})
         kit = data_analyst_toolkit(cfg)
         tool_names = [t.name for t in kit.tools]
         assert "vision_analysis" in tool_names
+
+    def test_data_analyst_no_vision_when_disabled(self) -> None:
+        """Vision disabled -> no vision_analysis in data_analyst toolkit."""
+        cfg = self._make_config(vision={"enabled": False})
+        kit = data_analyst_toolkit(cfg)
+        tool_names = [t.name for t in kit.tools]
+        assert "vision_analysis" not in tool_names
 
     def test_data_analyst_has_sql_when_enabled(self) -> None:
         """SQL enabled -> sql_client in data_analyst toolkit."""
@@ -392,6 +399,20 @@ class TestProductivityTools:
         kit = manager_toolkit(cfg)
         tool_names = [t.name for t in kit.tools]
         assert "asana" in tool_names
+
+    def test_manager_has_spreadsheet_when_enabled(self) -> None:
+        """Spreadsheet enabled -> excel in manager toolkit."""
+        cfg = self._make_config(spreadsheet={"enabled": True, "provider": "excel"})
+        kit = manager_toolkit(cfg)
+        tool_names = [t.name for t in kit.tools]
+        assert "excel" in tool_names
+
+    def test_manager_has_vision_when_enabled(self) -> None:
+        """Vision enabled -> vision_analysis in manager toolkit."""
+        cfg = self._make_config(vision={"enabled": True})
+        kit = manager_toolkit(cfg)
+        tool_names = [t.name for t in kit.tools]
+        assert "vision_analysis" in tool_names
 
     # -- Google provider variants ---------------------------------------------
 

@@ -230,10 +230,14 @@ def _build_data_tools(config: TenantConfig) -> list[BaseTool]:
 
 
 def _build_vision_tools(config: TenantConfig) -> list[BaseTool]:
-    """Build vision analysis tools."""
+    """Build vision analysis tools from tenant connector config."""
     tools: list[BaseTool] = []
-    if tool_registry.has("vision_analysis"):
-        tools.append(tool_registry.create("vision_analysis"))
+    cfg = config.connectors.vision
+    if not getattr(cfg, "enabled", False):
+        return tools
+    provider = getattr(cfg, "provider", "vision_analysis")
+    if tool_registry.has(provider):
+        tools.append(tool_registry.create(provider))
     return tools
 
 
@@ -331,14 +335,17 @@ def data_analyst_toolkit(config: TenantConfig) -> ToolKit:
 def manager_toolkit(config: TenantConfig) -> ToolKit:
     """Build a ToolKit for the *manager* worker role.
 
-    Includes project management tools, communication connectors, presentation
-    and document tools, report generation, and documentation.
+    Includes project management tools, communication connectors, all
+    productivity tools (presentation, document, spreadsheet, vision),
+    report generation, and documentation.
     """
     tools: list[BaseTool] = []
     tools.extend(_build_project_tools(config))
     tools.extend(_build_communication_tools(config))
     tools.extend(_build_presentation_tools(config))
     tools.extend(_build_document_tools(config))
+    tools.extend(_build_spreadsheet_tools(config))
+    tools.extend(_build_vision_tools(config))
 
     tools.extend(
         [

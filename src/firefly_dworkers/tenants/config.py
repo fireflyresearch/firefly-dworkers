@@ -217,6 +217,12 @@ class SpreadsheetConnectorConfig(BaseConnectorConfig):
     credentials_json: str = ""
 
 
+class VisionConnectorConfig(BaseConnectorConfig):
+    """Vision analysis tool configuration."""
+
+    provider: str = "vision_analysis"
+
+
 class ConnectorsConfig(BaseModel, extra="allow"):
     """Typed connector configuration registry.
 
@@ -241,6 +247,7 @@ class ConnectorsConfig(BaseModel, extra="allow"):
     presentation: PresentationConnectorConfig = Field(default_factory=PresentationConnectorConfig)
     document: DocumentConnectorConfig = Field(default_factory=DocumentConnectorConfig)
     spreadsheet: SpreadsheetConnectorConfig = Field(default_factory=SpreadsheetConnectorConfig)
+    vision: VisionConnectorConfig = Field(default_factory=VisionConnectorConfig)
 
     def enabled_connectors(self) -> dict[str, BaseConnectorConfig]:
         """Return only connectors where ``enabled=True``."""
