@@ -226,13 +226,16 @@ class ProjectOrchestrator:
         )
         manager.memory = self._workspace.memory
 
-        # Build synthesis prompt
+        # Build synthesis prompt with workspace context
         results_summary = "\n".join(f"Task {k}: {v}" for k, v in task_results.items())
+        context = self._workspace.get_context()
         prompt = (
             f"Original brief: {brief}\n\n"
             f"Task results:\n{results_summary}\n\n"
-            f"Please synthesize a final deliverable from these results."
         )
+        if context:
+            prompt += f"Workspace context:\n{context}\n\n"
+        prompt += "Please synthesize a final deliverable from these results."
 
         try:
             result = await manager.run(prompt)
@@ -247,6 +250,10 @@ class ProjectOrchestrator:
         """Map decomposition output to worker role-task pairs.
 
         Uses simple keyword matching to assign tasks to appropriate roles.
+
+        .. note::
+            Task 15 will replace this with DelegationRouter +
+            ContentBasedStrategy for intelligent LLM-based routing.
         """
         tasks: list[tuple[str, str]] = []
         lines = [line.strip() for line in decomposition_output.split("\n") if line.strip()]
