@@ -972,15 +972,151 @@ if [[ "${DWORKERS_TEST_MODE:-}" == "1" ]]; then
     return 0 2>/dev/null || true
 fi
 
-# ── Main (placeholder) ───────────────────────────────────────────────────────
+# ── Data arrays ──────────────────────────────────────────────────────────────
+
+EXTRAS_LIST=(
+    "web:Web search & scraping"
+    "sharepoint:SharePoint integration"
+    "google:Google Drive / Docs / Sheets"
+    "confluence:Confluence wiki"
+    "jira:Jira task management"
+    "slack:Slack messaging"
+    "teams:Microsoft Teams"
+    "email:Email via SMTP"
+    "data:openpyxl + pandas"
+    "server:FastAPI REST server"
+    "browser:FlyBrowser (Playwright)"
+    "presentation:PowerPoint generation"
+    "pdf:PDF from Markdown/HTML"
+    "cli:Typer + Rich CLI"
+)
+
+PROFILE_OPTIONS=(
+    "Minimal        Core library + CLI only"
+    "Analyst        + web, data, presentation — for research workflows"
+    "Server         + FastAPI server, CLI, web — for API deployments"
+    "Full           All 14 extras — everything included"
+    "Custom         Pick individual extras"
+)
+
+PROFILE_NAMES=(minimal analyst server full custom)
+
+# ── Profile selection ────────────────────────────────────────────────────────
+
+select_profile() {
+    # $1 = profile result var, $2 = extras result var
+    local _sp_profile_var=$1
+    local _sp_extras_var=$2
+
+    # If profile was passed via flag
+    if [[ -n "$OPT_PROFILE" ]]; then
+        eval "$_sp_profile_var=\"\$OPT_PROFILE\""
+        if [[ "$OPT_PROFILE" == "custom" ]] && [[ "$OPT_YES" == "1" ]]; then
+            eval "$_sp_extras_var=\"all\""
+        elif [[ "$OPT_PROFILE" != "custom" ]]; then
+            local _sp_e
+            _sp_e="$(profile_to_extras "$OPT_PROFILE")"
+            eval "$_sp_extras_var=\"\$_sp_e\""
+        fi
+        return
+    fi
+
+    section "Choose a profile"
+    printf "\n"
+
+    local choice=0
+    menu_select choice "${PROFILE_OPTIONS[@]}"
+
+    local _sp_name="${PROFILE_NAMES[$choice]}"
+    eval "$_sp_profile_var=\"\$_sp_name\""
+
+    if [[ "$_sp_name" == "custom" ]]; then
+        printf "\n"
+        section "Select extras"
+        printf "  ${DIM}Space to toggle, Enter to confirm, 'a' to select all${RESET}\n\n"
+
+        local selected_extras=""
+        toggle_picker selected_extras "${EXTRAS_LIST[@]}"
+        eval "$_sp_extras_var=\"\$selected_extras\""
+    else
+        local _sp_mapped
+        _sp_mapped="$(profile_to_extras "$_sp_name")"
+        eval "$_sp_extras_var=\"\$_sp_mapped\""
+    fi
+}
+
+# ── Cleanup trap ─────────────────────────────────────────────────────────────
+
+cleanup() {
+    stop_spinner 2>/dev/null || true
+    printf "\033[?25h" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+# ── Main install flow ────────────────────────────────────────────────────────
+
+run_install() {
+    local install_dir profile extras
+
+    # 1. Welcome
+    print_welcome
+
+    # 2-3. Preflight
+    preflight_checks
+
+    # 4. Install location
+    local install_dir=""
+    prompt_path "Install location" "$DEFAULT_PREFIX" install_dir
+
+    # Override with flag if provided
+    if [[ -n "$OPT_PREFIX" ]]; then
+        install_dir="$OPT_PREFIX"
+    fi
+
+    # 5. Bootstrap uv
+    ensure_uv
+
+    # 6. Create venv
+    create_venv "$install_dir"
+
+    # 7. Profile selection
+    local profile="" extras=""
+    select_profile profile extras
+
+    if [[ -z "$extras" ]]; then
+        die "No extras selected. At minimum, the 'cli' extra is required."
+    fi
+
+    # Ensure cli is always included
+    if [[ "$extras" != "all" ]] && [[ "$extras" != *"cli"* ]]; then
+        extras="cli,${extras}"
+    fi
+
+    # 8. Install packages
+    install_packages "$install_dir" "$extras" "$profile"
+
+    # 9-10. PATH + symlinks
+    setup_path "$install_dir"
+
+    # 11. Metadata
+    write_metadata "$install_dir" "$DWORKERS_VERSION" "$profile" "$extras" "$DETECTED_SHELL_RC"
+
+    # 12. Success
+    print_success "$install_dir" "$DWORKERS_VERSION" "$profile" "$extras"
+}
+
+# ── Entry point ──────────────────────────────────────────────────────────────
+
+# Detect interactive mode
+INTERACTIVE=1
+if [[ ! -t 0 ]] || [[ ! -t 1 ]]; then
+    INTERACTIVE=0
+fi
 
 parse_args "$@"
-detect_platform
 
-section "dworkers installer v${DWORKERS_VERSION}"
-info "OS: ${DETECTED_OS}, Arch: ${DETECTED_ARCH}"
-info "Prefix: ${OPT_PREFIX:-$DEFAULT_PREFIX}"
-info "Profile: ${OPT_PROFILE:-<interactive>}"
-info "Shell RC: ${DETECTED_SHELL_RC}"
-echo ""
-pending "Installer scaffold ready. Nothing to install yet."
+if [[ "$OPT_UNINSTALL" == "1" ]]; then
+    run_uninstall
+else
+    run_install
+fi
