@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -143,12 +143,26 @@ class TestRunProjectStream:
         assert resp.status_code == 200
         assert "text/event-stream" in resp.headers["content-type"]
 
-    def test_streams_placeholder_events(self, client):
-        """Without ProjectOrchestrator, should yield project_start and project_complete."""
+    def test_streams_orchestrator_events(self, client):
+        """With ProjectOrchestrator, should yield project_start and project_complete."""
         config = _make_tenant_config()
 
-        with patch("firefly_dworkers.tenants.registry.tenant_registry") as mock_tr:
+        mock_worker = MagicMock()
+        mock_result = MagicMock()
+        mock_result.output = "mock output"
+        mock_worker.run = AsyncMock(return_value=mock_result)
+        mock_worker.memory = None
+
+        with (
+            patch("firefly_dworkers.tenants.registry.tenant_registry") as mock_tr,
+            patch("firefly_dworkers.workers.factory.worker_factory") as mock_factory,
+            patch(
+                "fireflyframework_genai.reasoning.goal_decomposition.GoalDecompositionPattern",
+                side_effect=ImportError("not available"),
+            ),
+        ):
             mock_tr.get.return_value = config
+            mock_factory.create.return_value = mock_worker
 
             resp = client.post(
                 "/api/projects/run",
@@ -156,14 +170,13 @@ class TestRunProjectStream:
             )
 
         events = _parse_sse_events(resp.text)
-        assert len(events) == 2
+        assert len(events) >= 2
 
         assert events[0].type == "project_start"
         assert events[0].metadata["brief"] == "Build a market analysis"
 
-        assert events[1].type == "project_complete"
-        assert events[1].metadata["success"] is True
-        assert "not yet implemented" in events[1].metadata["note"].lower()
+        assert events[-1].type == "project_complete"
+        assert events[-1].metadata["success"] is True
 
     def test_auto_generated_project_id(self, client):
         """When no project_id is provided, one should be auto-generated."""
@@ -242,8 +255,22 @@ class TestRunProjectStream:
         """Both start and complete events should reference the same project_id."""
         config = _make_tenant_config()
 
-        with patch("firefly_dworkers.tenants.registry.tenant_registry") as mock_tr:
+        mock_worker = MagicMock()
+        mock_result = MagicMock()
+        mock_result.output = "mock output"
+        mock_worker.run = AsyncMock(return_value=mock_result)
+        mock_worker.memory = None
+
+        with (
+            patch("firefly_dworkers.tenants.registry.tenant_registry") as mock_tr,
+            patch("firefly_dworkers.workers.factory.worker_factory") as mock_factory,
+            patch(
+                "fireflyframework_genai.reasoning.goal_decomposition.GoalDecompositionPattern",
+                side_effect=ImportError("not available"),
+            ),
+        ):
             mock_tr.get.return_value = config
+            mock_factory.create.return_value = mock_worker
 
             resp = client.post(
                 "/api/projects/run",
@@ -256,7 +283,8 @@ class TestRunProjectStream:
 
         events = _parse_sse_events(resp.text)
         assert events[0].content == "proj-abc"
-        assert events[1].content == "proj-abc"
+        # The last event (project_complete) should also reference the project_id
+        assert events[-1].content == "proj-abc"
 
 
 # ---------------------------------------------------------------------------
@@ -269,8 +297,22 @@ class TestRunProjectSync:
         """The sync endpoint should return a ProjectResponse JSON."""
         config = _make_tenant_config()
 
-        with patch("firefly_dworkers.tenants.registry.tenant_registry") as mock_tr:
+        mock_worker = MagicMock()
+        mock_result = MagicMock()
+        mock_result.output = "mock output"
+        mock_worker.run = AsyncMock(return_value=mock_result)
+        mock_worker.memory = None
+
+        with (
+            patch("firefly_dworkers.tenants.registry.tenant_registry") as mock_tr,
+            patch("firefly_dworkers.workers.factory.worker_factory") as mock_factory,
+            patch(
+                "fireflyframework_genai.reasoning.goal_decomposition.GoalDecompositionPattern",
+                side_effect=ImportError("not available"),
+            ),
+        ):
             mock_tr.get.return_value = config
+            mock_factory.create.return_value = mock_worker
 
             resp = client.post(
                 "/api/projects/run/sync",
@@ -281,7 +323,7 @@ class TestRunProjectSync:
         data = resp.json()
         assert data["success"] is True
         assert "project_id" in data
-        assert "note" in data["deliverables"]
+        assert "deliverables" in data
 
     def test_sync_custom_project_id(self, client):
         """A custom project_id should be returned in the response."""
@@ -334,12 +376,26 @@ class TestRunProjectSync:
         assert resp.status_code == 404
         assert "nope" in resp.json()["detail"]
 
-    def test_sync_placeholder_deliverables(self, client):
-        """Without orchestrator, deliverables should contain a 'not yet implemented' note."""
+    def test_sync_orchestrator_deliverables(self, client):
+        """With orchestrator, deliverables should contain synthesised results."""
         config = _make_tenant_config()
 
-        with patch("firefly_dworkers.tenants.registry.tenant_registry") as mock_tr:
+        mock_worker = MagicMock()
+        mock_result = MagicMock()
+        mock_result.output = "synthesised output"
+        mock_worker.run = AsyncMock(return_value=mock_result)
+        mock_worker.memory = None
+
+        with (
+            patch("firefly_dworkers.tenants.registry.tenant_registry") as mock_tr,
+            patch("firefly_dworkers.workers.factory.worker_factory") as mock_factory,
+            patch(
+                "fireflyframework_genai.reasoning.goal_decomposition.GoalDecompositionPattern",
+                side_effect=ImportError("not available"),
+            ),
+        ):
             mock_tr.get.return_value = config
+            mock_factory.create.return_value = mock_worker
 
             resp = client.post(
                 "/api/projects/run/sync",
@@ -348,7 +404,8 @@ class TestRunProjectSync:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert "not yet implemented" in data["deliverables"]["note"].lower()
+        assert data["success"] is True
+        assert "summary" in data["deliverables"] or "task_results" in data["deliverables"]
 
     def test_sync_missing_brief_returns_422(self, client):
         """A request without 'brief' should return 422 (validation error)."""
