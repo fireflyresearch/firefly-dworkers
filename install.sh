@@ -13,6 +13,12 @@ DEFAULT_PREFIX="${HOME}/.dworkers"
 UV_INSTALL_URL="https://astral.sh/uv/install.sh"
 PYTHON_VERSION="3.13"
 
+# ── GitHub source URLs ──────────────────────────────────────────────────────
+# These packages are not published on PyPI — install directly from GitHub.
+DWORKERS_REPO="https://github.com/fireflyresearch/firefly-dworkers.git"
+GENAI_REPO="https://github.com/fireflyframework/fireflyframework-genai.git"
+FLYBROWSER_REPO="https://github.com/fireflyresearch/flybrowser.git"
+
 # ── Color / Formatting ───────────────────────────────────────────────────────
 # Respect NO_COLOR (https://no-color.org/) and dumb terminals.
 
@@ -83,9 +89,15 @@ parse_args() {
     OPT_PREFIX=""
     OPT_PROFILE=""
 
-    # Auto-detect non-interactive (stdin is not a TTY)
+    # When piped (curl | bash), stdin comes from curl, not the terminal.
+    # Reopen stdin from /dev/tty so interactive prompts still work.
+    # If /dev/tty is unavailable (e.g. Docker, CI), fall back to non-interactive.
     if ! [ -t 0 ]; then
-        OPT_YES=1
+        if (exec </dev/tty) 2>/dev/null; then
+            exec 0</dev/tty
+        else
+            OPT_YES=1
+        fi
     fi
 
     while [[ $# -gt 0 ]]; do
@@ -599,6 +611,13 @@ preflight_checks() {
         die "curl is required but not found. Please install curl and try again."
     fi
 
+    # git (needed to install packages from GitHub)
+    if command -v git >/dev/null 2>&1; then
+        info "git available"
+    else
+        die "git is required but not found. Please install git and try again."
+    fi
+
     # Existing installation
     local install_prefix="${OPT_PREFIX:-$DEFAULT_PREFIX}"
     if [[ -d "$install_prefix" ]]; then
@@ -655,26 +674,118 @@ create_venv() {
     fi
 }
 
+show_install_error() {
+    local log_file="$1"
+    if [[ -f "$log_file" ]] && [[ -s "$log_file" ]]; then
+        printf "\n  %s\n" "${DIM}─── last 10 lines of install log ───${RESET}"
+        tail -10 "$log_file" | while IFS= read -r line; do
+            printf "  %s\n" "${DIM}${line}${RESET}"
+        done
+        printf "  %s\n\n" "${DIM}Full log: ${log_file}${RESET}"
+    fi
+    die "Installation failed. See log above for details."
+}
+
 install_packages() {
     local install_dir="$1" extras="$2" profile_name="$3"
+    local python="${install_dir}/venv/bin/python"
+    local log_file="${install_dir}/install.log"
+    local build_dir="${install_dir}/.build"
 
     section "Installing dworkers · ${profile_name} profile"
 
-    local spec
-    if [[ "$extras" == "all" ]]; then
-        spec="firefly-dworkers[all]"
+    # Truncate log file and create build directory
+    : > "$log_file"
+    mkdir -p "$build_dir"
+
+    # ── Step 1: Install fireflyframework-genai (not on PyPI) ──
+    start_spinner "Installing fireflyframework-genai..."
+    if uv pip install "fireflyframework-genai[all] @ git+${GENAI_REPO}" \
+        --python "$python" --quiet 2>>"$log_file"; then
+        stop_spinner
+        info "fireflyframework-genai installed"
     else
-        spec="firefly-dworkers[${extras}]"
+        stop_spinner
+        fail "Failed to install fireflyframework-genai"
+        show_install_error "$log_file"
     fi
 
-    start_spinner "Installing ${spec}..."
-    if uv pip install "$spec" --python "${install_dir}/venv/bin/python" --quiet 2>/dev/null; then
+    # ── Step 2: Install flybrowser if browser extra is selected (not on PyPI) ──
+    if [[ "$extras" == "all" ]] || [[ "$extras" == *"browser"* ]]; then
+        start_spinner "Installing flybrowser..."
+        if uv pip install "flybrowser @ git+${FLYBROWSER_REPO}" \
+            --python "$python" --quiet 2>>"$log_file"; then
+            stop_spinner
+            info "flybrowser installed"
+        else
+            stop_spinner
+            fail "Failed to install flybrowser"
+            show_install_error "$log_file"
+        fi
+    fi
+
+    # ── Step 3: Download and install firefly-dworkers from source ──
+    # We download the source tarball instead of using git+URL because
+    # pyproject.toml contains [tool.uv.sources] with local dev paths
+    # that uv_build tries to resolve during build — causing failures.
+    # Stripping that section lets uv resolve deps from what's already
+    # installed (steps 1-2) or from PyPI.
+    start_spinner "Downloading firefly-dworkers source..."
+    local tarball_url="${DWORKERS_REPO%.git}/archive/refs/heads/main.tar.gz"
+    if curl -fsSL "$tarball_url" | tar -xz -C "$build_dir" 2>>"$log_file"; then
+        stop_spinner
+        info "Source downloaded"
+    else
+        stop_spinner
+        fail "Failed to download firefly-dworkers source"
+        show_install_error "$log_file"
+    fi
+
+    local src_dir="${build_dir}/firefly-dworkers-main"
+
+    # Patch pyproject.toml for clean install:
+    # 1. Strip [tool.uv.sources] — local dev paths that break remote builds
+    # 2. Ensure [tool.uv.build-backend] lists all source packages so the
+    #    wheel includes firefly_dworkers_cli and firefly_dworkers_server
+    "$python" -c "
+import re, sys
+p = sys.argv[1]
+with open(p) as f:
+    text = f.read()
+# Strip [tool.uv.sources] section
+text = re.sub(r'\n*\[tool\.uv\.sources\][^\[]*', '\n\n', text)
+# Ensure build-backend config exists
+if '[tool.uv.build-backend]' not in text:
+    build_backend_cfg = '''
+[tool.uv.build-backend]
+module-name = [\"firefly_dworkers\", \"firefly_dworkers_cli\", \"firefly_dworkers_server\"]
+module-root = \"src\"
+'''
+    text = text.replace('[build-system]', build_backend_cfg + '\n[build-system]')
+with open(p, 'w') as f:
+    f.write(text)
+" "${src_dir}/pyproject.toml"
+
+    local spec
+    if [[ "$extras" == "all" ]]; then
+        spec="${src_dir}[all]"
+    else
+        spec="${src_dir}[${extras}]"
+    fi
+
+    start_spinner "Installing firefly-dworkers[${extras}]..."
+    if uv pip install "$spec" \
+        --python "$python" --quiet 2>>"$log_file"; then
         stop_spinner
         info "Packages installed"
     else
         stop_spinner
-        die "Failed to install ${spec}. Check your network connection and try again."
+        fail "Failed to install firefly-dworkers[${extras}]"
+        show_install_error "$log_file"
     fi
+
+    # Clean up build artifacts
+    rm -rf "$build_dir"
 }
 
 # ── Post-install ────────────────────────────────────────────────────────────
@@ -752,7 +863,15 @@ write_uninstall_script() {
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlinks to find the real script location (not the symlink in ~/.local/bin)
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_PATH" ]]; do
+    LINK_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+    # Handle relative symlink targets
+    [[ "$SCRIPT_PATH" != /* ]] && SCRIPT_PATH="${LINK_DIR}/${SCRIPT_PATH}"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 
 # Source metadata
 if [[ -f "${SCRIPT_DIR}/../env" ]]; then

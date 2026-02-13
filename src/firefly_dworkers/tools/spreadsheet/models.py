@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from firefly_dworkers.design.models import TextStyle
+
 
 class CellData(BaseModel):
     """Data for a single cell."""
@@ -42,6 +44,8 @@ class CellSpec(BaseModel):
     col: int
     value: Any = None
     formula: str = ""
+    number_format: str = ""
+    style: TextStyle | None = None
 
 
 class SheetSpec(BaseModel):
@@ -50,6 +54,10 @@ class SheetSpec(BaseModel):
     name: str
     headers: list[str] = Field(default_factory=list)
     rows: list[list[Any]] = Field(default_factory=list)
+    header_style: TextStyle | None = None
+    cell_style: TextStyle | None = None
+    column_widths: list[float] = Field(default_factory=list)
+    number_formats: dict[str, str] = Field(default_factory=dict)
 
 
 class SpreadsheetOperation(BaseModel):

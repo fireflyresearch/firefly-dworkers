@@ -118,6 +118,8 @@ class PowerPointTool(PresentationTool):
 
             if slide.shapes.title and spec.title:
                 slide.shapes.title.text = spec.title
+                if spec.title_style:
+                    self._apply_text_style(slide.shapes.title.text_frame, spec.title_style)
 
             body_ph = self._find_body_placeholder(slide)
             if body_ph:
@@ -133,8 +135,21 @@ class PowerPointTool(PresentationTool):
                 elif spec.content:
                     body_ph.text_frame.text = spec.content
 
+                if spec.body_style:
+                    self._apply_text_style(body_ph.text_frame, spec.body_style)
+
             if spec.table:
                 self._add_table(slide, spec.table)
+
+            if spec.chart:
+                self._add_chart(slide, spec.chart)
+
+            if spec.image_path:
+                self._add_image(slide, spec.image_path)
+
+            for img in spec.images:
+                if img.file_path:
+                    self._add_image_placement(slide, img)
 
             if spec.speaker_notes:
                 slide.notes_slide.notes_text_frame.text = spec.speaker_notes
@@ -200,3 +215,68 @@ class PowerPointTool(PresentationTool):
             for c, val in enumerate(row):
                 if c < n_cols:
                     table.cell(r + 1, c).text = str(val)
+
+    @staticmethod
+    def _add_chart(slide: Any, chart_spec: Any) -> None:
+        """Add a native chart to a slide using ChartRenderer."""
+        from firefly_dworkers.design.charts import ChartRenderer
+        from firefly_dworkers.design.models import DataSeries, ResolvedChart
+
+        renderer = ChartRenderer()
+        resolved = ResolvedChart(
+            chart_type=chart_spec.chart_type,
+            title=chart_spec.title,
+            categories=chart_spec.categories,
+            series=[DataSeries(name=s["name"], values=s["values"]) for s in chart_spec.series],
+            colors=chart_spec.colors,
+            show_legend=chart_spec.show_legend,
+            show_data_labels=chart_spec.show_data_labels,
+            stacked=chart_spec.stacked,
+        )
+        renderer.render_for_pptx(resolved, slide)
+
+    @staticmethod
+    def _add_image(slide: Any, image_path: str) -> None:
+        """Add a single image from a file path to a slide."""
+        from pptx.util import Inches
+
+        slide.shapes.add_picture(image_path, Inches(1), Inches(2), Inches(4), Inches(3))
+
+    @staticmethod
+    def _add_image_placement(slide: Any, img: Any) -> None:
+        """Add an image with explicit placement from an ImagePlacement spec."""
+        from pptx.util import Emu, Inches
+
+        slide.shapes.add_picture(
+            img.file_path,
+            Emu(int(img.left)) if img.left else Inches(1),
+            Emu(int(img.top)) if img.top else Inches(2),
+            Emu(int(img.width)) if img.width else None,
+            Emu(int(img.height)) if img.height else None,
+        )
+
+    @staticmethod
+    def _apply_text_style(text_frame: Any, style: Any) -> None:
+        """Apply TextStyle to all runs in a text frame."""
+        from pptx.dml.color import RGBColor
+        from pptx.util import Pt
+
+        if style is None:
+            return
+        for paragraph in text_frame.paragraphs:
+            for run in paragraph.runs:
+                if style.font_name:
+                    run.font.name = style.font_name
+                if style.font_size > 0:
+                    run.font.size = Pt(style.font_size)
+                if style.bold:
+                    run.font.bold = True
+                if style.italic:
+                    run.font.italic = True
+                if style.color:
+                    hex_color = style.color.lstrip("#")
+                    run.font.color.rgb = RGBColor(
+                        int(hex_color[0:2], 16),
+                        int(hex_color[2:4], 16),
+                        int(hex_color[4:6], 16),
+                    )
