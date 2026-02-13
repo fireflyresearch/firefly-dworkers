@@ -13,11 +13,7 @@
 
 ---
 
-The `dworkers` command-line interface is built with [Typer](https://typer.tiangolo.com/) and [Rich](https://rich.readthedocs.io/) for a polished terminal experience. Install it with:
-
-```bash
-pip install firefly-dworkers[cli]
-```
+The `dworkers` command-line interface is built with [Typer](https://typer.tiangolo.com/) and [Rich](https://rich.readthedocs.io/) for a polished terminal experience. The CLI is included automatically when you install dworkers via the [installer](../README.md#installation).
 
 ---
 
@@ -80,7 +76,7 @@ dworkers init -t acme-corp -n "Acme Corporation" -o config/tenants
 
 ### dworkers serve
 
-Start the dworkers API server. Requires the `server` extra to be installed (`pip install "firefly-dworkers[server]"`). If server dependencies are missing, the command prints an error and exits with code 1.
+Start the dworkers API server. Requires the `server` extra to be installed (use the **Server** or **Full** profile during installation). If server dependencies are missing, the command prints an error and exits with code 1.
 
 ```bash
 dworkers serve [OPTIONS]
@@ -116,7 +112,7 @@ The server runs on [Uvicorn](https://www.uvicorn.org/) with the factory pattern,
 
 ### dworkers install
 
-Install optional dependency groups for firefly-dworkers. When run without options, the command presents an interactive menu to select which extras to install. Dependencies are installed via `uv pip install`.
+Install optional dependency groups for firefly-dworkers. When run without options, the command presents an interactive menu to select which extras to install.
 
 ```bash
 dworkers install [OPTIONS]
@@ -163,7 +159,7 @@ dworkers install --all
 dworkers install -e sharepoint -e slack
 ```
 
-The command runs `uv pip install "firefly-dworkers[<extras>]"` under the hood. If the installation fails, the command exits with the pip return code.
+The command installs the selected extras into the current environment. If the installation fails, the command exits with a non-zero return code.
 
 ---
 

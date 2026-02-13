@@ -461,11 +461,7 @@ connectors:
     # speed_preset: "balanced"      # "fast", "balanced", "thorough"
 ```
 
-When using `flybrowser`, install the browser extra:
-
-```bash
-pip install firefly-dworkers[browser]
-```
+When using `flybrowser`, ensure you installed dworkers with the **Full** or **Custom** profile (with `browser` extra selected).
 
 The `FlyBrowserTool` accepts additional parameters beyond simple URL fetching:
 

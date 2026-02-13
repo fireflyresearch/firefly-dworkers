@@ -22,8 +22,8 @@ This guide walks you through installing firefly-dworkers, configuring a tenant, 
 
 ## Prerequisites
 
-- Python 3.13 or later
-- `pip` or `uv` package manager
+- macOS or Linux
+- `curl`
 - An API key for your chosen LLM provider (e.g., OpenAI, Anthropic)
 - (Optional) API keys for connectors you plan to use (Tavily, Slack, Jira, etc.)
 
@@ -53,33 +53,6 @@ To uninstall:
 
 ```bash
 dworkers-uninstall
-```
-
-### Alternative: pip / uv
-
-If you prefer traditional Python package management:
-
-```bash
-pip install firefly-dworkers[all]
-```
-
-Or install only what you need:
-
-```bash
-# Core library only (no connectors, no server)
-pip install firefly-dworkers
-
-# Core + server + CLI
-pip install firefly-dworkers[server,cli]
-
-# Core + specific connectors
-pip install firefly-dworkers[web,slack,jira]
-```
-
-If you use `uv`:
-
-```bash
-uv add firefly-dworkers[all]
 ```
 
 ---

@@ -9,7 +9,6 @@
         Digital Workers as a Service (DWaaS)
 ```
 
-[![PyPI version](https://img.shields.io/pypi/v/firefly-dworkers.svg)](https://pypi.org/project/firefly-dworkers/)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)]()
@@ -272,30 +271,33 @@ end-to-end presentation generation using the public `create_and_save()` API.
 
 ## Installation
 
-Install the base package:
+Install via the interactive TUI installer:
 
 ```bash
-pip install firefly-dworkers
+curl -fsSL https://raw.githubusercontent.com/fireflyresearch/firefly-dworkers/main/install.sh | bash
 ```
 
-Or install with specific extras:
+The installer bootstraps `uv`, creates an isolated Python 3.13 virtual environment, and lets you choose a profile:
 
-| Extra | What it adds | Install command |
-|-------|-------------|-----------------|
-| `web` | httpx, beautifulsoup4, feedparser | `pip install firefly-dworkers[web]` |
-| `browser` | FlyBrowser integration | `pip install firefly-dworkers[browser]` |
-| `sharepoint` | msal, Office365 REST client | `pip install firefly-dworkers[sharepoint]` |
-| `google` | Google API client, auth libraries | `pip install firefly-dworkers[google]` |
-| `confluence` | Atlassian Python API | `pip install firefly-dworkers[confluence]` |
-| `jira` | Atlassian Python API | `pip install firefly-dworkers[jira]` |
-| `slack` | Slack SDK | `pip install firefly-dworkers[slack]` |
-| `teams` | Microsoft Graph SDK | `pip install firefly-dworkers[teams]` |
-| `email` | aiosmtplib | `pip install firefly-dworkers[email]` |
-| `data` | openpyxl, pandas | `pip install firefly-dworkers[data]` |
-| `server` | FastAPI, Uvicorn | `pip install firefly-dworkers[server]` |
-| `cli` | Typer, Rich | `pip install firefly-dworkers[cli]` |
-| `all` | All of the above | `pip install firefly-dworkers[all]` |
-| `dev` | pytest, ruff, pyright, coverage | `pip install firefly-dworkers[dev]` |
+| Profile | What it installs |
+|---------|------------------|
+| **Minimal** | Core library + CLI |
+| **Analyst** | + web search, data processing, presentation generation |
+| **Server** | + FastAPI server, CLI, web search |
+| **Full** | All 14 optional extras |
+| **Custom** | Pick individual extras interactively |
+
+Non-interactive install (for CI or scripts):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fireflyresearch/firefly-dworkers/main/install.sh | bash -s -- --yes --profile full
+```
+
+To uninstall:
+
+```bash
+dworkers-uninstall
+```
 
 ---
 
@@ -400,9 +402,6 @@ cd firefly-dworkers
 
 # Install with dev dependencies using uv
 uv sync --all-extras
-
-# Or with pip
-pip install -e ".[dev,all]"
 ```
 
 ### Testing

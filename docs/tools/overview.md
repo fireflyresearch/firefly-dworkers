@@ -438,8 +438,8 @@ except ImportError:
 async def _search(self, query: str, max_results: int) -> list[SearchResult]:
     if not HTTPX_AVAILABLE:
         raise ImportError(
-            "httpx required for TavilySearchTool -- install with: "
-            "pip install firefly-dworkers[web]"
+            "httpx required for TavilySearchTool -- "
+            "reinstall dworkers with the 'web' extra enabled"
         )
     ...
 ```

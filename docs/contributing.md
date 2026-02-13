@@ -56,16 +56,8 @@ cd firefly-dworkers
 
 ### Install Dependencies
 
-With uv (recommended):
-
 ```bash
 uv sync --all-extras
-```
-
-With pip:
-
-```bash
-pip install -e ".[dev,all]"
 ```
 
 This installs the package in editable mode with all optional dependencies and development tools.
