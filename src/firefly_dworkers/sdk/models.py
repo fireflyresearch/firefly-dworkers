@@ -95,6 +95,20 @@ class SearchResponse(BaseModel):
     results: list[KnowledgeChunkResponse] = Field(default_factory=list)
 
 
+class StreamEvent(BaseModel):
+    """A single SSE event from a streaming worker execution.
+
+    Event types:
+    - ``"token"``: An incremental text token from the worker.
+    - ``"complete"``: The full output after all tokens have been streamed.
+    - ``"error"``: An error that occurred during worker execution.
+    """
+
+    type: str  # "token", "complete", "error"
+    content: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class HealthResponse(BaseModel):
     """Health check response."""
 

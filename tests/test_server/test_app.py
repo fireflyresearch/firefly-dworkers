@@ -42,21 +42,53 @@ class TestWorkersRouter:
         workers = resp.json()
         assert isinstance(workers, list)
 
-    def test_run_worker(self):
-        resp = self.client.post(
-            "/api/workers/run",
-            json={
-                "worker_role": "analyst",
-                "prompt": "Analyze market trends",
-                "tenant_id": "default",
-            },
-        )
+    def test_run_worker_stream_returns_sse(self):
+        """The /run endpoint now returns SSE; verify content type."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        config = MagicMock()
+        config.id = "default"
+        config.models.default = "openai:gpt-4o"
+        config.verticals = []
+        config.branding.company_name = "TestCo"
+        settings = MagicMock()
+        settings.autonomy = "semi_supervised"
+        settings.custom_instructions = ""
+        config.workers.settings_for.return_value = settings
+
+        worker = MagicMock()
+        worker.name = "analyst-default"
+
+        async def _stream_tokens():
+            yield "ok"
+
+        stream_wrapper = MagicMock()
+        stream_wrapper.stream_tokens = _stream_tokens
+        stream_ctx = AsyncMock()
+        stream_ctx.__aenter__ = AsyncMock(return_value=stream_wrapper)
+        stream_ctx.__aexit__ = AsyncMock(return_value=False)
+
+        async def _run_stream(*a, **kw):
+            return stream_ctx
+
+        worker.run_stream = _run_stream
+
+        with (
+            patch("firefly_dworkers.tenants.registry.tenant_registry") as mock_tr,
+            patch("firefly_dworkers.workers.factory.worker_factory") as mock_wf,
+        ):
+            mock_tr.get.return_value = config
+            mock_wf.create.return_value = worker
+            resp = self.client.post(
+                "/api/workers/run",
+                json={
+                    "worker_role": "analyst",
+                    "prompt": "Analyze market trends",
+                    "tenant_id": "default",
+                },
+            )
         assert resp.status_code == 200
-        data = resp.json()
-        assert "worker_name" in data
-        assert "role" in data
-        assert data["role"] == "analyst"
-        assert "output" in data
+        assert "text/event-stream" in resp.headers["content-type"]
 
 
 class TestPlansRouter:
