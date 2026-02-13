@@ -70,8 +70,9 @@ cli = [
     "rich>=13.9.0",
 ]
 presentation = ["python-pptx>=1.0.0"]
+document = ["python-docx>=1.1.0"]
 all = [
-    "firefly-dworkers[web,browser,sharepoint,google,confluence,jira,slack,teams,email,data,server,cli,presentation]",
+    "firefly-dworkers[web,browser,sharepoint,google,confluence,jira,slack,teams,email,data,server,cli,presentation,document]",
 ]
 dev = [
     "pytest>=8.3.0",
