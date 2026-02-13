@@ -153,6 +153,22 @@ class SQLConnectorConfig(BaseConnectorConfig):
     pool_size: int = 5
 
 
+class WebBrowserConnectorConfig(BaseConnectorConfig):
+    """Web browser adapter configuration.
+
+    Controls which browser backend is used by web tools:
+    ``"web_browser"`` for the lightweight HTTP+BS4 adapter, or
+    ``"flybrowser"`` for LLM-powered browser automation.
+    """
+
+    provider: str = "web_browser"
+    llm_provider: str = "openai"
+    llm_model: str = ""
+    llm_api_key: str = ""
+    headless: bool = True
+    speed_preset: str = "balanced"
+
+
 class APIConnectorConfig(BaseConnectorConfig):
     """Generic HTTP API connector configuration."""
 
@@ -171,6 +187,7 @@ class ConnectorsConfig(BaseModel, extra="allow"):
     """
 
     web_search: WebSearchConnectorConfig = Field(default_factory=WebSearchConnectorConfig)
+    web_browser: WebBrowserConnectorConfig = Field(default_factory=WebBrowserConnectorConfig)
     sharepoint: SharePointConnectorConfig = Field(default_factory=SharePointConnectorConfig)
     google_drive: GoogleDriveConnectorConfig = Field(default_factory=GoogleDriveConnectorConfig)
     confluence: ConfluenceConnectorConfig = Field(default_factory=ConfluenceConnectorConfig)

@@ -54,6 +54,9 @@ teams = [
 email = [
     "aiosmtplib>=3.0.0",
 ]
+browser = [
+    "flybrowser>=26.02.01",
+]
 data = [
     "openpyxl>=3.1.0",
     "pandas>=2.2.0",
@@ -62,8 +65,12 @@ server = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
 ]
+cli = [
+    "typer[all]>=0.15.0",
+    "rich>=13.9.0",
+]
 all = [
-    "firefly-dworkers[web,sharepoint,google,confluence,jira,slack,teams,email,data,server]",
+    "firefly-dworkers[web,browser,sharepoint,google,confluence,jira,slack,teams,email,data,server,cli]",
 ]
 dev = [
     "pytest>=8.3.0",
@@ -74,12 +81,16 @@ dev = [
     "httpx>=0.28.0",
 ]
 
+[project.scripts]
+dworkers = "firefly_dworkers_cli.app:app"
+
 [build-system]
 requires = ["uv_build>=0.9.5,<0.10.0"]
 build-backend = "uv_build"
 
 [tool.uv.sources]
 fireflyframework-genai = { path = "../../fireflyframework/fireflyframework-genai" }
+flybrowser = { path = "../flybrowser" }
 
 [tool.ruff]
 target-version = "py313"
@@ -90,7 +101,7 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "TC"]
 ignore = ["E501", "TC001", "TC002", "TC003", "UP040", "UP046", "B008"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["firefly_dworkers", "firefly_dworkers_server"]
+known-first-party = ["firefly_dworkers", "firefly_dworkers_cli", "firefly_dworkers_server"]
 
 [tool.pyright]
 pythonVersion = "3.13"
