@@ -1,0 +1,47 @@
+tenant:
+  id: acme-consulting
+  name: ACME Consulting
+  models:
+    default: openai:gpt-4o
+    research: anthropic:claude-sonnet-4-5-20250929
+    analysis: openai:gpt-4o
+  verticals:
+    - technology
+    - banking
+  workers:
+    analyst:
+      enabled: true
+      autonomy: semi_supervised
+      custom_instructions: Focus on Agile methodologies
+      max_concurrent_tasks: 5
+    researcher:
+      enabled: true
+      autonomy: autonomous
+    data_analyst:
+      enabled: true
+      autonomy: semi_supervised
+    manager:
+      enabled: true
+      autonomy: manual
+  connectors:
+    web_search:
+      enabled: true
+      provider: tavily
+      credential_ref: vault://acme/tavily
+    sharepoint:
+      enabled: true
+      auth_type: oauth2
+      tenant_id: acme.onmicrosoft.com
+      credential_ref: vault://acme/sharepoint
+    jira:
+      enabled: true
+      base_url: https://acme.atlassian.net
+      credential_ref: vault://acme/jira
+  branding:
+    company_name: ACME Consulting
+  security:
+    allowed_models:
+      - "openai:*"
+      - "anthropic:*"
+    data_residency: eu
+    encryption_enabled: true
