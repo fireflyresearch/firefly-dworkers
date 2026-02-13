@@ -360,3 +360,30 @@ def manager_toolkit(config: TenantConfig) -> ToolKit:
         description="Manager tools",
         tags=["manager"],
     )
+
+
+def designer_toolkit(config: TenantConfig) -> ToolKit:
+    """Build a ToolKit for the *designer* worker role.
+
+    Includes all productivity tools (presentation, document, spreadsheet),
+    vision tools, storage connectors, and report generation.
+    """
+    tools: list[BaseTool] = []
+    tools.extend(_build_presentation_tools(config))
+    tools.extend(_build_document_tools(config))
+    tools.extend(_build_spreadsheet_tools(config))
+    tools.extend(_build_vision_tools(config))
+    tools.extend(_build_storage_tools(config))
+
+    tools.extend(
+        [
+            tool_registry.create("report_generation"),
+        ]
+    )
+
+    return ToolKit(
+        f"designer-{config.id}",
+        tools,
+        description="Designer tools",
+        tags=["designer"],
+    )
