@@ -58,14 +58,74 @@ class BaseWorker(FireflyAgent):
         self._tenant_config = tenant_config
         self._instructions_text = instructions if isinstance(instructions, str) else ""
 
+        # Build guard middleware from tenant config and merge with user
+        # middleware (guards come first so they run before user middleware).
+        guard_middleware = self._build_guard_middleware(tenant_config)
+        user_middleware = kwargs.pop("middleware", None) or []
+        all_middleware = guard_middleware + list(user_middleware)
+
         super().__init__(
             name,
             model=resolved_model,
             instructions=instructions,
             tools=tools,
             auto_register=auto_register,
+            middleware=all_middleware if all_middleware else None,
             **kwargs,
         )
+
+    # -- Guard middleware builder ---------------------------------------------
+
+    @staticmethod
+    def _build_guard_middleware(config: TenantConfig) -> list[Any]:
+        """Build guard middleware from tenant security config.
+
+        Uses lazy imports so the guards module is optional -- if the
+        framework security extras are not installed, an empty list is
+        returned and no guards are applied.
+        """
+        middleware: list[Any] = []
+        guards_cfg = config.security.guards
+
+        try:
+            from fireflyframework_genai.agents.builtin_middleware import (
+                OutputGuardMiddleware,
+                PromptGuardMiddleware,
+            )
+            from fireflyframework_genai.security.output_guard import OutputGuard
+            from fireflyframework_genai.security.prompt_guard import PromptGuard
+        except ImportError:
+            return middleware
+
+        if guards_cfg.prompt_guard_enabled:
+            prompt_guard = PromptGuard(
+                custom_patterns=guards_cfg.custom_prompt_patterns,
+                sanitise=guards_cfg.sanitise_prompts,
+                max_input_length=guards_cfg.max_input_length,
+            )
+            middleware.append(
+                PromptGuardMiddleware(
+                    guard=prompt_guard,
+                    sanitise=guards_cfg.sanitise_prompts,
+                ),
+            )
+
+        if guards_cfg.output_guard_enabled:
+            output_guard = OutputGuard(
+                custom_patterns=guards_cfg.custom_output_patterns or None,
+                deny_patterns=guards_cfg.custom_deny_patterns,
+                sanitise=guards_cfg.sanitise_outputs,
+                max_output_length=guards_cfg.max_output_length,
+            )
+            middleware.append(
+                OutputGuardMiddleware(
+                    guard=output_guard,
+                    sanitise=guards_cfg.sanitise_outputs,
+                    block_categories=guards_cfg.output_block_categories,
+                ),
+            )
+
+        return middleware
 
     # -- Properties ----------------------------------------------------------
 

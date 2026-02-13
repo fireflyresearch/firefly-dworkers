@@ -274,10 +274,31 @@ class BrandingConfig(BaseModel):
     logo_url: str = ""
 
 
+class GuardsConfig(BaseModel):
+    """Guard settings for a tenant.
+
+    Controls prompt-injection detection and output scanning (PII, secrets).
+    """
+
+    prompt_guard_enabled: bool = True
+    output_guard_enabled: bool = True
+    sanitise_prompts: bool = True
+    sanitise_outputs: bool = True
+    output_block_categories: list[str] = Field(
+        default_factory=lambda: ["secrets", "pii"],
+    )
+    custom_prompt_patterns: list[str] = Field(default_factory=list)
+    custom_output_patterns: dict[str, str] = Field(default_factory=dict)
+    custom_deny_patterns: list[str] = Field(default_factory=list)
+    max_input_length: int = 0
+    max_output_length: int = 0
+
+
 class SecurityConfig(BaseModel):
     allowed_models: list[str] = Field(default_factory=lambda: ["openai:*", "anthropic:*"])
     data_residency: str = ""
     encryption_enabled: bool = False
+    guards: GuardsConfig = Field(default_factory=GuardsConfig)
 
 
 class TenantConfig(BaseModel):
