@@ -36,6 +36,62 @@ except ImportError:
     GOOGLE_AVAILABLE = False
 
 
+def _hex_to_rgb(hex_color: str) -> dict[str, float]:
+    """Convert a hex color string (e.g. '#1A73E8') to Google API rgbColor dict."""
+    h = hex_color.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    return {
+        "red": int(h[0:2], 16) / 255.0,
+        "green": int(h[2:4], 16) / 255.0,
+        "blue": int(h[4:6], 16) / 255.0,
+    }
+
+
+def _build_text_style_request(
+    object_id: str,
+    style: Any,
+) -> dict[str, Any]:
+    """Build an updateTextStyle request for the Slides API from a TextStyle model."""
+    from firefly_dworkers.design.models import TextStyle
+
+    if not isinstance(style, TextStyle):
+        return {}
+
+    api_style: dict[str, Any] = {}
+    fields: list[str] = []
+
+    if style.font_name:
+        api_style["fontFamily"] = style.font_name
+        fields.append("fontFamily")
+    if style.font_size:
+        api_style["fontSize"] = {"magnitude": style.font_size, "unit": "PT"}
+        fields.append("fontSize")
+    if style.bold:
+        api_style["bold"] = True
+        fields.append("bold")
+    if style.italic:
+        api_style["italic"] = True
+        fields.append("italic")
+    if style.color:
+        api_style["foregroundColor"] = {
+            "opaqueColor": {"rgbColor": _hex_to_rgb(style.color)}
+        }
+        fields.append("foregroundColor")
+
+    if not fields:
+        return {}
+
+    return {
+        "updateTextStyle": {
+            "objectId": object_id,
+            "style": api_style,
+            "fields": ",".join(fields),
+            "textRange": {"type": "ALL"},
+        }
+    }
+
+
 @tool_registry.register("google_slides", category="presentation")
 class GoogleSlidesTool(PresentationTool):
     """Read, create, and modify Google Slides presentations via Slides API v1."""
@@ -149,7 +205,7 @@ class GoogleSlidesTool(PresentationTool):
                         }
                     }
                 )
-            await asyncio.to_thread(
+            result = await asyncio.to_thread(
                 lambda: (
                     svc.presentations()
                     .batchUpdate(
@@ -160,7 +216,116 @@ class GoogleSlidesTool(PresentationTool):
                 )
             )
 
+            # Collect created slide IDs from the batch update reply
+            slide_ids = []
+            for reply in result.get("replies", []):
+                create_reply = reply.get("createSlide", {})
+                obj_id = create_reply.get("objectId", "")
+                if obj_id:
+                    slide_ids.append(obj_id)
+
+            # Build styling / image / background requests
+            style_requests = self._build_slide_enhancement_requests(slides, slide_ids, pres)
+            if style_requests:
+                await asyncio.to_thread(
+                    lambda: (
+                        svc.presentations()
+                        .batchUpdate(
+                            presentationId=presentation_id,
+                            body={"requests": style_requests},
+                        )
+                        .execute()
+                    )
+                )
+
         return presentation_id.encode("utf-8")
+
+    def _build_slide_enhancement_requests(
+        self,
+        slides: list[SlideSpec],
+        slide_ids: list[str],
+        pres_response: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Build batch update requests for styling, images, and backgrounds."""
+        requests: list[dict[str, Any]] = []
+
+        for i, spec in enumerate(slides):
+            slide_id = slide_ids[i] if i < len(slide_ids) else None
+            if not slide_id:
+                continue
+
+            # --- Background color ---
+            if spec.background_color:
+                rgb = _hex_to_rgb(spec.background_color)
+                requests.append(
+                    {
+                        "updatePageProperties": {
+                            "objectId": slide_id,
+                            "pageProperties": {
+                                "pageBackgroundFill": {
+                                    "solidFill": {
+                                        "color": {"rgbColor": rgb},
+                                    }
+                                }
+                            },
+                            "fields": "pageBackgroundFill.solidFill.color",
+                        }
+                    }
+                )
+
+            # --- Title styling ---
+            if spec.title_style:
+                # Use a deterministic element ID for the title placeholder
+                title_element_id = f"{slide_id}_title"
+                req = _build_text_style_request(title_element_id, spec.title_style)
+                if req:
+                    requests.append(req)
+
+            # --- Body styling ---
+            if spec.body_style:
+                body_element_id = f"{slide_id}_body"
+                req = _build_text_style_request(body_element_id, spec.body_style)
+                if req:
+                    requests.append(req)
+
+            # --- Images ---
+            for img in spec.images:
+                url = img.image_ref or img.file_path
+                if not url:
+                    continue
+                img_req: dict[str, Any] = {
+                    "createImage": {
+                        "url": url,
+                        "elementProperties": {
+                            "pageObjectId": slide_id,
+                        },
+                    }
+                }
+                # Add size if provided
+                size: dict[str, Any] = {}
+                if img.width:
+                    size["width"] = {"magnitude": img.width, "unit": "PT"}
+                if img.height:
+                    size["height"] = {"magnitude": img.height, "unit": "PT"}
+                if size:
+                    img_req["createImage"]["elementProperties"]["size"] = size
+                # Add transform for position if provided
+                if img.left or img.top:
+                    img_req["createImage"]["elementProperties"]["transform"] = {
+                        "scaleX": 1,
+                        "scaleY": 1,
+                        "translateX": img.left,
+                        "translateY": img.top,
+                        "unit": "PT",
+                    }
+                requests.append(img_req)
+
+            # --- Charts ---
+            # TODO: Chart embedding in Google Slides requires rendering the chart to PNG
+            # and uploading to Google Drive first to get a URL, then using createImage.
+            # This is complex and deferred for now.
+
+        return requests
 
     async def _modify_presentation(self, source: str, operations: list[SlideOperation]) -> bytes:
         """Modify a Google Slides presentation by ID."""
