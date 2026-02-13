@@ -12,7 +12,6 @@ from fireflyframework_genai.pipeline.builder import PipelineBuilder
 from fireflyframework_genai.pipeline.steps import CallableStep
 
 from firefly_dworkers.plans.base import BasePlan, PlanStep
-from firefly_dworkers.types import WorkerRole
 
 if TYPE_CHECKING:
     from fireflyframework_genai.pipeline.dag import DAG
@@ -99,24 +98,12 @@ class PlanBuilder:
 
     def _create_worker(self, step: PlanStep) -> BaseWorker:
         """Create the appropriate worker for a step based on its role."""
-        from firefly_dworkers.workers import (
-            AnalystWorker,
-            DataAnalystWorker,
-            ManagerWorker,
-            ResearcherWorker,
-        )
+        from firefly_dworkers.workers.factory import worker_factory
 
-        worker_map: dict[WorkerRole, type] = {
-            WorkerRole.ANALYST: AnalystWorker,
-            WorkerRole.RESEARCHER: ResearcherWorker,
-            WorkerRole.DATA_ANALYST: DataAnalystWorker,
-            WorkerRole.MANAGER: ManagerWorker,
-        }
-        worker_cls = worker_map[step.worker_role]
         kwargs: dict[str, Any] = {"name": f"{self._plan.name}-{step.step_id}"}
         if self._model is not None:
             kwargs["model"] = self._model
-        return worker_cls(self._tenant_config, **kwargs)
+        return worker_factory.create(step.worker_role, self._tenant_config, **kwargs)
 
 
 def _make_placeholder(step_id: str) -> CallableStep:

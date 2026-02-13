@@ -5,10 +5,14 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from fireflyframework_genai.tools.base import BaseTool, GuardProtocol, ParameterSpec
+from fireflyframework_genai.tools.base import GuardProtocol, ParameterSpec
+
+from firefly_dworkers.tools.consulting.base import ConsultingTool
+from firefly_dworkers.tools.registry import tool_registry
 
 
-class ReportGenerationTool(BaseTool):
+@tool_registry.register("report_generation", category="consulting")
+class ReportGenerationTool(ConsultingTool):
     """Generate structured report sections from data and analysis results.
 
     Supports markdown, plain text, and JSON output formats.

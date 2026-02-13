@@ -15,6 +15,7 @@ from typing import Any
 from fireflyframework_genai.tools.base import GuardProtocol
 
 from firefly_dworkers.exceptions import ConnectorAuthError, ConnectorError
+from firefly_dworkers.tools.registry import tool_registry
 from firefly_dworkers.tools.storage.base import DocumentResult, DocumentStorageTool
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ except ImportError:
     CONFLUENCE_AVAILABLE = False
 
 
+@tool_registry.register("confluence", category="storage")
 class ConfluenceTool(DocumentStorageTool):
     """Atlassian Confluence document access via the REST API.
 

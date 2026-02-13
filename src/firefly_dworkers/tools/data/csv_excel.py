@@ -13,6 +13,8 @@ from typing import Any
 
 from fireflyframework_genai.tools.base import BaseTool, GuardProtocol, ParameterSpec
 
+from firefly_dworkers.tools.registry import tool_registry
+
 try:
     import openpyxl
 
@@ -22,6 +24,7 @@ except ImportError:
     OPENPYXL_AVAILABLE = False
 
 
+@tool_registry.register("spreadsheet", category="data")
 class SpreadsheetTool(BaseTool):
     """Parse and extract data from CSV and Excel files.
 

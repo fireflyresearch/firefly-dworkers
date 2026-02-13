@@ -17,6 +17,7 @@ from typing import Any
 from fireflyframework_genai.tools.base import BaseTool, GuardProtocol, ParameterSpec
 
 from firefly_dworkers.exceptions import ConnectorAuthError, ConnectorError
+from firefly_dworkers.tools.registry import tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ except ImportError:
     ASYNCPG_AVAILABLE = False
 
 
+@tool_registry.register("sql", category="data")
 class SQLClientTool(BaseTool):
     """Execute SQL queries against a configured database.
 

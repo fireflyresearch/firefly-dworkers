@@ -15,6 +15,7 @@ from fireflyframework_genai.tools.base import GuardProtocol
 
 from firefly_dworkers.exceptions import ConnectorAuthError, ConnectorError
 from firefly_dworkers.tools.project.base import ProjectManagementTool, ProjectTask
+from firefly_dworkers.tools.registry import tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ except ImportError:
 _ASANA_BASE = "https://app.asana.com/api/1.0"
 
 
+@tool_registry.register("asana", category="project")
 class AsanaTool(ProjectManagementTool):
     """Asana project management via the REST API.
 

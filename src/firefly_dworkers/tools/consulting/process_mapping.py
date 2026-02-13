@@ -6,7 +6,10 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-from fireflyframework_genai.tools.base import BaseTool, GuardProtocol, ParameterSpec
+from fireflyframework_genai.tools.base import GuardProtocol, ParameterSpec
+
+from firefly_dworkers.tools.consulting.base import ConsultingTool
+from firefly_dworkers.tools.registry import tool_registry
 
 _DEFAULT_ACTOR_VERBS: tuple[str, ...] = (
     "will", "does", "performs", "sends", "receives",
@@ -16,7 +19,8 @@ _DEFAULT_ACTOR_VERBS: tuple[str, ...] = (
 _DEFAULT_STEP_SPLIT_PATTERN = r"[\n.]"
 
 
-class ProcessMappingTool(BaseTool):
+@tool_registry.register("process_mapping", category="consulting")
+class ProcessMappingTool(ConsultingTool):
     """Take process descriptions and generate structured process maps.
 
     Extracts steps, actors, inputs, and outputs from textual process

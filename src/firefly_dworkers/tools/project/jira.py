@@ -16,6 +16,7 @@ from fireflyframework_genai.tools.base import GuardProtocol
 
 from firefly_dworkers.exceptions import ConnectorAuthError, ConnectorError
 from firefly_dworkers.tools.project.base import ProjectManagementTool, ProjectTask
+from firefly_dworkers.tools.registry import tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ except ImportError:
     JIRA_AVAILABLE = False
 
 
+@tool_registry.register("jira", category="project")
 class JiraTool(ProjectManagementTool):
     """Atlassian Jira project management via the REST API.
 

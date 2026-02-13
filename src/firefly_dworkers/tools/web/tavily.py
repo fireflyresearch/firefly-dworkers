@@ -7,6 +7,7 @@ from typing import Any
 
 from fireflyframework_genai.tools.base import GuardProtocol
 
+from firefly_dworkers.tools.registry import tool_registry
 from firefly_dworkers.tools.web.search import SearchResult, WebSearchTool
 
 try:
@@ -18,6 +19,7 @@ except ImportError:
     HTTPX_AVAILABLE = False
 
 
+@tool_registry.register("tavily", category="web_search")
 class TavilySearchTool(WebSearchTool):
     """Web search using the Tavily API.
 

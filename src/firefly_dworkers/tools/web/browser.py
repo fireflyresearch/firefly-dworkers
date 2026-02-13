@@ -1,11 +1,19 @@
-"""WebBrowserTool — concrete tool for fetching and parsing web pages."""
+"""WebBrowserTool -- HTTP-based web browsing adapter.
+
+Uses httpx for async HTTP requests and beautifulsoup4 for HTML parsing.
+This is the lightweight adapter for simple page fetching without
+JavaScript execution or interactive browsing.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from typing import Any
 
-from fireflyframework_genai.tools.base import BaseTool, GuardProtocol, ParameterSpec
+from fireflyframework_genai.tools.base import GuardProtocol
+
+from firefly_dworkers.tools.registry import tool_registry
+from firefly_dworkers.tools.web.browsing import BrowsingResult, WebBrowsingTool
 
 # Optional dependency check
 try:
@@ -25,7 +33,8 @@ except ImportError:
     BS4_AVAILABLE = False
 
 
-class WebBrowserTool(BaseTool):
+@tool_registry.register("web_browser", category="web")
+class WebBrowserTool(WebBrowsingTool):
     """Fetch and extract text content from a web page URL.
 
     Uses httpx for async HTTP requests and beautifulsoup4 for HTML parsing.
@@ -38,30 +47,11 @@ class WebBrowserTool(BaseTool):
         super().__init__(
             "web_browser",
             description="Fetch and extract text content from a web page URL",
-            tags=["web", "browser", "scraping"],
-            guards=guards,
-            parameters=[
-                ParameterSpec(
-                    name="url",
-                    type_annotation="str",
-                    description="URL to fetch",
-                    required=True,
-                ),
-                ParameterSpec(
-                    name="extract_links",
-                    type_annotation="bool",
-                    description="Also extract links",
-                    required=False,
-                    default=False,
-                ),
-            ],
             timeout=timeout,
+            guards=guards,
         )
 
-    async def _execute(self, **kwargs: Any) -> dict[str, Any]:
-        url: str = kwargs["url"]
-        extract_links: bool = kwargs.get("extract_links", False)
-
+    async def _fetch_page(self, url: str, *, extract_links: bool = False) -> BrowsingResult:
         if not HTTPX_AVAILABLE:
             raise ImportError("httpx required. Install with: pip install httpx")
 
@@ -70,18 +60,29 @@ class WebBrowserTool(BaseTool):
             response.raise_for_status()
             html = response.text
 
+        title = ""
+        text = html[:10000]
+        links: list[dict[str, Any]] = []
+
         if BS4_AVAILABLE:
             soup = BeautifulSoup(html, "html.parser")
             # Remove script and style elements
             for element in soup(["script", "style", "nav", "footer", "header"]):
                 element.decompose()
-            text = soup.get_text(separator="\n", strip=True)
-            result: dict[str, Any] = {"url": url, "text": text[:10000], "status_code": response.status_code}
+            text = soup.get_text(separator="\n", strip=True)[:10000]
+            title_tag = soup.find("title")
+            if title_tag:
+                title = title_tag.get_text(strip=True)
             if extract_links:
                 links = [
-                    {"text": a.get_text(strip=True), "href": a.get("href", "")} for a in soup.find_all("a", href=True)
-                ]
-                result["links"] = links[:50]
-            return result
+                    {"text": a.get_text(strip=True), "href": a.get("href", "")}
+                    for a in soup.find_all("a", href=True)
+                ][:50]
 
-        return {"url": url, "text": html[:10000], "status_code": response.status_code}
+        return BrowsingResult(
+            url=url,
+            text=text,
+            status_code=response.status_code,
+            title=title,
+            links=links,
+        )

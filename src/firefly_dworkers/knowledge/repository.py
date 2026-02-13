@@ -1,4 +1,8 @@
-"""Document chunk model and knowledge repository backed by MemoryManager."""
+"""Document chunk model and knowledge repository.
+
+Supports pluggable backends via the :class:`KnowledgeBackend` protocol.
+The default backend wraps :class:`MemoryManager` for backward compatibility.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +10,8 @@ from typing import Any
 
 from fireflyframework_genai.memory.manager import MemoryManager
 from pydantic import BaseModel, Field
+
+from firefly_dworkers.knowledge.backends import InMemoryKnowledgeBackend, KnowledgeBackend
 
 
 class DocumentChunk(BaseModel):
@@ -18,11 +24,15 @@ class DocumentChunk(BaseModel):
 
 
 class KnowledgeRepository:
-    """High-level API for document knowledge backed by :class:`MemoryManager`.
+    """High-level API for document knowledge.
 
-    Each :class:`DocumentChunk` is stored as a working-memory fact
-    under the key ``doc:<chunk_id>``.  Search is performed via simple
-    case-insensitive substring matching (MVP).
+    Accepts either a :class:`KnowledgeBackend` (new) or a bare
+    :class:`MemoryManager` (backward-compatible).  When ``memory`` is
+    provided without ``backend``, an :class:`InMemoryKnowledgeBackend`
+    adapter is created automatically.
+
+    Each :class:`DocumentChunk` is stored under the key ``doc:<chunk_id>``.
+    Search is performed via simple case-insensitive substring matching (MVP).
     """
 
     _DOC_PREFIX = "doc:"
@@ -30,20 +40,24 @@ class KnowledgeRepository:
     def __init__(
         self,
         *,
+        backend: KnowledgeBackend | None = None,
         memory: MemoryManager | None = None,
         scope_id: str = "knowledge",
     ) -> None:
-        self._memory = memory or MemoryManager(working_scope_id=scope_id)
+        if backend is not None:
+            self._backend = backend
+        else:
+            self._backend = InMemoryKnowledgeBackend(memory=memory, scope_id=scope_id)
 
     # -- CRUD --------------------------------------------------------------
 
     def index(self, chunk: DocumentChunk) -> None:
         """Store a document chunk in working memory."""
-        self._memory.set_fact(f"{self._DOC_PREFIX}{chunk.chunk_id}", chunk.model_dump())
+        self._backend.set_fact(f"{self._DOC_PREFIX}{chunk.chunk_id}", chunk.model_dump())
 
     def get(self, chunk_id: str) -> DocumentChunk | None:
         """Retrieve a specific chunk by ID."""
-        data = self._memory.get_fact(f"{self._DOC_PREFIX}{chunk_id}")
+        data = self._backend.get_fact(f"{self._DOC_PREFIX}{chunk_id}")
         if data is None:
             return None
         return DocumentChunk.model_validate(data)
@@ -58,7 +72,7 @@ class KnowledgeRepository:
         """
         query_lower = query.lower()
         matches: list[DocumentChunk] = []
-        for key, value in self._memory.working.items():
+        for key, value in self._backend.iter_items():
             if not key.startswith(self._DOC_PREFIX):
                 continue
             chunk = DocumentChunk.model_validate(value)
@@ -73,7 +87,7 @@ class KnowledgeRepository:
     def list_sources(self) -> list[str]:
         """Return unique source identifiers of all indexed documents."""
         sources: set[str] = set()
-        for key, value in self._memory.working.items():
+        for key, value in self._backend.iter_items():
             if not key.startswith(self._DOC_PREFIX):
                 continue
             chunk = DocumentChunk.model_validate(value)
@@ -82,9 +96,14 @@ class KnowledgeRepository:
 
     def clear(self) -> None:
         """Clear all indexed knowledge."""
-        self._memory.clear_working()
+        self._backend.clear_all()
 
     @property
     def memory(self) -> MemoryManager:
-        """The underlying :class:`MemoryManager`."""
-        return self._memory
+        """The underlying :class:`MemoryManager` (backward compatibility).
+
+        Raises :class:`AttributeError` if the backend is not memory-based.
+        """
+        if isinstance(self._backend, InMemoryKnowledgeBackend):
+            return self._backend.memory
+        raise AttributeError("Backend does not expose a MemoryManager")

@@ -6,10 +6,14 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-from fireflyframework_genai.tools.base import BaseTool, GuardProtocol, ParameterSpec
+from fireflyframework_genai.tools.base import GuardProtocol, ParameterSpec
+
+from firefly_dworkers.tools.consulting.base import ConsultingTool
+from firefly_dworkers.tools.registry import tool_registry
 
 
-class GapAnalysisTool(BaseTool):
+@tool_registry.register("gap_analysis", category="consulting")
+class GapAnalysisTool(ConsultingTool):
     """Take current state and desired state descriptions and identify gaps.
 
     Produces a structured list of gaps with severity and recommendations.

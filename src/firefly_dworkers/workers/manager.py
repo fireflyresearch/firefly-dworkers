@@ -10,10 +10,12 @@ from firefly_dworkers.tenants.config import TenantConfig
 from firefly_dworkers.tools.toolkits import manager_toolkit
 from firefly_dworkers.types import AutonomyLevel, WorkerRole
 from firefly_dworkers.workers.base import BaseWorker
+from firefly_dworkers.workers.factory import worker_factory
 
 logger = logging.getLogger(__name__)
 
 
+@worker_factory.register(WorkerRole.MANAGER)
 class ManagerWorker(BaseWorker):
     """Digital worker specialised in project management.
 

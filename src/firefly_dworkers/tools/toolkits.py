@@ -1,11 +1,15 @@
-"""ToolKit factories — build per-worker ToolKits from tenant configuration.
+"""ToolKit factories -- build per-worker ToolKits from tenant configuration.
 
 Each factory reads ``tenant_config.connectors`` to determine which providers
 to instantiate, then bundles the resulting tools into a
 :class:`~fireflyframework_genai.tools.toolkit.ToolKit` keyed to a worker role.
 
 Switching from one provider to another (e.g. Tavily to SerpAPI) is purely a
-YAML / configuration change — no code modifications required.
+YAML / configuration change -- no code modifications required.
+
+Tool classes are discovered via :data:`tool_registry` -- concrete tools
+self-register when their modules are imported (triggered by
+:mod:`firefly_dworkers.tools.__init__`).
 """
 
 from __future__ import annotations
@@ -14,6 +18,7 @@ from fireflyframework_genai.tools.base import BaseTool
 from fireflyframework_genai.tools.toolkit import ToolKit
 
 from firefly_dworkers.tenants.config import TenantConfig
+from firefly_dworkers.tools.registry import tool_registry
 
 # ---------------------------------------------------------------------------
 # Internal builder helpers
@@ -24,24 +29,34 @@ def _build_web_tools(config: TenantConfig) -> list[BaseTool]:
     """Build web tools from tenant connector config."""
     tools: list[BaseTool] = []
 
+    # -- Search tool (Tavily, SerpAPI, etc.) ---------------------------------
     ws_cfg = config.connectors.web_search
     enabled = getattr(ws_cfg, "enabled", False)
     provider = getattr(ws_cfg, "provider", "tavily")
     api_key = getattr(ws_cfg, "api_key", "") or getattr(ws_cfg, "credential_ref", "")
 
-    if enabled:
-        if provider == "tavily":
-            from firefly_dworkers.tools.web.tavily import TavilySearchTool
+    if enabled and tool_registry.has(provider):
+        tools.append(tool_registry.create(provider, api_key=api_key))
 
-            tools.append(TavilySearchTool(api_key=api_key))
-        elif provider == "serpapi":
-            from firefly_dworkers.tools.web.serpapi import SerpAPISearchTool
+    # -- Browser tool (web_browser or flybrowser) ----------------------------
+    wb_cfg = config.connectors.web_browser
+    browser_provider = getattr(wb_cfg, "provider", "web_browser")
 
-            tools.append(SerpAPISearchTool(api_key=api_key))
+    if browser_provider == "flybrowser" and tool_registry.has("flybrowser"):
+        tools.append(
+            tool_registry.create(
+                "flybrowser",
+                llm_provider=getattr(wb_cfg, "llm_provider", "openai"),
+                llm_model=getattr(wb_cfg, "llm_model", None) or None,
+                llm_api_key=getattr(wb_cfg, "llm_api_key", None) or None,
+                headless=getattr(wb_cfg, "headless", True),
+                timeout=getattr(wb_cfg, "timeout", 60.0),
+                speed_preset=getattr(wb_cfg, "speed_preset", "balanced"),
+            )
+        )
+    else:
+        tools.append(tool_registry.create("web_browser"))
 
-    from firefly_dworkers.tools.web.browser import WebBrowserTool
-
-    tools.append(WebBrowserTool())
     return tools
 
 
@@ -49,22 +64,13 @@ def _build_storage_tools(config: TenantConfig) -> list[BaseTool]:
     """Build storage tools for enabled connectors."""
     tools: list[BaseTool] = []
 
-    for attr_name, import_path in [
-        ("sharepoint", "firefly_dworkers.tools.storage.sharepoint.SharePointTool"),
-        ("google_drive", "firefly_dworkers.tools.storage.google_drive.GoogleDriveTool"),
-        ("confluence", "firefly_dworkers.tools.storage.confluence.ConfluenceTool"),
-    ]:
+    for attr_name in ("sharepoint", "google_drive", "confluence"):
         cfg = getattr(config.connectors, attr_name, None)
         if cfg is None:
             continue
         enabled = getattr(cfg, "enabled", False)
-        if enabled:
-            import importlib
-
-            module_path, class_name = import_path.rsplit(".", 1)
-            module = importlib.import_module(module_path)
-            tool_class = getattr(module, class_name)
-            tools.append(tool_class())
+        if enabled and tool_registry.has(attr_name):
+            tools.append(tool_registry.create(attr_name))
 
     return tools
 
@@ -73,22 +79,13 @@ def _build_communication_tools(config: TenantConfig) -> list[BaseTool]:
     """Build communication tools for enabled connectors."""
     tools: list[BaseTool] = []
 
-    for attr_name, import_path in [
-        ("slack", "firefly_dworkers.tools.communication.slack.SlackTool"),
-        ("teams", "firefly_dworkers.tools.communication.teams.TeamsTool"),
-        ("email", "firefly_dworkers.tools.communication.email.EmailTool"),
-    ]:
+    for attr_name in ("slack", "teams", "email"):
         cfg = getattr(config.connectors, attr_name, None)
         if cfg is None:
             continue
         enabled = getattr(cfg, "enabled", False)
-        if enabled:
-            import importlib
-
-            module_path, class_name = import_path.rsplit(".", 1)
-            module = importlib.import_module(module_path)
-            tool_class = getattr(module, class_name)
-            tools.append(tool_class())
+        if enabled and tool_registry.has(attr_name):
+            tools.append(tool_registry.create(attr_name))
 
     return tools
 
@@ -98,10 +95,8 @@ def _build_project_tools(config: TenantConfig) -> list[BaseTool]:
     tools: list[BaseTool] = []
 
     cfg = getattr(config.connectors, "jira", None)
-    if cfg is not None and getattr(cfg, "enabled", False):
-        from firefly_dworkers.tools.project.jira import JiraTool
-
-        tools.append(JiraTool())
+    if cfg is not None and getattr(cfg, "enabled", False) and tool_registry.has("jira"):
+        tools.append(tool_registry.create("jira"))
 
     return tools
 
@@ -121,11 +116,8 @@ def researcher_toolkit(config: TenantConfig) -> ToolKit:
     tools.extend(_build_web_tools(config))
     tools.extend(_build_storage_tools(config))
 
-    from firefly_dworkers.tools.consulting.report_generation import ReportGenerationTool
-    from firefly_dworkers.tools.web.rss import RSSFeedTool
-
-    tools.append(ReportGenerationTool())
-    tools.append(RSSFeedTool())
+    tools.append(tool_registry.create("report_generation"))
+    tools.append(tool_registry.create("rss_feed"))
 
     return ToolKit(
         f"researcher-{config.id}",
@@ -146,21 +138,13 @@ def analyst_toolkit(config: TenantConfig) -> ToolKit:
     tools.extend(_build_storage_tools(config))
     tools.extend(_build_communication_tools(config))
 
-    from firefly_dworkers.tools.consulting.documentation import DocumentationTool
-    from firefly_dworkers.tools.consulting.gap_analysis import GapAnalysisTool
-    from firefly_dworkers.tools.consulting.process_mapping import ProcessMappingTool
-    from firefly_dworkers.tools.consulting.report_generation import ReportGenerationTool
-    from firefly_dworkers.tools.consulting.requirement_gathering import (
-        RequirementGatheringTool,
-    )
-
     tools.extend(
         [
-            RequirementGatheringTool(),
-            ProcessMappingTool(),
-            GapAnalysisTool(),
-            ReportGenerationTool(),
-            DocumentationTool(),
+            tool_registry.create("requirement_gathering"),
+            tool_registry.create("process_mapping"),
+            tool_registry.create("gap_analysis"),
+            tool_registry.create("report_generation"),
+            tool_registry.create("documentation"),
         ]
     )
 
@@ -181,11 +165,11 @@ def data_analyst_toolkit(config: TenantConfig) -> ToolKit:
     tools: list[BaseTool] = []
     tools.extend(_build_storage_tools(config))
 
-    from firefly_dworkers.tools.consulting.report_generation import ReportGenerationTool
-    from firefly_dworkers.tools.data.api_client import GenericAPITool
-    from firefly_dworkers.tools.data.csv_excel import SpreadsheetTool
-
-    tools.extend([SpreadsheetTool(), GenericAPITool(), ReportGenerationTool()])
+    tools.extend([
+        tool_registry.create("spreadsheet"),
+        tool_registry.create("api_client"),
+        tool_registry.create("report_generation"),
+    ])
 
     return ToolKit(
         f"data-analyst-{config.id}",
@@ -205,10 +189,10 @@ def manager_toolkit(config: TenantConfig) -> ToolKit:
     tools.extend(_build_project_tools(config))
     tools.extend(_build_communication_tools(config))
 
-    from firefly_dworkers.tools.consulting.documentation import DocumentationTool
-    from firefly_dworkers.tools.consulting.report_generation import ReportGenerationTool
-
-    tools.extend([ReportGenerationTool(), DocumentationTool()])
+    tools.extend([
+        tool_registry.create("report_generation"),
+        tool_registry.create("documentation"),
+    ])
 
     return ToolKit(
         f"manager-{config.id}",

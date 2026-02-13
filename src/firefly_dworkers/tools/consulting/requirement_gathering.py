@@ -6,7 +6,10 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
-from fireflyframework_genai.tools.base import BaseTool, GuardProtocol, ParameterSpec
+from fireflyframework_genai.tools.base import GuardProtocol, ParameterSpec
+
+from firefly_dworkers.tools.consulting.base import ConsultingTool
+from firefly_dworkers.tools.registry import tool_registry
 
 _DEFAULT_FUNCTIONAL_KEYWORDS: tuple[str, ...] = (
     "must", "shall", "should", "need", "require", "want",
@@ -20,7 +23,8 @@ _DEFAULT_CONSTRAINT_KEYWORDS: tuple[str, ...] = (
 )
 
 
-class RequirementGatheringTool(BaseTool):
+@tool_registry.register("requirement_gathering", category="consulting")
+class RequirementGatheringTool(ConsultingTool):
     """Take interview notes or documents and extract structured requirements.
 
     Categorises requirements into functional, non-functional, and constraints.

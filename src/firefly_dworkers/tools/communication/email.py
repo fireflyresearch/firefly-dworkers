@@ -20,6 +20,7 @@ from fireflyframework_genai.tools.base import GuardProtocol
 
 from firefly_dworkers.exceptions import ConnectorAuthError, ConnectorError
 from firefly_dworkers.tools.communication.base import Message, MessageTool
+from firefly_dworkers.tools.registry import tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ except ImportError:
     AIOSMTPLIB_AVAILABLE = False
 
 
+@tool_registry.register("email", category="communication")
 class EmailTool(MessageTool):
     """Email communication via SMTP (send) and IMAP (read).
 

@@ -16,6 +16,7 @@ from fireflyframework_genai.tools.base import GuardProtocol
 
 from firefly_dworkers.exceptions import ConnectorAuthError, ConnectorError
 from firefly_dworkers.tools.communication.base import Message, MessageTool
+from firefly_dworkers.tools.registry import tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ except ImportError:
     SLACK_AVAILABLE = False
 
 
+@tool_registry.register("slack", category="communication")
 class SlackTool(MessageTool):
     """Slack communication via the Web API.
 

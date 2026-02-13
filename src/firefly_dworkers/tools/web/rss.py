@@ -8,6 +8,8 @@ from typing import Any
 
 from fireflyframework_genai.tools.base import BaseTool, GuardProtocol, ParameterSpec
 
+from firefly_dworkers.tools.registry import tool_registry
+
 try:
     import feedparser
 
@@ -17,6 +19,7 @@ except ImportError:
     FEEDPARSER_AVAILABLE = False
 
 
+@tool_registry.register("rss_feed", category="web")
 class RSSFeedTool(BaseTool):
     """Read and parse RSS/Atom feeds for news and updates.
 

@@ -17,6 +17,7 @@ from fireflyframework_genai.tools.base import GuardProtocol
 
 from firefly_dworkers.exceptions import ConnectorAuthError, ConnectorError
 from firefly_dworkers.tools.communication.base import Message, MessageTool
+from firefly_dworkers.tools.registry import tool_registry
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ except ImportError:
 _GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 
+@tool_registry.register("teams", category="communication")
 class TeamsTool(MessageTool):
     """Microsoft Teams communication via the Graph API.
 

@@ -16,6 +16,7 @@ from typing import Any
 from fireflyframework_genai.tools.base import GuardProtocol
 
 from firefly_dworkers.exceptions import ConnectorAuthError, ConnectorError
+from firefly_dworkers.tools.registry import tool_registry
 from firefly_dworkers.tools.storage.base import DocumentResult, DocumentStorageTool
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ except ImportError:
 _GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 
 
+@tool_registry.register("sharepoint", category="storage")
 class SharePointTool(DocumentStorageTool):
     """SharePoint document access via Microsoft Graph API.
 

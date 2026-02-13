@@ -7,6 +7,8 @@ from typing import Any
 
 from fireflyframework_genai.tools.base import BaseTool, GuardProtocol, ParameterSpec
 
+from firefly_dworkers.tools.registry import tool_registry
+
 try:
     import httpx
 
@@ -16,6 +18,7 @@ except ImportError:
     HTTPX_AVAILABLE = False
 
 
+@tool_registry.register("api_client", category="data")
 class GenericAPITool(BaseTool):
     """Make HTTP API calls to external services.
 

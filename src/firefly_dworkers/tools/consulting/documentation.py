@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from fireflyframework_genai.tools.base import BaseTool, GuardProtocol, ParameterSpec
+from fireflyframework_genai.tools.base import GuardProtocol, ParameterSpec
+
+from firefly_dworkers.tools.consulting.base import ConsultingTool
+from firefly_dworkers.tools.registry import tool_registry
 
 _DEFAULT_TEMPLATES: dict[str, list[str]] = {
     "charter": ["Overview", "Objectives", "Scope", "Stakeholders", "Timeline", "Budget"],
@@ -16,7 +19,8 @@ _DEFAULT_TEMPLATES: dict[str, list[str]] = {
 }
 
 
-class DocumentationTool(BaseTool):
+@tool_registry.register("documentation", category="consulting")
+class DocumentationTool(ConsultingTool):
     """Generate project documentation from structured inputs.
 
     Produces formatted documentation sections for various document types
