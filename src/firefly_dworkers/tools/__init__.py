@@ -24,6 +24,7 @@ import firefly_dworkers.tools.data.api_client  # noqa: F401
 import firefly_dworkers.tools.data.csv_excel  # noqa: F401
 import firefly_dworkers.tools.data.sql  # noqa: F401
 import firefly_dworkers.tools.document.google_docs  # noqa: F401
+import firefly_dworkers.tools.document.pdf  # noqa: F401
 import firefly_dworkers.tools.document.word  # noqa: F401
 import firefly_dworkers.tools.presentation.google_slides  # noqa: F401
 import firefly_dworkers.tools.presentation.powerpoint  # noqa: F401

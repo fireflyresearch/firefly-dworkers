@@ -1,4 +1,4 @@
-"""Document tools -- Word and Google Docs."""
+"""Document tools -- Word, Google Docs, and PDF."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from firefly_dworkers.tools.document.models import (
     SectionSpec,
     TableData,
 )
+from firefly_dworkers.tools.document.pdf import PDFTool
 from firefly_dworkers.tools.document.word import WordTool
 
 __all__ = [
@@ -18,6 +19,7 @@ __all__ = [
     "DocumentOperation",
     "DocumentTool",
     "GoogleDocsTool",
+    "PDFTool",
     "ParagraphData",
     "SectionSpec",
     "TableData",
