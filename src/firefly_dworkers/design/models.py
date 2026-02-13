@@ -226,6 +226,15 @@ class SheetDesign(BaseModel):
     number_formats: dict[str, str] = Field(default_factory=dict)
 
 
+class DiagramSpec(BaseModel):
+    """Specification for generating a diagram."""
+
+    diagram_type: str = "flowchart"  # flowchart, architecture, sequence
+    dot_source: str = ""  # DOT/Graphviz language source
+    mermaid_source: str = ""  # Mermaid source (optional)
+    title: str = ""
+
+
 class DesignSpec(BaseModel):
     """Fully resolved design blueprint that tools render."""
 
