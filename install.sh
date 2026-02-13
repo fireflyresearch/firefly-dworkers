@@ -89,9 +89,15 @@ parse_args() {
     OPT_PREFIX=""
     OPT_PROFILE=""
 
-    # Auto-detect non-interactive (stdin is not a TTY)
+    # When piped (curl | bash), stdin comes from curl, not the terminal.
+    # Reopen stdin from /dev/tty so interactive prompts still work.
+    # If /dev/tty is unavailable (e.g. Docker, CI), fall back to non-interactive.
     if ! [ -t 0 ]; then
-        OPT_YES=1
+        if (exec </dev/tty) 2>/dev/null; then
+            exec 0</dev/tty
+        else
+            OPT_YES=1
+        fi
     fi
 
     while [[ $# -gt 0 ]]; do
@@ -737,13 +743,25 @@ install_packages() {
 
     local src_dir="${build_dir}/firefly-dworkers-main"
 
-    # Strip [tool.uv.sources] — contains local dev paths that break clean installs
+    # Patch pyproject.toml for clean install:
+    # 1. Strip [tool.uv.sources] — local dev paths that break remote builds
+    # 2. Ensure [tool.uv.build-backend] lists all source packages so the
+    #    wheel includes firefly_dworkers_cli and firefly_dworkers_server
     "$python" -c "
 import re, sys
 p = sys.argv[1]
 with open(p) as f:
     text = f.read()
+# Strip [tool.uv.sources] section
 text = re.sub(r'\n*\[tool\.uv\.sources\][^\[]*', '\n\n', text)
+# Ensure build-backend config exists
+if '[tool.uv.build-backend]' not in text:
+    build_backend_cfg = '''
+[tool.uv.build-backend]
+module-name = [\"firefly_dworkers\", \"firefly_dworkers_cli\", \"firefly_dworkers_server\"]
+module-root = \"src\"
+'''
+    text = text.replace('[build-system]', build_backend_cfg + '\n[build-system]')
 with open(p, 'w') as f:
     f.write(text)
 " "${src_dir}/pyproject.toml"
@@ -845,7 +863,15 @@ write_uninstall_script() {
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlinks to find the real script location (not the symlink in ~/.local/bin)
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_PATH" ]]; do
+    LINK_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
+    # Handle relative symlink targets
+    [[ "$SCRIPT_PATH" != /* ]] && SCRIPT_PATH="${LINK_DIR}/${SCRIPT_PATH}"
+done
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 
 # Source metadata
 if [[ -f "${SCRIPT_DIR}/../env" ]]; then
