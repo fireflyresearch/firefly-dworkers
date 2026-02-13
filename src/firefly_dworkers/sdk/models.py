@@ -109,6 +109,41 @@ class StreamEvent(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class ProjectRequest(BaseModel):
+    """Request to run a multi-agent project."""
+
+    brief: str
+    tenant_id: str = "default"
+    project_id: str | None = None  # auto-generated if not provided
+    worker_roles: list[str] = Field(default_factory=list)  # optional override
+
+
+class ProjectEvent(BaseModel):
+    """An event from project orchestration.
+
+    Event types:
+    - ``"project_start"``: Project orchestration has begun.
+    - ``"task_assigned"``: A task has been assigned to a worker.
+    - ``"task_complete"``: A worker has completed a task.
+    - ``"worker_output"``: Incremental output from a worker.
+    - ``"project_complete"``: The entire project has finished.
+    - ``"error"``: An error occurred during orchestration.
+    """
+
+    type: str
+    content: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProjectResponse(BaseModel):
+    """Response from a synchronous project run."""
+
+    project_id: str
+    success: bool
+    deliverables: dict[str, Any] = Field(default_factory=dict)
+    duration_ms: float = 0.0
+
+
 class HealthResponse(BaseModel):
     """Health check response."""
 

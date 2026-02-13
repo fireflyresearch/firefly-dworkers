@@ -1,7 +1,7 @@
 """Application factory for the dworkers platform server.
 
 Extends the framework's :func:`create_genai_app` with dworkers-specific
-API routers for workers, plans, tenants, and knowledge.
+API routers for workers, plans, projects, tenants, and knowledge.
 """
 
 from __future__ import annotations
@@ -36,11 +36,13 @@ def create_dworkers_app(
     # Include dworkers-specific routers
     from firefly_dworkers_server.api.knowledge import router as knowledge_router
     from firefly_dworkers_server.api.plans import router as plans_router
+    from firefly_dworkers_server.api.projects import router as projects_router
     from firefly_dworkers_server.api.tenants import router as tenants_router
     from firefly_dworkers_server.api.workers import router as workers_router
 
     app.include_router(workers_router, prefix="/api/workers", tags=["workers"])
     app.include_router(plans_router, prefix="/api/plans", tags=["plans"])
+    app.include_router(projects_router, prefix="/api/projects", tags=["projects"])
     app.include_router(tenants_router, prefix="/api/tenants", tags=["tenants"])
     app.include_router(knowledge_router, prefix="/api/knowledge", tags=["knowledge"])
 
