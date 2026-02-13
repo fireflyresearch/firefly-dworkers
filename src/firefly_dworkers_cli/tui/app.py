@@ -133,7 +133,17 @@ class DworkersApp(App):
     def action_command_palette(self) -> None:
         from firefly_dworkers_cli.tui.widgets.search import SearchModal
 
-        self.push_screen(SearchModal())
+        self.push_screen(SearchModal(), callback=self._on_command)
+
+    def _on_command(self, result: str | None) -> None:
+        if not result:
+            return
+        if result.startswith("goto:"):
+            self._switch_to(result.replace("goto:", ""))
+        elif result == "action:new-conversation":
+            self._switch_to("conversations")
+        elif result == "action:quit":
+            self.exit()
 
     def action_new_conversation(self) -> None:
         self._switch_to("conversations")
