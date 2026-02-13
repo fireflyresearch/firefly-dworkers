@@ -1,17 +1,55 @@
 # Python
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
+*.egg
 dist/
 build/
+*.whl
 
-# Virtual environment
+# Virtual environments
 .venv/
+venv/
+env/
 
-# Environment
+# Environment / secrets
 .env
+.env.*
+*.pem
+*.key
+credentials.json
 
-# IDE
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+
+# Type checking
+.mypy_cache/
+.pyright/
+.pytype/
+
+# Linting
+.ruff_cache/
+
+# IDE / editors
 .idea/
 .vscode/
 *.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints/
+
+# uv
+.uv/
+
+# Build artifacts
+*.so
+*.dylib
