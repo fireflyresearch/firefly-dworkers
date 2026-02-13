@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import io
+import logging
 from collections.abc import Sequence
+from typing import Any
 
 from fireflyframework_genai.tools.base import GuardProtocol
 
@@ -19,10 +21,13 @@ from firefly_dworkers.tools.registry import tool_registry
 
 try:
     import docx
+    from docx.shared import Inches, Pt, RGBColor
 
     DOCX_AVAILABLE = True
 except ImportError:
     DOCX_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
 
 
 def _require_docx() -> None:
@@ -107,13 +112,23 @@ class WordTool(DocumentTool):
                 doc.add_page_break()
 
             if section.heading:
-                doc.add_heading(section.heading, level=section.heading_level)
+                para = doc.add_heading(section.heading, level=section.heading_level)
+                if section.heading_style:
+                    self._apply_text_style(para, section.heading_style)
 
             if section.content:
-                doc.add_paragraph(section.content)
+                para = doc.add_paragraph(section.content)
+                if section.body_style:
+                    self._apply_text_style(para, section.body_style)
 
             for point in section.bullet_points:
                 doc.add_paragraph(point, style="List Bullet")
+
+            for item in section.numbered_list:
+                doc.add_paragraph(item, style="List Number")
+
+            if section.callout:
+                self._add_callout(doc, section.callout)
 
             if section.table:
                 headers = section.table.headers
@@ -128,9 +143,93 @@ class WordTool(DocumentTool):
                             if c < len(headers):
                                 tbl.cell(r + 1, c).text = str(val)
 
+            if section.chart:
+                self._add_chart(doc, section.chart)
+
+            for img in section.images:
+                self._add_image(doc, img)
+
         buf = io.BytesIO()
         doc.save(buf)
         return buf.getvalue()
+
+    # -- Helper methods --
+
+    @staticmethod
+    def _apply_text_style(paragraph: Any, style: Any) -> None:
+        """Apply a TextStyle to all runs in a paragraph."""
+        if style is None or paragraph is None:
+            return
+        for run in paragraph.runs:
+            if style.font_name:
+                run.font.name = style.font_name
+            if style.font_size > 0:
+                run.font.size = Pt(style.font_size)
+            if style.bold:
+                run.font.bold = True
+            if style.italic:
+                run.font.italic = True
+            if style.color:
+                hex_color = style.color.lstrip("#")
+                if len(hex_color) == 6:
+                    run.font.color.rgb = RGBColor(
+                        int(hex_color[0:2], 16),
+                        int(hex_color[2:4], 16),
+                        int(hex_color[4:6], 16),
+                    )
+
+    @staticmethod
+    def _add_callout(doc: Any, text: str) -> None:
+        """Add a visually distinct callout paragraph (bold, indented)."""
+        para = doc.add_paragraph()
+        para.paragraph_format.left_indent = Inches(0.5)
+        run = para.add_run(f"\u25b6 {text}")
+        run.font.bold = True
+        run.font.italic = True
+
+    @staticmethod
+    def _add_chart(doc: Any, chart_spec: Any) -> None:
+        """Render a chart as PNG and embed it in the document."""
+        from firefly_dworkers.design.charts import ChartRenderer
+        from firefly_dworkers.design.models import DataSeries, ResolvedChart
+
+        # Normalise to ResolvedChart
+        if isinstance(chart_spec, ResolvedChart):
+            resolved = chart_spec
+        elif isinstance(chart_spec, dict):
+            resolved = ResolvedChart.model_validate(chart_spec)
+        else:
+            # Duck-type: pull attributes with getattr for ChartSpec-like objects
+            series_raw = getattr(chart_spec, "series", [])
+            series = [
+                DataSeries(**s) if isinstance(s, dict) else s for s in series_raw
+            ]
+            resolved = ResolvedChart(
+                chart_type=getattr(chart_spec, "chart_type", "bar"),
+                title=getattr(chart_spec, "title", ""),
+                categories=getattr(chart_spec, "categories", []),
+                series=series,
+                colors=getattr(chart_spec, "colors", []),
+                show_legend=getattr(chart_spec, "show_legend", True),
+                show_data_labels=getattr(chart_spec, "show_data_labels", False),
+                stacked=getattr(chart_spec, "stacked", False),
+            )
+
+        renderer = ChartRenderer()
+        try:
+            png_bytes = renderer.render_to_image_sync(resolved, 800, 600)
+            doc.add_picture(io.BytesIO(png_bytes), width=Inches(6))
+        except (ImportError, ValueError) as exc:
+            logger.warning("Failed to render chart to image: %s", exc, exc_info=True)
+
+    @staticmethod
+    def _add_image(doc: Any, img: Any) -> None:
+        """Embed an image from an ImagePlacement spec."""
+        if not img.file_path:
+            return
+        width = Inches(img.width) if img.width else None
+        height = Inches(img.height) if img.height else None
+        doc.add_picture(img.file_path, width=width, height=height)
 
     def _modify_sync(self, source: str, operations: list[DocumentOperation]) -> bytes:
         doc = docx.Document(source)

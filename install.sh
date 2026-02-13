@@ -89,15 +89,19 @@ parse_args() {
     OPT_PREFIX=""
     OPT_PROFILE=""
 
-    # When piped (curl | bash), stdin comes from curl, not the terminal.
-    # Reopen stdin from /dev/tty so interactive prompts still work.
-    # If /dev/tty is unavailable (e.g. Docker, CI), fall back to non-interactive.
+    # When piped (curl | bash), bash reads the script from stdin (fd 0).
+    # We MUST NOT redirect fd 0 or bash loses the script source and hangs.
+    # Instead, open /dev/tty on a separate fd (3) for interactive prompts.
+    # All interactive read calls use <&3 to read from the terminal.
     if ! [ -t 0 ]; then
-        if (exec </dev/tty) 2>/dev/null; then
-            exec 0</dev/tty
+        if (exec 3</dev/tty) 2>/dev/null; then
+            exec 3</dev/tty
         else
+            exec 3<&0
             OPT_YES=1
         fi
+    else
+        exec 3<&0
     fi
 
     while [[ $# -gt 0 ]]; do
@@ -292,7 +296,7 @@ menu_select() {
     local selected=0
 
     # Non-interactive: return first option immediately
-    if [[ "${OPT_YES:-0}" == "1" ]] || ! [ -t 0 ]; then
+    if [[ "${OPT_YES:-0}" == "1" ]] || ! [ -t 3 ]; then
         eval "$_result_var=\"0\""
         return 0
     fi
@@ -307,7 +311,7 @@ menu_select() {
     while true; do
         # Read a single character
         local key=""
-        IFS= read -rsn1 key
+        IFS= read -rsn1 key <&3
 
         if [[ "$key" == "" ]]; then
             # Enter pressed
@@ -317,8 +321,8 @@ menu_select() {
         if [[ "$key" == $'\033' ]]; then
             # Escape sequence — read two more chars
             local seq1="" seq2=""
-            IFS= read -rsn1 seq1
-            IFS= read -rsn1 seq2
+            IFS= read -rsn1 seq1 <&3
+            IFS= read -rsn1 seq2 <&3
             if [[ "$seq1" == "[" ]]; then
                 case "$seq2" in
                     A)  # Up arrow
@@ -427,7 +431,7 @@ toggle_picker() {
     fi
 
     # Non-interactive: return pre-selected items
-    if [[ "${OPT_YES:-0}" == "1" ]] || ! [ -t 0 ]; then
+    if [[ "${OPT_YES:-0}" == "1" ]] || ! [ -t 3 ]; then
         local result=""
         local i=0
         while [[ $i -lt $count ]]; do
@@ -455,7 +459,7 @@ toggle_picker() {
 
     while true; do
         local key=""
-        IFS= read -rsn1 key
+        IFS= read -rsn1 key <&3
 
         if [[ "$key" == "" ]]; then
             # Enter — confirm
@@ -545,7 +549,7 @@ confirm() {
     printf "  %s %s " "$prompt" "${DIM}${hint}${RESET}"
 
     local answer=""
-    read -r answer
+    read -r answer <&3
 
     # Default on empty
     if [[ -z "$answer" ]]; then
@@ -564,14 +568,14 @@ prompt_path() {
     local _result_var="$3"
 
     # Non-interactive: use default
-    if [[ "${OPT_YES:-0}" == "1" ]] || ! [ -t 0 ]; then
+    if [[ "${OPT_YES:-0}" == "1" ]] || ! [ -t 3 ]; then
         eval "$_result_var=\"\$default_path\""
         return 0
     fi
 
     printf "  %s %s: " "$title" "${DIM}[${default_path}]${RESET}"
     local answer=""
-    read -r answer
+    read -r answer <&3
 
     if [[ -z "$answer" ]]; then
         answer="$default_path"
@@ -622,7 +626,7 @@ preflight_checks() {
     local install_prefix="${OPT_PREFIX:-$DEFAULT_PREFIX}"
     if [[ -d "$install_prefix" ]]; then
         warn "Existing installation found at ${install_prefix}"
-        if [[ "${OPT_YES:-0}" != "1" ]] && [ -t 0 ]; then
+        if [[ "${OPT_YES:-0}" != "1" ]] && [ -t 3 ]; then
             if ! confirm "Overwrite existing installation?"; then
                 die "Installation cancelled."
             fi
