@@ -165,10 +165,75 @@ def _build_project_tools(config: TenantConfig) -> list[BaseTool]:
     """Build project management tools for enabled connectors."""
     tools: list[BaseTool] = []
 
+    # Jira
     cfg = getattr(config.connectors, "jira", None)
     if cfg is not None and getattr(cfg, "enabled", False) and tool_registry.has("jira"):
         tools.append(tool_registry.create("jira"))
 
+    # Asana
+    cfg = getattr(config.connectors, "asana", None)
+    if cfg is not None and getattr(cfg, "enabled", False) and tool_registry.has("asana"):
+        tools.append(tool_registry.create("asana"))
+
+    return tools
+
+
+def _build_presentation_tools(config: TenantConfig) -> list[BaseTool]:
+    """Build presentation tools from tenant connector config."""
+    tools: list[BaseTool] = []
+    cfg = config.connectors.presentation
+    if not getattr(cfg, "enabled", False):
+        return tools
+    provider = getattr(cfg, "provider", "powerpoint")
+    if tool_registry.has(provider):
+        tools.append(tool_registry.create(provider))
+    # Always include PDF for presentation export
+    if tool_registry.has("pdf"):
+        tools.append(tool_registry.create("pdf"))
+    return tools
+
+
+def _build_document_tools(config: TenantConfig) -> list[BaseTool]:
+    """Build document tools from tenant connector config."""
+    tools: list[BaseTool] = []
+    cfg = config.connectors.document
+    if not getattr(cfg, "enabled", False):
+        return tools
+    provider = getattr(cfg, "provider", "word")
+    if tool_registry.has(provider):
+        tools.append(tool_registry.create(provider))
+    # Always include PDF for document export
+    if tool_registry.has("pdf"):
+        tools.append(tool_registry.create("pdf"))
+    return tools
+
+
+def _build_spreadsheet_tools(config: TenantConfig) -> list[BaseTool]:
+    """Build spreadsheet tools from tenant connector config."""
+    tools: list[BaseTool] = []
+    cfg = config.connectors.spreadsheet
+    if not getattr(cfg, "enabled", False):
+        return tools
+    provider = getattr(cfg, "provider", "excel")
+    if tool_registry.has(provider):
+        tools.append(tool_registry.create(provider))
+    return tools
+
+
+def _build_data_tools(config: TenantConfig) -> list[BaseTool]:
+    """Build data analysis tools from tenant connector config."""
+    tools: list[BaseTool] = []
+    sql_cfg = config.connectors.sql
+    if getattr(sql_cfg, "enabled", False) and tool_registry.has("sql"):
+        tools.append(tool_registry.create("sql"))
+    return tools
+
+
+def _build_vision_tools(config: TenantConfig) -> list[BaseTool]:
+    """Build vision analysis tools."""
+    tools: list[BaseTool] = []
+    if tool_registry.has("vision_analysis"):
+        tools.append(tool_registry.create("vision_analysis"))
     return tools
 
 
@@ -207,13 +272,15 @@ def researcher_toolkit(config: TenantConfig) -> ToolKit:
 def analyst_toolkit(config: TenantConfig) -> ToolKit:
     """Build a ToolKit for the *analyst* worker role.
 
-    Includes storage connectors, communication connectors, and all five
-    consulting tools (requirement gathering, process mapping, gap analysis,
-    report generation, documentation).
+    Includes storage connectors, communication connectors, presentation
+    and document tools, and all five consulting tools (requirement gathering,
+    process mapping, gap analysis, report generation, documentation).
     """
     tools: list[BaseTool] = []
     tools.extend(_build_storage_tools(config))
     tools.extend(_build_communication_tools(config))
+    tools.extend(_build_presentation_tools(config))
+    tools.extend(_build_document_tools(config))
 
     tools.extend(
         [
@@ -236,11 +303,14 @@ def analyst_toolkit(config: TenantConfig) -> ToolKit:
 def data_analyst_toolkit(config: TenantConfig) -> ToolKit:
     """Build a ToolKit for the *data analyst* worker role.
 
-    Includes storage connectors, spreadsheet parsing, API client, and report
-    generation.
+    Includes storage connectors, spreadsheet tools, data analysis tools,
+    vision analysis, spreadsheet parsing, API client, and report generation.
     """
     tools: list[BaseTool] = []
     tools.extend(_build_storage_tools(config))
+    tools.extend(_build_spreadsheet_tools(config))
+    tools.extend(_build_data_tools(config))
+    tools.extend(_build_vision_tools(config))
 
     tools.extend(
         [
@@ -261,12 +331,14 @@ def data_analyst_toolkit(config: TenantConfig) -> ToolKit:
 def manager_toolkit(config: TenantConfig) -> ToolKit:
     """Build a ToolKit for the *manager* worker role.
 
-    Includes project management tools, communication connectors, report
-    generation, and documentation.
+    Includes project management tools, communication connectors, presentation
+    and document tools, report generation, and documentation.
     """
     tools: list[BaseTool] = []
     tools.extend(_build_project_tools(config))
     tools.extend(_build_communication_tools(config))
+    tools.extend(_build_presentation_tools(config))
+    tools.extend(_build_document_tools(config))
 
     tools.extend(
         [

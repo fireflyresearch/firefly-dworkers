@@ -9,8 +9,11 @@ from fireflyframework_genai.tools.toolkit import ToolKit
 
 from firefly_dworkers.tenants.config import TenantConfig
 from firefly_dworkers.tools.toolkits import (
+    _build_document_tools,
+    _build_presentation_tools,
     _build_research_chain,
     _build_resilient_search,
+    _build_spreadsheet_tools,
     _build_web_tools,
     analyst_toolkit,
     data_analyst_toolkit,
@@ -294,3 +297,150 @@ class TestToolResilience:
         with patch.dict("sys.modules", {"fireflyframework_genai.tools": None}):
             chain = _build_research_chain(cfg)
         assert chain is None
+
+
+class TestProductivityTools:
+    """Tests for productivity tool builders and their integration with role toolkits."""
+
+    def _make_config(self, **connector_overrides: dict) -> TenantConfig:
+        """Build a TenantConfig with optional connector overrides."""
+        connectors = {
+            "web_search": {"enabled": True, "provider": "tavily", "api_key": "test-key"},
+            **connector_overrides,
+        }
+        return TenantConfig(id="test", name="Test", connectors=connectors)
+
+    # -- analyst + presentation -----------------------------------------------
+
+    def test_analyst_has_presentation_tools_when_enabled(self) -> None:
+        """Presentation enabled -> powerpoint in analyst toolkit."""
+        cfg = self._make_config(presentation={"enabled": True, "provider": "powerpoint"})
+        kit = analyst_toolkit(cfg)
+        tool_names = [t.name for t in kit.tools]
+        assert "powerpoint" in tool_names
+
+    def test_analyst_has_document_tools_when_enabled(self) -> None:
+        """Document enabled -> word in analyst toolkit."""
+        cfg = self._make_config(document={"enabled": True, "provider": "word"})
+        kit = analyst_toolkit(cfg)
+        tool_names = [t.name for t in kit.tools]
+        assert "word" in tool_names
+
+    def test_analyst_no_presentation_when_disabled(self) -> None:
+        """Presentation disabled -> no powerpoint in analyst toolkit."""
+        cfg = self._make_config(presentation={"enabled": False})
+        kit = analyst_toolkit(cfg)
+        tool_names = [t.name for t in kit.tools]
+        assert "powerpoint" not in tool_names
+
+    def test_analyst_no_document_when_disabled(self) -> None:
+        """Document disabled -> no word in analyst toolkit."""
+        cfg = self._make_config(document={"enabled": False})
+        kit = analyst_toolkit(cfg)
+        tool_names = [t.name for t in kit.tools]
+        assert "word" not in tool_names
+
+    # -- data_analyst + spreadsheet / vision / data ---------------------------
+
+    def test_data_analyst_has_spreadsheet_tools_when_enabled(self) -> None:
+        """Spreadsheet enabled -> excel in data_analyst toolkit."""
+        cfg = self._make_config(spreadsheet={"enabled": True, "provider": "excel"})
+        kit = data_analyst_toolkit(cfg)
+        tool_names = [t.name for t in kit.tools]
+        assert "excel" in tool_names
+
+    def test_data_analyst_has_vision_tools(self) -> None:
+        """Vision tools always included in data_analyst toolkit."""
+        cfg = self._make_config()
+        kit = data_analyst_toolkit(cfg)
+        tool_names = [t.name for t in kit.tools]
+        assert "vision_analysis" in tool_names
+
+    def test_data_analyst_has_sql_when_enabled(self) -> None:
+        """SQL enabled -> sql_client in data_analyst toolkit."""
+        cfg = self._make_config(sql={"enabled": True, "connection_string": "sqlite://"})
+        kit = data_analyst_toolkit(cfg)
+        tool_names = [t.name for t in kit.tools]
+        assert "sql_client" in tool_names
+
+    def test_data_analyst_no_spreadsheet_when_disabled(self) -> None:
+        """Spreadsheet disabled -> no excel in data_analyst toolkit."""
+        cfg = self._make_config(spreadsheet={"enabled": False})
+        kit = data_analyst_toolkit(cfg)
+        tool_names = [t.name for t in kit.tools]
+        assert "excel" not in tool_names
+
+    # -- manager + presentation / document / asana ----------------------------
+
+    def test_manager_has_presentation_when_enabled(self) -> None:
+        """Presentation enabled -> powerpoint in manager toolkit."""
+        cfg = self._make_config(presentation={"enabled": True, "provider": "powerpoint"})
+        kit = manager_toolkit(cfg)
+        tool_names = [t.name for t in kit.tools]
+        assert "powerpoint" in tool_names
+
+    def test_manager_has_document_when_enabled(self) -> None:
+        """Document enabled -> word in manager toolkit."""
+        cfg = self._make_config(document={"enabled": True, "provider": "word"})
+        kit = manager_toolkit(cfg)
+        tool_names = [t.name for t in kit.tools]
+        assert "word" in tool_names
+
+    def test_manager_has_asana_when_enabled(self) -> None:
+        """Asana enabled -> asana in manager toolkit."""
+        cfg = self._make_config(asana={"enabled": True})
+        kit = manager_toolkit(cfg)
+        tool_names = [t.name for t in kit.tools]
+        assert "asana" in tool_names
+
+    # -- Google provider variants ---------------------------------------------
+
+    def test_google_slides_provider(self) -> None:
+        """Presentation provider=google_slides -> google_slides tool."""
+        cfg = self._make_config(
+            presentation={"enabled": True, "provider": "google_slides"},
+        )
+        tools = _build_presentation_tools(cfg)
+        tool_names = [t.name for t in tools]
+        assert "google_slides" in tool_names
+        assert "powerpoint" not in tool_names
+
+    def test_google_docs_provider(self) -> None:
+        """Document provider=google_docs -> google_docs tool."""
+        cfg = self._make_config(
+            document={"enabled": True, "provider": "google_docs"},
+        )
+        tools = _build_document_tools(cfg)
+        tool_names = [t.name for t in tools]
+        assert "google_docs" in tool_names
+        assert "word" not in tool_names
+
+    def test_google_sheets_provider(self) -> None:
+        """Spreadsheet provider=google_sheets_spreadsheet -> google_sheets tool."""
+        cfg = self._make_config(
+            spreadsheet={"enabled": True, "provider": "google_sheets_spreadsheet"},
+        )
+        tools = _build_spreadsheet_tools(cfg)
+        tool_names = [t.name for t in tools]
+        assert "google_sheets" in tool_names
+        assert "excel" not in tool_names
+
+    # -- PDF inclusion --------------------------------------------------------
+
+    def test_pdf_included_with_presentation(self) -> None:
+        """PDF tool included alongside presentation tools."""
+        cfg = self._make_config(
+            presentation={"enabled": True, "provider": "powerpoint"},
+        )
+        tools = _build_presentation_tools(cfg)
+        tool_names = [t.name for t in tools]
+        assert "pdf" in tool_names
+
+    def test_pdf_included_with_document(self) -> None:
+        """PDF tool included alongside document tools."""
+        cfg = self._make_config(
+            document={"enabled": True, "provider": "word"},
+        )
+        tools = _build_document_tools(cfg)
+        tool_names = [t.name for t in tools]
+        assert "pdf" in tool_names
