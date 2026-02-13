@@ -42,3 +42,22 @@ class TestSerpAPISearchTool:
     def test_api_key_stored(self):
         tool = SerpAPISearchTool(api_key="my-serpapi-key")
         assert tool._api_key == "my-serpapi-key"
+
+    def test_config_params(self):
+        tool = SerpAPISearchTool(
+            api_key="key",
+            base_url="https://custom.serpapi.com/search.json",
+            timeout=45.0,
+            max_snippet_length=300,
+            max_results=15,
+        )
+        assert tool._base_url == "https://custom.serpapi.com/search.json"
+        assert tool._timeout == 45.0
+        assert tool._max_snippet_length == 300
+        assert tool._max_results == 15
+
+    def test_default_config_values(self):
+        tool = SerpAPISearchTool(api_key="key")
+        assert tool._base_url == "https://serpapi.com/search.json"
+        assert tool._timeout == 30.0
+        assert tool._max_snippet_length == 500
