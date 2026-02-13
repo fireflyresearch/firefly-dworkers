@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
+from firefly_dworkers.exceptions import VerticalNotFoundError
 from firefly_dworkers.tenants.config import TenantConfig
 from firefly_dworkers.tools.toolkits import analyst_toolkit
 from firefly_dworkers.types import AutonomyLevel, WorkerRole
 from firefly_dworkers.workers.base import BaseWorker
+
+logger = logging.getLogger(__name__)
 
 
 class AnalystWorker(BaseWorker):
@@ -44,6 +48,8 @@ class AnalystWorker(BaseWorker):
     @staticmethod
     def _build_instructions(config: TenantConfig) -> str:
         """Build role-specific system prompt with vertical fragments."""
+        from firefly_dworkers.verticals import get_vertical
+
         parts: list[str] = [
             "You are an expert consulting analyst. Your role is to analyze "
             "business processes, gather requirements, identify gaps, and "
@@ -53,12 +59,12 @@ class AnalystWorker(BaseWorker):
         # Add vertical-specific fragments
         for v_name in config.verticals:
             try:
-                from firefly_dworkers.verticals import get_vertical
-
                 v = get_vertical(v_name)
                 parts.append(v.system_prompt_fragment)
-            except Exception:  # noqa: BLE001
-                pass
+            except VerticalNotFoundError:
+                logger.debug("Skipping unknown vertical '%s'", v_name)
+            except Exception:
+                logger.warning("Failed to load vertical '%s'", v_name, exc_info=True)
 
         # Add custom instructions from tenant config
         settings = config.workers.settings_for("analyst")

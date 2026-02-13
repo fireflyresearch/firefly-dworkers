@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import threading
+from typing import TYPE_CHECKING
 
 from firefly_dworkers.exceptions import WorkerNotFoundError
+
+if TYPE_CHECKING:
+    from firefly_dworkers.workers.base import BaseWorker
 
 
 class WorkerRegistry:
@@ -16,18 +20,15 @@ class WorkerRegistry:
     """
 
     def __init__(self) -> None:
-        self._workers: dict[str, object] = {}
+        self._workers: dict[str, BaseWorker] = {}
         self._lock = threading.Lock()
 
-    def register(self, worker: object) -> None:
+    def register(self, worker: BaseWorker) -> None:
         """Register a worker by its ``name`` attribute."""
-        name = getattr(worker, "name", None)
-        if name is None:
-            raise ValueError("Worker must have a 'name' attribute")
         with self._lock:
-            self._workers[name] = worker
+            self._workers[worker.name] = worker
 
-    def get(self, name: str) -> object:
+    def get(self, name: str) -> BaseWorker:
         """Return the worker with *name*, or raise :class:`WorkerNotFoundError`."""
         with self._lock:
             if name not in self._workers:
