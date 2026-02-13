@@ -97,6 +97,17 @@ assert_contains "banner has version" "$DWORKERS_VERSION" "$banner_output"
 
 echo ""
 
+# --- Preflight checks ---
+echo "  Preflight checks"
+echo "  ─────────────────"
+
+preflight_output="$(preflight_checks 2>&1)"
+assert_contains "preflight detects OS" "$DETECTED_OS" "$preflight_output"
+assert_contains "preflight checks bash" "bash" "$preflight_output"
+assert_contains "preflight checks curl" "curl" "$preflight_output"
+
+echo ""
+
 # --- Summary ---
 echo "  ───────────────────────"
 printf "  %d passed, %d failed\n\n" "$PASS" "$FAIL"

@@ -590,6 +590,55 @@ prompt_path() {
     eval "$_result_var=\"\$answer\""
 }
 
+# ── Preflight checks ───────────────────────────────────────────────────────
+
+preflight_checks() {
+    detect_platform
+
+    section "Preflight"
+
+    # OS + architecture
+    local os_label=""
+    case "${DETECTED_OS}-${DETECTED_ARCH}" in
+        macos-arm64)   os_label="macOS arm64 (Apple Silicon)" ;;
+        macos-x86_64)  os_label="macOS x86_64 (Intel)" ;;
+        linux-arm64)   os_label="Linux arm64" ;;
+        linux-x86_64)  os_label="Linux x86_64" ;;
+        *)             os_label="${DETECTED_OS} ${DETECTED_ARCH}" ;;
+    esac
+    info "OS: ${os_label} [${DETECTED_OS}/${DETECTED_ARCH}]"
+
+    # Bash version
+    info "bash ${BASH_VERSION}"
+
+    # curl
+    if command -v curl >/dev/null 2>&1; then
+        info "curl available"
+    else
+        die "curl is required but not found. Please install curl and try again."
+    fi
+
+    # Existing installation
+    local install_prefix="${OPT_PREFIX:-$DEFAULT_PREFIX}"
+    if [[ -d "$install_prefix" ]]; then
+        warn "Existing installation found at ${install_prefix}"
+        if [[ "${OPT_YES:-0}" != "1" ]] && [ -t 0 ]; then
+            if ! confirm "Overwrite existing installation?"; then
+                die "Installation cancelled."
+            fi
+        fi
+    fi
+
+    # uv
+    if command -v uv >/dev/null 2>&1; then
+        local uv_ver=""
+        uv_ver="$(uv --version 2>/dev/null || echo "unknown")"
+        info "uv: ${uv_ver}"
+    else
+        warn "uv not found — will install automatically"
+    fi
+}
+
 # ── Test mode guard ──────────────────────────────────────────────────────────
 # When sourced with DWORKERS_TEST_MODE=1, stop here so tests can call
 # individual functions without triggering the main installer flow.
