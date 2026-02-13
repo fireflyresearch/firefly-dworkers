@@ -274,6 +274,16 @@ class BrandingConfig(BaseModel):
     logo_url: str = ""
 
 
+class ObservabilityConfig(BaseModel):
+    """Tenant-level observability settings."""
+
+    cost_budget_usd: float = 0.0  # 0 = no budget limit
+    cost_warn_only: bool = True  # When True, log warning instead of blocking
+    per_call_limit_usd: float = 0.0  # 0 = no per-call limit
+    enable_tracing: bool = True  # Enable OTel tracing for this tenant
+    log_level: str = "INFO"  # Tenant-specific log level
+
+
 class GuardsConfig(BaseModel):
     """Guard settings for a tenant.
 
@@ -311,3 +321,4 @@ class TenantConfig(BaseModel):
     knowledge: KnowledgeConfig = Field(default_factory=KnowledgeConfig)
     branding: BrandingConfig = Field(default_factory=BrandingConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)

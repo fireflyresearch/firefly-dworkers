@@ -58,11 +58,12 @@ class BaseWorker(FireflyAgent):
         self._tenant_config = tenant_config
         self._instructions_text = instructions if isinstance(instructions, str) else ""
 
-        # Build guard middleware from tenant config and merge with user
-        # middleware (guards come first so they run before user middleware).
+        # Build guard + cost middleware from tenant config and merge with user
+        # middleware (guards come first, then cost, then user middleware).
         guard_middleware = self._build_guard_middleware(tenant_config)
+        cost_middleware = self._build_cost_middleware(tenant_config)
         user_middleware = kwargs.pop("middleware", None) or []
-        all_middleware = guard_middleware + list(user_middleware)
+        all_middleware = guard_middleware + cost_middleware + list(user_middleware)
 
         super().__init__(
             name,
@@ -125,6 +126,37 @@ class BaseWorker(FireflyAgent):
                 ),
             )
 
+        return middleware
+
+    # -- Cost middleware builder -----------------------------------------------
+
+    @staticmethod
+    def _build_cost_middleware(config: TenantConfig) -> list[Any]:
+        """Build cost guard middleware from tenant observability config.
+
+        Uses lazy imports so the cost-guard module is optional -- if the
+        framework extras are not installed, an empty list is returned.
+        """
+        middleware: list[Any] = []
+        obs_cfg = config.observability
+
+        if obs_cfg.cost_budget_usd <= 0 and obs_cfg.per_call_limit_usd <= 0:
+            return middleware
+
+        try:
+            from fireflyframework_genai.agents.builtin_middleware import (
+                CostGuardMiddleware,
+            )
+        except ImportError:
+            return middleware
+
+        middleware.append(
+            CostGuardMiddleware(
+                budget_usd=obs_cfg.cost_budget_usd if obs_cfg.cost_budget_usd > 0 else None,
+                warn_only=obs_cfg.cost_warn_only,
+                per_call_limit_usd=obs_cfg.per_call_limit_usd if obs_cfg.per_call_limit_usd > 0 else None,
+            ),
+        )
         return middleware
 
     # -- Properties ----------------------------------------------------------
