@@ -21,8 +21,10 @@
 ## Table of Contents
 
 - [Why dworkers?](#why-dworkers)
+- [Business Value](#business-value)
 - [Architecture](#architecture)
 - [Features](#features)
+- [Productivity Tools](#productivity-tools)
 - [Quick Start](#quick-start)
 - [Installation](#installation)
 - [CLI Usage](#cli-usage)
@@ -44,6 +46,54 @@ Consulting firms face a persistent challenge: scaling expertise without linearly
 - **Multi-tenant by design** -- Onboard new clients with a YAML file. No code changes required.
 - **Configurable autonomy** -- From fully manual (human approves every step) to fully autonomous, with semi-supervised as the default.
 - **Pluggable connectors** -- Swap Tavily for SerpAPI, SharePoint for Google Drive, or Slack for Teams through configuration alone.
+
+---
+
+## Business Value
+
+### For Consulting Firms
+
+firefly-dworkers is designed for the economics of professional services. The platform maps directly to how consulting firms staff, bill, and deliver engagements:
+
+| Traditional Model | With Digital Workers |
+|-------------------|----------------------|
+| 1 analyst at $150/hr billing rate | 1 analyst + DWorker at $150/hr + ~$2/hr API cost |
+| 40 hrs/week effective capacity | 50+ hrs/week equivalent output |
+| 5-day turnaround on market scans | Same-day research briefs |
+| Manual PowerPoint and Excel assembly | Auto-generated deliverables from analysis |
+
+### Use Cases
+
+**Market Entry Analysis** — A partner asks "Should we enter the AI advisory market?"
+1. **ResearcherWorker** gathers competitive landscape, market sizing, and regulatory context
+2. **DataAnalystWorker** analyzes financial data and builds projection models
+3. **AnalystWorker** synthesizes findings into strategic recommendations
+4. **PowerPointTool** generates the client-ready strategy deck
+
+**Client Onboarding** — A new engagement kicks off:
+1. `dworkers init acme-corp` scaffolds the tenant configuration
+2. Connectors are configured (SharePoint for document access, Jira for task tracking, Slack for communications)
+3. Workers are assigned autonomy levels based on the engagement's risk profile
+4. The Manager worker oversees plan execution with checkpoint approvals
+
+**Recurring Reporting** — Monthly deliverables on autopilot:
+1. A `market-analysis` plan template runs on schedule
+2. Workers pull fresh data from configured sources
+3. Reports are generated as Word documents or PowerPoint decks
+4. Results are posted to Slack and filed in SharePoint
+
+### Industry Verticals
+
+Each vertical provides domain-tuned system prompts so workers understand sector-specific terminology, regulations, and best practices:
+
+| Vertical | Focus Areas |
+|----------|-------------|
+| Banking | Risk frameworks, Basel III/IV, AML/KYC, fintech disruption |
+| Healthcare | HIPAA compliance, clinical workflows, payer-provider dynamics |
+| Technology | Cloud migration, SaaS metrics, engineering productivity |
+| Gaming | LiveOps, player economics, platform compliance (ESRB, PEGI) |
+| Legal | Contract analysis, regulatory mapping, litigation support |
+| Consumer | Brand strategy, retail analytics, supply chain optimization |
 
 ---
 
@@ -156,6 +206,39 @@ See [docs/architecture.md](docs/architecture.md) for a deep dive.
 
 ---
 
+## Productivity Tools
+
+Digital workers can generate Office documents directly from analysis results. Each tool provides a two-tier API:
+
+- **`execute()`** — Returns metadata (`{"bytes_length": N, "success": True}`) for LLM tool calling
+- **`create()` / `generate()`** — Returns raw file bytes for programmatic use
+- **`create_and_save()`** — Generates and writes the file in one call
+- **`artifact_bytes`** — Retrieves bytes from the last `execute()` call
+
+| Tool | Formats | Key Methods |
+|------|---------|-------------|
+| `PresentationTool` | `.pptx` (PowerPoint, Google Slides) | `create()`, `create_and_save()`, `modify()`, `modify_and_save()` |
+| `DocumentTool` | `.docx` (Word, Google Docs) | `create()`, `create_and_save()`, `modify()`, `modify_and_save()` |
+| `SpreadsheetPort` | `.xlsx` (Excel, Google Sheets) | `create()`, `create_and_save()`, `modify()`, `modify_and_save()` |
+| `PDFTool` | `.pdf` (from Markdown/HTML) | `generate()`, `generate_and_save()` |
+
+```python
+from firefly_dworkers.tools.presentation.powerpoint import PowerPointTool
+from firefly_dworkers.tools.presentation.models import SlideSpec
+
+ppt = PowerPointTool()
+path = await ppt.create_and_save(
+    "strategy_deck.pptx",
+    slides=[
+        SlideSpec(title="Executive Summary", bullet_points=["Market is growing 23% YoY", "Three acquisition targets identified"]),
+        SlideSpec(title="Recommendations", content="Prioritize organic growth in Q3-Q4."),
+    ],
+)
+print(f"Deck saved to {path}")
+```
+
+---
+
 ## Quick Start
 
 ```bash
@@ -179,7 +262,8 @@ uv run python examples/01_basic_analyst.py
 ```
 
 See the [examples/](examples/) directory for six runnable scripts covering
-workers, plans, streaming, and tool usage (including PowerPoint generation).
+workers, plans, streaming, and productivity tool usage. Example 06 demonstrates
+end-to-end presentation generation using the public `create_and_save()` API.
 
 ---
 

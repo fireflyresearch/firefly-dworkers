@@ -266,13 +266,23 @@ class ConsultingTool(BaseTool):
 
 ```python
 @abstractmethod
-async def _create(self, title: str, **kwargs) -> Any: ...
+async def _read_presentation(self, source: str) -> PresentationData: ...
 
 @abstractmethod
-async def _add_slide(self, presentation: Any, slide_data: SlideData) -> Any: ...
+async def _create_presentation(self, template: str, slides: list[SlideSpec]) -> bytes: ...
 
 @abstractmethod
-async def _save(self, presentation: Any, path: str) -> str: ...
+async def _modify_presentation(self, source: str, operations: list[SlideOperation]) -> bytes: ...
+```
+
+**Public convenience methods:**
+
+```python
+tool.artifact_bytes          # bytes | None — last create/modify result
+await tool.create(slides=[...])                         # → bytes
+await tool.create_and_save("out.pptx", slides=[...])    # → str (absolute path)
+await tool.modify("src.pptx", operations=[...])         # → bytes
+await tool.modify_and_save("src.pptx", "out.pptx", operations=[...])  # → str
 ```
 
 **Adapters:** `PowerPointTool`, `GoogleSlidesTool`
@@ -285,13 +295,23 @@ async def _save(self, presentation: Any, path: str) -> str: ...
 
 ```python
 @abstractmethod
-async def _create(self, title: str, **kwargs) -> Any: ...
+async def _read_document(self, source: str) -> DocumentData: ...
 
 @abstractmethod
-async def _add_section(self, document: Any, section: DocumentSection) -> Any: ...
+async def _create_document(self, title: str, sections: list[SectionSpec]) -> bytes: ...
 
 @abstractmethod
-async def _save(self, document: Any, path: str) -> str: ...
+async def _modify_document(self, source: str, operations: list[DocumentOperation]) -> bytes: ...
+```
+
+**Public convenience methods:**
+
+```python
+tool.artifact_bytes          # bytes | None — last create/modify result
+await tool.create(title="...", sections=[...])                    # → bytes
+await tool.create_and_save("out.docx", title="...", sections=[...])  # → str
+await tool.modify("src.docx", operations=[...])                  # → bytes
+await tool.modify_and_save("src.docx", "out.docx", operations=[...])  # → str
 ```
 
 **Adapters:** `WordTool`, `GoogleDocsTool`, `PDFTool`
@@ -304,16 +324,23 @@ async def _save(self, document: Any, path: str) -> str: ...
 
 ```python
 @abstractmethod
-async def _create(self, title: str, **kwargs) -> Any: ...
+async def _read_spreadsheet(self, source: str, sheet_name: str = "") -> WorkbookData: ...
 
 @abstractmethod
-async def _add_sheet(self, workbook: Any, sheet_data: SheetData) -> Any: ...
+async def _create_spreadsheet(self, sheets: list[SheetSpec]) -> bytes: ...
 
 @abstractmethod
-async def _save(self, workbook: Any, path: str) -> str: ...
+async def _modify_spreadsheet(self, source: str, operations: list[SpreadsheetOperation]) -> bytes: ...
+```
 
-@abstractmethod
-async def _read(self, path: str) -> SheetData: ...
+**Public convenience methods:**
+
+```python
+tool.artifact_bytes          # bytes | None — last create/modify result
+await tool.create(sheets=[...])                                     # → bytes
+await tool.create_and_save("out.xlsx", sheets=[...])                # → str
+await tool.modify("src.xlsx", operations=[...])                     # → bytes
+await tool.modify_and_save("src.xlsx", "out.xlsx", operations=[...])  # → str
 ```
 
 **Adapters:** `ExcelTool`, `GoogleSheetsTool`
