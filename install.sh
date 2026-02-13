@@ -639,6 +639,63 @@ preflight_checks() {
     fi
 }
 
+# ── Install flow ────────────────────────────────────────────────────────────
+
+ensure_uv() {
+    if command -v uv &>/dev/null; then
+        return 0
+    fi
+
+    start_spinner "Installing uv..."
+    if curl -LsSf "$UV_INSTALL_URL" | sh >/dev/null 2>&1; then
+        export PATH="${HOME}/.local/bin:${HOME}/.cargo/bin:${PATH}"
+        stop_spinner
+        info "uv installed"
+    else
+        stop_spinner
+        die "Could not install uv. Please install it manually: https://docs.astral.sh/uv/"
+    fi
+
+    if ! command -v uv &>/dev/null; then
+        die "uv was installed but not found in PATH. Please restart your shell and try again."
+    fi
+}
+
+create_venv() {
+    local install_dir="$1"
+
+    start_spinner "Creating Python ${PYTHON_VERSION} virtual environment..."
+    if uv venv "${install_dir}/venv" --python "$PYTHON_VERSION" --quiet 2>/dev/null; then
+        stop_spinner
+        info "Python ${PYTHON_VERSION} virtual environment created"
+    else
+        stop_spinner
+        die "Could not create Python ${PYTHON_VERSION} venv. Ensure Python ${PYTHON_VERSION}+ is available.\n    Try: uv python install ${PYTHON_VERSION}"
+    fi
+}
+
+install_packages() {
+    local install_dir="$1" extras="$2" profile_name="$3"
+
+    section "Installing dworkers · ${profile_name} profile"
+
+    local spec
+    if [[ "$extras" == "all" ]]; then
+        spec="firefly-dworkers[all]"
+    else
+        spec="firefly-dworkers[${extras}]"
+    fi
+
+    start_spinner "Installing ${spec}..."
+    if uv pip install "$spec" --python "${install_dir}/venv/bin/python" --quiet 2>/dev/null; then
+        stop_spinner
+        info "Packages installed"
+    else
+        stop_spinner
+        die "Failed to install ${spec}. Check your network connection and try again."
+    fi
+}
+
 # ── Test mode guard ──────────────────────────────────────────────────────────
 # When sourced with DWORKERS_TEST_MODE=1, stop here so tests can call
 # individual functions without triggering the main installer flow.
