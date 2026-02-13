@@ -362,8 +362,8 @@ class TestServerIntegration:
         resp = self.client.get("/api/plans/nonexistent-plan")
         assert resp.status_code == 404
 
-    def test_execute_plan_placeholder(self):
-        """Execute plan endpoint returns placeholder response."""
+    def test_execute_plan_returns_sse(self):
+        """Execute plan endpoint now returns SSE streaming response."""
         resp = self.client.post(
             "/api/plans/execute",
             json={
@@ -373,9 +373,7 @@ class TestServerIntegration:
             },
         )
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["plan_name"] == "customer-segmentation"
-        assert data["success"] is True
+        assert "text/event-stream" in resp.headers["content-type"]
 
     def test_list_workers_endpoint(self):
         """Workers listing endpoint responds."""

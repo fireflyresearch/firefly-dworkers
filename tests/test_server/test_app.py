@@ -119,7 +119,8 @@ class TestPlansRouter:
         resp = self.client.get("/api/plans/nonexistent-plan")
         assert resp.status_code == 404
 
-    def test_execute_plan(self):
+    def test_execute_plan_returns_sse(self):
+        """The /execute endpoint now returns SSE (not JSON)."""
         resp = self.client.post(
             "/api/plans/execute",
             json={
@@ -129,9 +130,7 @@ class TestPlansRouter:
             },
         )
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["plan_name"] == "customer-segmentation"
-        assert "success" in data
+        assert "text/event-stream" in resp.headers["content-type"]
 
 
 class TestTenantsRouter:
