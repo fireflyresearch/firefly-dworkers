@@ -54,5 +54,10 @@ Thumbs.db
 *.so
 *.dylib
 
+# Generated example output
+*.pptx
+*.docx
+*.xlsx
+
 # Worktrees
 .worktrees/
