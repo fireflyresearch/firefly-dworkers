@@ -882,6 +882,88 @@ print_success() {
     printf "  %s\n\n" "${DIM}Docs: https://docs.fireflyresearch.com/dworkers${RESET}"
 }
 
+# ── Uninstall flow ──────────────────────────────────────────────────────────
+
+run_uninstall() {
+    print_banner
+
+    # Find existing installation
+    local install_dir=""
+    if [[ -n "${OPT_PREFIX:-}" ]]; then
+        install_dir="$OPT_PREFIX"
+    elif [[ -d "$DEFAULT_PREFIX" ]]; then
+        install_dir="$DEFAULT_PREFIX"
+    elif [[ -L "${HOME}/.local/bin/dworkers" ]]; then
+        # Resolve from symlink: ~/.local/bin/dworkers -> <prefix>/venv/bin/dworkers
+        local link_target=""
+        link_target="$(readlink "${HOME}/.local/bin/dworkers" 2>/dev/null || true)"
+        if [[ -n "$link_target" ]]; then
+            # Strip /venv/bin/dworkers to get prefix
+            install_dir="${link_target%/venv/bin/dworkers}"
+        fi
+    fi
+
+    if [[ -z "$install_dir" ]] || [[ ! -d "$install_dir" ]]; then
+        die "No dworkers installation found. Nothing to uninstall."
+    fi
+
+    # Load metadata
+    local dw_version="" dw_profile="" dw_extras="" dw_shell_rc=""
+    if [[ -f "${install_dir}/env" ]]; then
+        # shellcheck disable=SC1090
+        source "${install_dir}/env"
+        dw_version="${DWORKERS_VERSION:-unknown}"
+        dw_profile="${DWORKERS_PROFILE:-unknown}"
+        dw_extras="${DWORKERS_EXTRAS:-unknown}"
+        dw_shell_rc="${DWORKERS_SHELL_RC:-}"
+    else
+        dw_version="unknown"
+        dw_profile="unknown"
+        dw_extras="unknown"
+        dw_shell_rc="${DETECTED_SHELL_RC:-}"
+    fi
+
+    section "Uninstall dworkers"
+    printf "\n  %s\n" "The following will be removed:"
+    printf "  %s %s\n" "${DIM}•${RESET}" "${install_dir}"
+    printf "  %s %s\n" "${DIM}•${RESET}" "${HOME}/.local/bin/dworkers"
+    printf "  %s %s\n" "${DIM}•${RESET}" "${HOME}/.local/bin/dworkers-uninstall"
+    if [[ -n "$dw_shell_rc" ]]; then
+        printf "  %s %s\n" "${DIM}•${RESET}" "PATH entries from ${dw_shell_rc}"
+    fi
+    echo ""
+
+    if ! confirm "Proceed with uninstall?"; then
+        die "Uninstall cancelled."
+    fi
+
+    # Remove symlinks
+    rm -f "${HOME}/.local/bin/dworkers"
+    rm -f "${HOME}/.local/bin/dworkers-uninstall"
+    info "Symlinks removed"
+
+    # Remove PATH block from shell rc
+    if [[ -n "$dw_shell_rc" ]] && [[ -f "$dw_shell_rc" ]]; then
+        local sed_inplace
+        if [[ "${DETECTED_OS}" == "macos" ]]; then
+            sed_inplace=(-i '')
+        else
+            sed_inplace=(-i)
+        fi
+        sed "${sed_inplace[@]}" '/# >>> dworkers >>>/,/# <<< dworkers <<</d' "$dw_shell_rc"
+        rm -f "${dw_shell_rc}.bak"
+        info "PATH entries removed from ${dw_shell_rc}"
+    fi
+
+    # Remove install directory
+    rm -rf "$install_dir"
+    info "Installation removed from ${install_dir}"
+
+    echo ""
+    printf "  %s\n" "${DIM}dworkers has been uninstalled. Goodbye!${RESET}"
+    echo ""
+}
+
 # ── Test mode guard ──────────────────────────────────────────────────────────
 # When sourced with DWORKERS_TEST_MODE=1, stop here so tests can call
 # individual functions without triggering the main installer flow.
