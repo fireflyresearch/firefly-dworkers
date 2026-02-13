@@ -100,9 +100,14 @@ class ChartRenderer:
         """
         if not MATPLOTLIB_AVAILABLE:
             raise ImportError("matplotlib required: pip install matplotlib")
-        return await asyncio.to_thread(self._render_to_image_sync, chart, width, height)
+        return await asyncio.to_thread(self.render_to_image_sync, chart, width, height)
 
-    def _render_to_image_sync(self, chart: ResolvedChart, width: int, height: int) -> bytes:
+    def render_to_image_sync(self, chart: ResolvedChart, width: int = 800, height: int = 600) -> bytes:
+        """Synchronous variant of :meth:`render_to_image`.
+
+        Useful when called from within a sync context that is already
+        off the event loop (e.g. ``_create_sync`` in tool adapters).
+        """
         fig, ax = plt.subplots(figsize=(width / 100, height / 100), dpi=100)
         try:
             self._plot_matplotlib(chart, ax)

@@ -193,31 +193,34 @@ class WordTool(DocumentTool):
         from firefly_dworkers.design.charts import ChartRenderer
         from firefly_dworkers.design.models import DataSeries, ResolvedChart
 
-        # Accept either a ResolvedChart or a dict-like spec
+        # Normalise to ResolvedChart
         if isinstance(chart_spec, ResolvedChart):
             resolved = chart_spec
+        elif isinstance(chart_spec, dict):
+            resolved = ResolvedChart.model_validate(chart_spec)
         else:
-            # Build a ResolvedChart from the spec
-            series = chart_spec.series if hasattr(chart_spec, "series") else []
-            if series and isinstance(series[0], dict):
-                series = [DataSeries(name=s["name"], values=s["values"]) for s in series]
+            # Duck-type: pull attributes with getattr for ChartSpec-like objects
+            series_raw = getattr(chart_spec, "series", [])
+            series = [
+                DataSeries(**s) if isinstance(s, dict) else s for s in series_raw
+            ]
             resolved = ResolvedChart(
-                chart_type=chart_spec.chart_type if hasattr(chart_spec, "chart_type") else chart_spec.get("chart_type", "bar"),
-                title=chart_spec.title if hasattr(chart_spec, "title") else chart_spec.get("title", ""),
-                categories=chart_spec.categories if hasattr(chart_spec, "categories") else chart_spec.get("categories", []),
+                chart_type=getattr(chart_spec, "chart_type", "bar"),
+                title=getattr(chart_spec, "title", ""),
+                categories=getattr(chart_spec, "categories", []),
                 series=series,
-                colors=chart_spec.colors if hasattr(chart_spec, "colors") else chart_spec.get("colors", []),
-                show_legend=chart_spec.show_legend if hasattr(chart_spec, "show_legend") else chart_spec.get("show_legend", True),
-                show_data_labels=chart_spec.show_data_labels if hasattr(chart_spec, "show_data_labels") else chart_spec.get("show_data_labels", False),
-                stacked=chart_spec.stacked if hasattr(chart_spec, "stacked") else chart_spec.get("stacked", False),
+                colors=getattr(chart_spec, "colors", []),
+                show_legend=getattr(chart_spec, "show_legend", True),
+                show_data_labels=getattr(chart_spec, "show_data_labels", False),
+                stacked=getattr(chart_spec, "stacked", False),
             )
 
         renderer = ChartRenderer()
         try:
-            png_bytes = renderer._render_to_image_sync(resolved, 800, 600)
+            png_bytes = renderer.render_to_image_sync(resolved, 800, 600)
             doc.add_picture(io.BytesIO(png_bytes), width=Inches(6))
-        except Exception:
-            logger.warning("Failed to render chart to image", exc_info=True)
+        except (ImportError, ValueError) as exc:
+            logger.warning("Failed to render chart to image: %s", exc, exc_info=True)
 
     @staticmethod
     def _add_image(doc: Any, img: Any) -> None:
