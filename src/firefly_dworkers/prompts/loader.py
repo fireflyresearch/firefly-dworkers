@@ -17,6 +17,7 @@ _PROMPTS_DIR = Path(__file__).resolve().parent
 # Mapping from directory name (plural) to registry prefix (singular)
 _CATEGORY_PREFIX: dict[str, str] = {
     "workers": "worker",
+    "skills": "skill",
 }
 
 
