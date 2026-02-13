@@ -58,6 +58,8 @@ class SheetSpec(BaseModel):
     cell_style: TextStyle | None = None
     column_widths: list[float] = Field(default_factory=list)
     number_formats: dict[str, str] = Field(default_factory=dict)
+    chart: Any | None = None
+    cells: list[CellSpec] = Field(default_factory=list)
 
 
 class SpreadsheetOperation(BaseModel):
