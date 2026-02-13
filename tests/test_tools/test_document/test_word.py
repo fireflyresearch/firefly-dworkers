@@ -164,10 +164,12 @@ class TestWordToolModify:
             result = await tool.execute(
                 action="modify",
                 source=tmp_path,
-                operations=[{
-                    "operation": "add_section",
-                    "data": {"heading": "New Section", "content": "Added content", "heading_level": 2},
-                }],
+                operations=[
+                    {
+                        "operation": "add_section",
+                        "data": {"heading": "New Section", "content": "Added content", "heading_level": 2},
+                    }
+                ],
             )
             assert result["success"] is True
             assert result["bytes_length"] > 0
