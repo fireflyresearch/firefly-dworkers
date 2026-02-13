@@ -108,6 +108,29 @@ assert_contains "preflight checks curl" "curl" "$preflight_output"
 
 echo ""
 
+# --- Edge cases ---
+echo "  Edge cases"
+echo "  ──────────"
+
+# Profile with cli always included
+assert_contains "analyst includes cli" "cli" "$(profile_to_extras analyst)"
+assert_contains "server includes cli" "cli" "$(profile_to_extras server)"
+assert_eq "minimal is just cli" "cli" "$(profile_to_extras minimal)"
+
+# Default arg state
+parse_args
+assert_eq "default uninstall is 0" "0" "$OPT_UNINSTALL"
+# OPT_YES auto-detects non-interactive (non-TTY stdin), so in test harness it is 1
+if [ -t 0 ]; then
+    assert_eq "default yes is 0 (interactive)" "0" "$OPT_YES"
+else
+    assert_eq "default yes is 1 (non-interactive auto-detect)" "1" "$OPT_YES"
+fi
+assert_eq "default prefix is empty" "" "$OPT_PREFIX"
+assert_eq "default profile is empty" "" "$OPT_PROFILE"
+
+echo ""
+
 # --- Summary ---
 echo "  ───────────────────────"
 printf "  %d passed, %d failed\n\n" "$PASS" "$FAIL"
