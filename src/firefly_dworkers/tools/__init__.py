@@ -23,13 +23,14 @@ import firefly_dworkers.tools.consulting.requirement_gathering  # noqa: F401
 import firefly_dworkers.tools.data.api_client  # noqa: F401
 import firefly_dworkers.tools.data.csv_excel  # noqa: F401
 import firefly_dworkers.tools.data.sql  # noqa: F401
+import firefly_dworkers.tools.presentation.google_slides  # noqa: F401
+import firefly_dworkers.tools.presentation.powerpoint  # noqa: F401
 import firefly_dworkers.tools.project.asana  # noqa: F401
 import firefly_dworkers.tools.project.jira  # noqa: F401
 import firefly_dworkers.tools.storage.confluence  # noqa: F401
 import firefly_dworkers.tools.storage.google_drive  # noqa: F401
 import firefly_dworkers.tools.storage.s3  # noqa: F401
 import firefly_dworkers.tools.storage.sharepoint  # noqa: F401
-import firefly_dworkers.tools.presentation.powerpoint  # noqa: F401
 import firefly_dworkers.tools.web.browser  # noqa: F401
 import firefly_dworkers.tools.web.flybrowser  # noqa: F401
 import firefly_dworkers.tools.web.rss  # noqa: F401

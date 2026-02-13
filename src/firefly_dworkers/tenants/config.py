@@ -178,6 +178,19 @@ class APIConnectorConfig(BaseConnectorConfig):
     auth_token: str = ""
 
 
+class PresentationConnectorConfig(BaseConnectorConfig):
+    """Presentation tool configuration.
+
+    Controls which presentation backend is used:
+    ``"powerpoint"`` for local .pptx via python-pptx, or
+    ``"google_slides"`` for Google Slides API.
+    """
+
+    provider: str = "powerpoint"
+    service_account_key: str = ""
+    credentials_json: str = ""
+
+
 class ConnectorsConfig(BaseModel, extra="allow"):
     """Typed connector configuration registry.
 
@@ -199,6 +212,7 @@ class ConnectorsConfig(BaseModel, extra="allow"):
     email: EmailConnectorConfig = Field(default_factory=EmailConnectorConfig)
     sql: SQLConnectorConfig = Field(default_factory=SQLConnectorConfig)
     api: APIConnectorConfig = Field(default_factory=APIConnectorConfig)
+    presentation: PresentationConnectorConfig = Field(default_factory=PresentationConnectorConfig)
 
     def enabled_connectors(self) -> dict[str, BaseConnectorConfig]:
         """Return only connectors where ``enabled=True``."""

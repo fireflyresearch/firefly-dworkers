@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from firefly_dworkers.tools.presentation.base import PresentationTool
+from firefly_dworkers.tools.presentation.google_slides import GoogleSlidesTool
 from firefly_dworkers.tools.presentation.models import (
     ChartSpec,
     PlaceholderInfo,
@@ -17,6 +18,7 @@ from firefly_dworkers.tools.presentation.powerpoint import PowerPointTool
 
 __all__ = [
     "ChartSpec",
+    "GoogleSlidesTool",
     "PlaceholderInfo",
     "PowerPointTool",
     "PresentationData",
