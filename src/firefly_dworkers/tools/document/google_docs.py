@@ -36,6 +36,52 @@ except ImportError:
     GOOGLE_AVAILABLE = False
 
 
+def _hex_to_rgb_docs(hex_color: str) -> dict[str, float]:
+    """Convert a hex color string (e.g. '#1A73E8') to Google Docs API rgbColor dict."""
+    h = hex_color.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    return {
+        "red": int(h[0:2], 16) / 255.0,
+        "green": int(h[2:4], 16) / 255.0,
+        "blue": int(h[4:6], 16) / 255.0,
+    }
+
+
+def _build_docs_text_style(style: Any) -> tuple[dict[str, Any], list[str]]:
+    """Build Docs API textStyle dict and fields list from a TextStyle model.
+
+    Returns (text_style_dict, fields_list).
+    """
+    from firefly_dworkers.design.models import TextStyle
+
+    if not isinstance(style, TextStyle):
+        return {}, []
+
+    text_style: dict[str, Any] = {}
+    fields: list[str] = []
+
+    if style.font_name:
+        text_style["weightedFontFamily"] = {"fontFamily": style.font_name}
+        fields.append("weightedFontFamily")
+    if style.font_size:
+        text_style["fontSize"] = {"magnitude": style.font_size, "unit": "PT"}
+        fields.append("fontSize")
+    if style.bold:
+        text_style["bold"] = True
+        fields.append("bold")
+    if style.italic:
+        text_style["italic"] = True
+        fields.append("italic")
+    if style.color:
+        text_style["foregroundColor"] = {
+            "color": {"rgbColor": _hex_to_rgb_docs(style.color)}
+        }
+        fields.append("foregroundColor")
+
+    return text_style, fields
+
+
 @tool_registry.register("google_docs", category="document")
 class GoogleDocsTool(DocumentTool):
     """Read, create, and modify Google Docs via Docs API v1."""
@@ -141,11 +187,13 @@ class GoogleDocsTool(DocumentTool):
 
         # Build batch update requests for content
         if sections:
-            requests = []
+            requests: list[dict[str, Any]] = []
+            style_requests: list[dict[str, Any]] = []
             index = 1  # Start after the implicit empty paragraph
 
             for section in sections:
                 if section.heading:
+                    heading_start = index
                     requests.append(
                         {
                             "insertText": {
@@ -166,9 +214,28 @@ class GoogleDocsTool(DocumentTool):
                             }
                         }
                     )
+                    heading_end = index + len(section.heading)
                     index += len(section.heading) + 1
 
+                    # Apply heading style if provided
+                    if section.heading_style:
+                        text_style, fields = _build_docs_text_style(section.heading_style)
+                        if text_style and fields:
+                            style_requests.append(
+                                {
+                                    "updateTextStyle": {
+                                        "range": {
+                                            "startIndex": heading_start,
+                                            "endIndex": heading_end,
+                                        },
+                                        "textStyle": text_style,
+                                        "fields": ",".join(fields),
+                                    }
+                                }
+                            )
+
                 if section.content:
+                    content_start = index
                     requests.append(
                         {
                             "insertText": {
@@ -177,7 +244,25 @@ class GoogleDocsTool(DocumentTool):
                             }
                         }
                     )
+                    content_end = index + len(section.content)
                     index += len(section.content) + 1
+
+                    # Apply body style if provided
+                    if section.body_style:
+                        text_style, fields = _build_docs_text_style(section.body_style)
+                        if text_style and fields:
+                            style_requests.append(
+                                {
+                                    "updateTextStyle": {
+                                        "range": {
+                                            "startIndex": content_start,
+                                            "endIndex": content_end,
+                                        },
+                                        "textStyle": text_style,
+                                        "fields": ",".join(fields),
+                                    }
+                                }
+                            )
 
                 for point in section.bullet_points:
                     requests.append(
@@ -190,13 +275,72 @@ class GoogleDocsTool(DocumentTool):
                     )
                     index += len(point) + 1
 
-            if requests:
+                # --- Numbered list ---
+                if section.numbered_list:
+                    numbered_start = index
+                    for item in section.numbered_list:
+                        requests.append(
+                            {
+                                "insertText": {
+                                    "location": {"index": index},
+                                    "text": item + "\n",
+                                }
+                            }
+                        )
+                        index += len(item) + 1
+                    numbered_end = index
+                    # Apply numbered bullet formatting to the range
+                    requests.append(
+                        {
+                            "createParagraphBullets": {
+                                "range": {
+                                    "startIndex": numbered_start,
+                                    "endIndex": numbered_end,
+                                },
+                                "bulletPreset": "NUMBERED_DECIMAL_ALPHA_ROMAN",
+                            }
+                        }
+                    )
+
+                # --- Callout ---
+                if section.callout:
+                    callout_start = index
+                    requests.append(
+                        {
+                            "insertText": {
+                                "location": {"index": index},
+                                "text": section.callout + "\n",
+                            }
+                        }
+                    )
+                    callout_end = index + len(section.callout) + 1
+                    index += len(section.callout) + 1
+                    # Apply indentation to make it visually distinct as a callout
+                    requests.append(
+                        {
+                            "updateParagraphStyle": {
+                                "range": {
+                                    "startIndex": callout_start,
+                                    "endIndex": callout_end,
+                                },
+                                "paragraphStyle": {
+                                    "indentFirstLine": {"magnitude": 36, "unit": "PT"},
+                                    "indentStart": {"magnitude": 36, "unit": "PT"},
+                                },
+                                "fields": "indentFirstLine,indentStart",
+                            }
+                        }
+                    )
+
+            # Combine content requests and style requests
+            all_requests = requests + style_requests
+            if all_requests:
                 await asyncio.to_thread(
                     lambda: (
                         svc.documents()
                         .batchUpdate(
                             documentId=document_id,
-                            body={"requests": requests},
+                            body={"requests": all_requests},
                         )
                         .execute()
                     )

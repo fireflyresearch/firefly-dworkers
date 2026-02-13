@@ -123,11 +123,12 @@ class TestWorkerFactory:
         assert isinstance(worker_factory, WorkerFactory)
 
     def test_module_level_factory_has_all_roles(self) -> None:
-        """After importing workers, factory should have all four roles."""
+        """After importing workers, factory should have all five roles."""
         assert worker_factory.has(WorkerRole.ANALYST)
         assert worker_factory.has(WorkerRole.RESEARCHER)
         assert worker_factory.has(WorkerRole.DATA_ANALYST)
         assert worker_factory.has(WorkerRole.MANAGER)
+        assert worker_factory.has(WorkerRole.DESIGNER)
 
     def test_module_level_factory_creates_correct_types(self) -> None:
         config = _make_config()
@@ -142,6 +143,11 @@ class TestWorkerFactory:
 
         manager = worker_factory.create(WorkerRole.MANAGER, config, model=TestModel())
         assert isinstance(manager, ManagerWorker)
+
+        from firefly_dworkers.workers.designer import DocumentDesignerWorker
+
+        designer = worker_factory.create(WorkerRole.DESIGNER, config, model=TestModel())
+        assert isinstance(designer, DocumentDesignerWorker)
 
     def test_factory_passes_kwargs(self) -> None:
         config = _make_config()
