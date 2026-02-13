@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from firefly_dworkers.design.models import ContentBlock, ImagePlacement, TextStyle
+
 
 class TableSpec(BaseModel):
     """Specification for a table in a slide or document."""
@@ -21,6 +23,10 @@ class ChartSpec(BaseModel):
     title: str = ""
     categories: list[str] = Field(default_factory=list)
     series: list[dict[str, Any]] = Field(default_factory=list)  # [{"name": str, "values": list}]
+    colors: list[str] = Field(default_factory=list)
+    show_legend: bool = True
+    show_data_labels: bool = False
+    stacked: bool = False
 
 
 class SlideSpec(BaseModel):
@@ -35,6 +41,13 @@ class SlideSpec(BaseModel):
     chart: ChartSpec | None = None
     image_path: str = ""
     speaker_notes: str = ""
+    title_style: TextStyle | None = None
+    body_style: TextStyle | None = None
+    background_color: str = ""
+    background_image: str = ""
+    transition: str = ""
+    content_blocks: list[ContentBlock] = Field(default_factory=list)
+    images: list[ImagePlacement] = Field(default_factory=list)
 
 
 class PlaceholderInfo(BaseModel):

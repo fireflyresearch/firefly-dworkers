@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from firefly_dworkers.design.models import ImagePlacement, TextStyle
+
 
 class TableData(BaseModel):
     """Table specification for documents."""
@@ -23,6 +25,12 @@ class SectionSpec(BaseModel):
     bullet_points: list[str] = Field(default_factory=list)
     table: TableData | None = None
     page_break_before: bool = False
+    heading_style: TextStyle | None = None
+    body_style: TextStyle | None = None
+    chart: Any | None = None
+    images: list[ImagePlacement] = Field(default_factory=list)
+    callout: str = ""
+    numbered_list: list[str] = Field(default_factory=list)
 
 
 class ParagraphData(BaseModel):
@@ -41,6 +49,8 @@ class DocumentData(BaseModel):
     paragraphs: list[ParagraphData] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     styles: list[str] = Field(default_factory=list)
+    fonts: list[str] = Field(default_factory=list)
+    color_theme: dict[str, str] = Field(default_factory=dict)
 
 
 class DocumentOperation(BaseModel):
