@@ -696,6 +696,192 @@ install_packages() {
     fi
 }
 
+# ── Post-install ────────────────────────────────────────────────────────────
+
+setup_path() {
+    local install_dir="$1"
+    local shell_rc="${DETECTED_SHELL_RC}"
+
+    # Create directories
+    mkdir -p "${install_dir}/bin"
+    mkdir -p "${HOME}/.local/bin"
+
+    # Symlink dworkers binary
+    ln -sf "${install_dir}/venv/bin/dworkers" "${HOME}/.local/bin/dworkers"
+
+    # Write and chmod uninstall script
+    write_uninstall_script "${install_dir}"
+    chmod +x "${install_dir}/bin/dworkers-uninstall"
+
+    # Symlink uninstall script
+    ln -sf "${install_dir}/bin/dworkers-uninstall" "${HOME}/.local/bin/dworkers-uninstall"
+
+    # Determine sed in-place flag for platform
+    local sed_inplace
+    if [[ "${DETECTED_OS}" == "macos" ]]; then
+        sed_inplace=(-i '')
+    else
+        sed_inplace=(-i)
+    fi
+
+    # Remove existing PATH block if present, then add fresh one
+    if [[ -f "$shell_rc" ]] && grep -q '# >>> dworkers >>>' "$shell_rc" 2>/dev/null; then
+        sed "${sed_inplace[@]}" '/# >>> dworkers >>>/,/# <<< dworkers <<</d' "$shell_rc"
+        # Clean up .bak file if created
+        rm -f "${shell_rc}.bak"
+    fi
+
+    # Ensure file exists
+    touch "$shell_rc"
+
+    # Append PATH block
+    {
+        echo ""
+        echo "# >>> dworkers >>>"
+        echo "export PATH=\"${install_dir}/venv/bin:${install_dir}/bin:\${PATH}\""
+        echo "# <<< dworkers <<<"
+    } >> "$shell_rc"
+
+    info "PATH configured in ${shell_rc}"
+}
+
+write_metadata() {
+    local install_dir="$1" version="$2" profile="$3" extras="$4" shell_rc="$5"
+
+    # Write version file
+    printf "%s\n" "$version" > "${install_dir}/version"
+
+    # Write env metadata file
+    cat > "${install_dir}/env" <<ENVFILE
+DWORKERS_VERSION=${version}
+DWORKERS_PREFIX=${install_dir}
+DWORKERS_PROFILE=${profile}
+DWORKERS_EXTRAS=${extras}
+DWORKERS_INSTALLED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+DWORKERS_SHELL_RC=${shell_rc}
+ENVFILE
+
+    info "Metadata written to ${install_dir}/env"
+}
+
+write_uninstall_script() {
+    local install_dir="$1"
+
+    cat > "${install_dir}/bin/dworkers-uninstall" <<'UNINSTALL_SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source metadata
+if [[ -f "${SCRIPT_DIR}/../env" ]]; then
+    # shellcheck disable=SC1091
+    source "${SCRIPT_DIR}/../env"
+else
+    echo "Error: Cannot find dworkers metadata. Is dworkers installed?" >&2
+    exit 1
+fi
+
+# Colors
+if [[ -n "${NO_COLOR:-}" ]] || [[ "${TERM:-}" == "dumb" ]]; then
+    BOLD="" RESET="" RED="" GREEN="" YELLOW="" CYAN="" DIM=""
+    BOLD_WHITE="" BRIGHT_YELLOW="" BRIGHT_CYAN=""
+else
+    BOLD=$'\033[1m' RESET=$'\033[0m' RED=$'\033[0;31m'
+    GREEN=$'\033[0;32m' YELLOW=$'\033[0;33m' CYAN=$'\033[0;36m'
+    DIM=$'\033[2m' BOLD_WHITE=$'\033[1;37m'
+    BRIGHT_YELLOW=$'\033[1;33m' BRIGHT_CYAN=$'\033[1;36m'
+fi
+
+# Banner
+printf "%s" "${BRIGHT_YELLOW}"
+cat <<'BANNER'
+    .___                    __
+  __| _/_  _  _____________|  | __ ___________  ______
+ / __ |\ \/ \/ /  _ \_  __ \  |/ // __ \_  __ \/  ___/
+/ /_/ | \     (  <_> )  | \/    <\  ___/|  | \/\___ \
+\____ |  \/\_/ \____/|__|  |__|_ \\___  >__|  /____  >
+     \/                         \/    \/           \/
+BANNER
+printf "%s\n" "${RESET}"
+
+printf "\n  %s\n" "${BOLD}Uninstall dworkers${RESET}"
+printf "  %s\n\n" "───────────────────────"
+
+printf "  %s\n" "The following will be removed:"
+printf "  %s %s\n" "${DIM}•${RESET}" "${DWORKERS_PREFIX}"
+printf "  %s %s\n" "${DIM}•${RESET}" "${HOME}/.local/bin/dworkers"
+printf "  %s %s\n" "${DIM}•${RESET}" "${HOME}/.local/bin/dworkers-uninstall"
+printf "  %s %s\n" "${DIM}•${RESET}" "PATH entries from ${DWORKERS_SHELL_RC}"
+echo ""
+
+# Check for --yes/-y flag
+AUTO_YES=0
+for arg in "$@"; do
+    case "$arg" in
+        --yes|-y) AUTO_YES=1 ;;
+    esac
+done
+
+if [[ "$AUTO_YES" != "1" ]]; then
+    printf "  %s %s " "Proceed with uninstall?" "${DIM}(y/N)${RESET}"
+    read -r answer
+    case "$answer" in
+        [yY]|[yY][eE][sS]) ;;
+        *) echo "  Cancelled."; exit 0 ;;
+    esac
+fi
+
+# Remove symlinks
+rm -f "${HOME}/.local/bin/dworkers"
+rm -f "${HOME}/.local/bin/dworkers-uninstall"
+printf "  %s %s\n" "${GREEN}✓${RESET}" "Symlinks removed"
+
+# Remove PATH block from shell rc
+if [[ -n "${DWORKERS_SHELL_RC:-}" ]] && [[ -f "${DWORKERS_SHELL_RC}" ]]; then
+    # Detect platform for sed -i
+    case "$(uname -s)" in
+        Darwin*) sed -i '' '/# >>> dworkers >>>/,/# <<< dworkers <<</d' "${DWORKERS_SHELL_RC}" ;;
+        *)       sed -i '/# >>> dworkers >>>/,/# <<< dworkers <<</d' "${DWORKERS_SHELL_RC}" ;;
+    esac
+    printf "  %s %s\n" "${GREEN}✓${RESET}" "PATH entries removed from ${DWORKERS_SHELL_RC}"
+fi
+
+# Remove install directory
+rm -rf "${DWORKERS_PREFIX}"
+printf "  %s %s\n" "${GREEN}✓${RESET}" "Installation removed"
+
+echo ""
+printf "  %s\n" "${DIM}dworkers has been uninstalled. Goodbye!${RESET}"
+echo ""
+UNINSTALL_SCRIPT
+}
+
+print_success() {
+    local install_dir="$1" version="$2" profile="$3" extras="$4"
+
+    echo ""
+    print_banner
+    echo ""
+
+    printf "  %s\n\n" "${GREEN}✓ dworkers v${version} installed successfully!${RESET}"
+
+    printf "  %s  %s\n" "${DIM}Location${RESET}" "${install_dir}"
+    printf "  %s   %s\n" "${DIM}Profile${RESET}" "${profile}"
+    printf "  %s    %s\n" "${DIM}Extras${RESET}" "${extras}"
+
+    section "Get started"
+    printf "  %s\n" "${CYAN}dworkers init${RESET}       Create a new worker project"
+    printf "  %s\n" "${CYAN}dworkers serve${RESET}      Start the worker server"
+    printf "  %s\n" "${CYAN}dworkers check${RESET}      Validate configuration"
+
+    section "To uninstall"
+    printf "  %s\n" "${CYAN}dworkers-uninstall${RESET}"
+
+    echo ""
+    printf "  %s\n\n" "${DIM}Docs: https://docs.fireflyresearch.com/dworkers${RESET}"
+}
+
 # ── Test mode guard ──────────────────────────────────────────────────────────
 # When sourced with DWORKERS_TEST_MODE=1, stop here so tests can call
 # individual functions without triggering the main installer flow.
