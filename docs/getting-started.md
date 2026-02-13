@@ -31,7 +31,33 @@ This guide walks you through installing firefly-dworkers, configuring a tenant, 
 
 ## Step 1: Install
 
-Install the package with all extras for the full experience:
+The recommended way to install is via the interactive installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/fireflyresearch/firefly-dworkers/main/install.sh | bash
+```
+
+The installer will guide you through choosing an install location and a profile (Minimal, Analyst, Server, Full, or Custom). It bootstraps `uv` if needed and creates an isolated Python 3.13 virtual environment.
+
+For non-interactive environments (CI, scripts):
+
+```bash
+# Full profile, no prompts
+curl -fsSL https://raw.githubusercontent.com/fireflyresearch/firefly-dworkers/main/install.sh | bash -s -- --yes --profile full
+
+# Custom prefix
+curl -fsSL .../install.sh | bash -s -- --yes --profile analyst --prefix /opt/dworkers
+```
+
+To uninstall:
+
+```bash
+dworkers-uninstall
+```
+
+### Alternative: pip / uv
+
+If you prefer traditional Python package management:
 
 ```bash
 pip install firefly-dworkers[all]

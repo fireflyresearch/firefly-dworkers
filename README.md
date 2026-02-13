@@ -242,13 +242,16 @@ print(f"Deck saved to {path}")
 ## Quick Start
 
 ```bash
-# 1. Install
-pip install firefly-dworkers[all]
+# Install via the interactive installer
+curl -fsSL https://raw.githubusercontent.com/fireflyresearch/firefly-dworkers/main/install.sh | bash
 
-# 2. Initialize a new project
+# Or install non-interactively with the full profile
+curl -fsSL https://raw.githubusercontent.com/fireflyresearch/firefly-dworkers/main/install.sh | bash -s -- --yes --profile full
+
+# Initialize a new project
 dworkers init my-project
 
-# 3. Start the server
+# Start the server
 dworkers serve
 ```
 
