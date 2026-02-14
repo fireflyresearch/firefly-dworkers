@@ -9,6 +9,7 @@ Supports three output formats:
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 from typing import Any
 
@@ -301,6 +302,13 @@ def convert_sheet_design_to_sheet_spec(
     if sheet.chart_ref and sheet.chart_ref in spec.charts:
         chart = spec.charts[sheet.chart_ref]
 
+    # Sanitize number_formats: only single column letters are valid
+    # (LLMs sometimes return ranges like "B:F" which openpyxl rejects)
+    clean_formats: dict[str, str] = {}
+    for key, fmt in sheet.number_formats.items():
+        if re.match(r"^[A-Z]{1,3}$", key):
+            clean_formats[key] = fmt
+
     return SheetSpec(
         name=sheet.name,
         headers=list(sheet.headers),
@@ -308,7 +316,7 @@ def convert_sheet_design_to_sheet_spec(
         header_style=sheet.header_style,
         cell_style=sheet.cell_style,
         column_widths=list(sheet.column_widths),
-        number_formats=dict(sheet.number_formats),
+        number_formats=clean_formats,
         chart=chart,
     )
 
