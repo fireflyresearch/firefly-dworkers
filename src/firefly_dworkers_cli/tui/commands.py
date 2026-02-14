@@ -18,8 +18,15 @@ if TYPE_CHECKING:
 WELCOME_TEXT = """\
   dworkers v0.1.0
 
-  /help for commands · /team to list workers
-  Type a message to start.\
+  Your AI team of specialized workers — analyst, researcher, designer, and more.
+
+  Getting started:
+    Type a message to chat with the default analyst worker.
+    Use @role to target a specific worker (e.g., @researcher summarize...).
+    Use /plan <name> to run multi-step workflows across workers.
+    Use /project <brief> to orchestrate a full project with all workers.
+
+  /help for all commands · /team to see your workers\
 """
 
 _HELP_TEXT = """\

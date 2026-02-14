@@ -410,9 +410,9 @@ class TestModelText:
 
 class TestWelcomeTextMinimal:
     def test_welcome_text_is_short(self):
-        """Welcome text should be minimal — 5 lines or fewer."""
+        """Welcome text should be concise — 10 lines or fewer."""
         lines = [l for l in WELCOME_TEXT.strip().split("\n") if l.strip()]
-        assert len(lines) <= 5
+        assert len(lines) <= 10
 
     def test_welcome_text_mentions_help(self):
         assert "/help" in WELCOME_TEXT
