@@ -509,52 +509,67 @@ class SetupWizard(Screen):
     def compose(self) -> ComposeResult:
         yield Static("")
 
-    async def on_mount(self) -> None:
+    def on_mount(self) -> None:
         self._detected = self._config_mgr.detect_api_keys()
-        await self._step_provider()
+        self._push_provider()
 
-    async def _step_provider(self) -> None:
+    def _push_provider(self) -> None:
         """Step 1: Provider selection."""
-        result = await self.app.push_screen_wait(ProviderScreen(self._detected))
+        self.app.push_screen(
+            ProviderScreen(self._detected), callback=self._on_provider
+        )
+
+    def _on_provider(self, result: object) -> None:
         if result is None:
             self._skip()
             return
-        self._selected_provider = result
-        await self._step_model()
+        self._selected_provider = str(result)
+        self._push_model()
 
-    async def _step_model(self) -> None:
+    def _push_model(self) -> None:
         """Step 2: Model selection."""
-        result = await self.app.push_screen_wait(ModelScreen(self._selected_provider))
-        if result is None:
-            await self._step_provider()
-            return
-        self._selected_model = result
-        await self._step_api_key()
+        self.app.push_screen(
+            ModelScreen(self._selected_provider), callback=self._on_model
+        )
 
-    async def _step_api_key(self) -> None:
+    def _on_model(self, result: object) -> None:
+        if result is None:
+            self._push_provider()
+            return
+        self._selected_model = str(result)
+        self._push_api_key()
+
+    def _push_api_key(self) -> None:
         """Step 3: API key (conditional)."""
         provider = self._selected_provider
         if provider in self._detected or provider == "other":
-            await self._step_config()
+            self._push_config()
             return
+        self.app.push_screen(
+            ApiKeyScreen(provider), callback=self._on_api_key
+        )
 
-        result = await self.app.push_screen_wait(ApiKeyScreen(provider))
+    def _on_api_key(self, result: object) -> None:
         if result is None:
-            await self._step_model()
+            self._push_model()
             return
-        self._api_key = result
-        env_key = _PROVIDER_ENV_KEYS.get(provider, "")
+        self._api_key = str(result)
+        env_key = _PROVIDER_ENV_KEYS.get(self._selected_provider, "")
         if env_key:
             os.environ[env_key] = self._api_key
-        await self._step_config()
+        self._push_config()
 
-    async def _step_config(self) -> None:
+    def _push_config(self) -> None:
         """Step 4: Mode + Autonomy."""
-        result = await self.app.push_screen_wait(ConfigScreen())
+        self.app.push_screen(ConfigScreen(), callback=self._on_config)
+
+    def _on_config(self, result: object) -> None:
         if result is None:
-            await self._step_api_key()
+            self._push_api_key()
             return
-        self._selected_mode, self._selected_autonomy = result
+        mode, autonomy = result  # type: ignore[misc]
+        self._selected_mode = str(mode)
+        self._selected_autonomy = str(autonomy)
         self._save_and_finish()
 
     def _save_and_finish(self) -> None:
