@@ -15,7 +15,7 @@ import contextlib
 import os
 
 from textual.app import ComposeResult
-from textual.containers import Center, Vertical
+from textual.containers import Center, Middle, Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Input, RadioButton, RadioSet, Static
 
@@ -80,7 +80,18 @@ _WIZARD_CSS = """
 Screen {
     background: transparent;
     color: #d4d4d4;
-    align: center middle;
+}
+
+Middle {
+    background: transparent;
+    width: 1fr;
+    height: 1fr;
+}
+
+Center {
+    background: transparent;
+    width: 1fr;
+    height: auto;
 }
 
 .wizard-container {
@@ -254,28 +265,30 @@ class ProviderScreen(Screen):
         self._selected: str = ALL_PROVIDERS[0][0]  # default to first
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="wizard-container"):
-            yield Static("dworkers", classes="wizard-title")
-            yield Static("step 1 of 4", classes="wizard-step-indicator")
-            yield Static("Select your LLM provider", classes="wizard-subtitle")
+        with Middle():
+            with Center():
+                with Vertical(classes="wizard-container"):
+                    yield Static("dworkers", classes="wizard-title")
+                    yield Static("step 1 of 4", classes="wizard-step-indicator")
+                    yield Static("Select your LLM provider", classes="wizard-subtitle")
 
-            if self._detected:
-                names = ", ".join(p.title() for p in sorted(self._detected))
-                yield Static(f"Detected: {names}", classes="wizard-detected")
+                    if self._detected:
+                        names = ", ".join(p.title() for p in sorted(self._detected))
+                        yield Static(f"Detected: {names}", classes="wizard-detected")
 
-            with RadioSet(id="provider-select", classes="wizard-radio-set"):
-                for i, (provider_id, display_name) in enumerate(ALL_PROVIDERS):
-                    suffix = ""
-                    if provider_id in self._detected:
-                        suffix = " (detected)"
-                    yield RadioButton(
-                        f"{display_name}{suffix}",
-                        value=i == 0,
-                        name=provider_id,
-                    )
+                    with RadioSet(id="provider-select", classes="wizard-radio-set"):
+                        for i, (provider_id, display_name) in enumerate(ALL_PROVIDERS):
+                            suffix = ""
+                            if provider_id in self._detected:
+                                suffix = " (detected)"
+                            yield RadioButton(
+                                f"{display_name}{suffix}",
+                                value=i == 0,
+                                name=provider_id,
+                            )
 
-            with Center(id="wizard-actions"):
-                yield Button("Continue", variant="primary", id="btn-continue")
+                    with Center(id="wizard-actions"):
+                        yield Button("Continue", variant="primary", id="btn-continue")
 
         yield Static(
             "up/down navigate  enter confirm  esc quit",
@@ -319,36 +332,38 @@ class ModelScreen(Screen):
         models = _PROVIDER_MODELS.get(self._provider, [])
         provider_name = dict(ALL_PROVIDERS).get(self._provider, self._provider)
 
-        with Vertical(classes="wizard-container"):
-            yield Static("dworkers", classes="wizard-title")
-            yield Static("step 2 of 4", classes="wizard-step-indicator")
-            yield Static(
-                f"Select a model  {provider_name}",
-                classes="wizard-subtitle",
-            )
-
-            if models:
-                with RadioSet(id="model-select", classes="wizard-radio-set"):
-                    for i, (model_id, label) in enumerate(models):
-                        yield RadioButton(label, value=i == 0, name=model_id)
-                    yield RadioButton(
-                        "Custom model ID",
-                        value=False,
-                        name="_custom",
+        with Middle():
+            with Center():
+                with Vertical(classes="wizard-container"):
+                    yield Static("dworkers", classes="wizard-title")
+                    yield Static("step 2 of 4", classes="wizard-step-indicator")
+                    yield Static(
+                        f"Select a model  {provider_name}",
+                        classes="wizard-subtitle",
                     )
-            else:
-                yield Static(
-                    "Enter your model ID (provider:model-name):",
-                    classes="wizard-hint",
-                )
-                yield Input(
-                    placeholder="e.g., openai:gpt-5.2",
-                    id="custom-model-input",
-                    classes="wizard-input",
-                )
 
-            with Center(id="wizard-actions"):
-                yield Button("Continue", variant="primary", id="btn-continue")
+                    if models:
+                        with RadioSet(id="model-select", classes="wizard-radio-set"):
+                            for i, (model_id, label) in enumerate(models):
+                                yield RadioButton(label, value=i == 0, name=model_id)
+                            yield RadioButton(
+                                "Custom model ID",
+                                value=False,
+                                name="_custom",
+                            )
+                    else:
+                        yield Static(
+                            "Enter your model ID (provider:model-name):",
+                            classes="wizard-hint",
+                        )
+                        yield Input(
+                            placeholder="e.g., openai:gpt-5.2",
+                            id="custom-model-input",
+                            classes="wizard-input",
+                        )
+
+                    with Center(id="wizard-actions"):
+                        yield Button("Continue", variant="primary", id="btn-continue")
 
         yield Static(
             "up/down navigate  enter confirm  esc back",
@@ -421,29 +436,27 @@ class ApiKeyScreen(Screen):
         env_var = _PROVIDER_ENV_KEYS.get(self._provider, "API_KEY")
         provider_name = dict(ALL_PROVIDERS).get(self._provider, self._provider)
 
-        with Vertical(classes="wizard-container"):
-            yield Static("dworkers", classes="wizard-title")
-            yield Static("step 3 of 4", classes="wizard-step-indicator")
-            yield Static("Enter your API key", classes="wizard-subtitle")
+        with Middle():
+            with Center():
+                with Vertical(classes="wizard-container"):
+                    yield Static("dworkers", classes="wizard-title")
+                    yield Static("step 3 of 4", classes="wizard-step-indicator")
+                    yield Static("Enter your API key", classes="wizard-subtitle")
 
-            yield Static(
-                f"{env_var} not found in environment",
-                classes="wizard-not-detected",
-            )
-            yield Static(
-                f"Enter your {provider_name} API key:",
-                classes="wizard-hint",
-            )
-            yield Input(
-                placeholder="sk-... or ant-...",
-                password=True,
-                id="api-key-input",
-                classes="wizard-input",
-            )
-            yield Static("", id="api-key-error", classes="wizard-error")
+                    yield Static(
+                        f"Enter your {provider_name} API key to get started:",
+                        classes="wizard-hint",
+                    )
+                    yield Input(
+                        placeholder="sk-... or ant-...",
+                        password=True,
+                        id="api-key-input",
+                        classes="wizard-input",
+                    )
+                    yield Static("", id="api-key-error", classes="wizard-error")
 
-            with Center(id="wizard-actions"):
-                yield Button("Continue", variant="primary", id="btn-continue")
+                    with Center(id="wizard-actions"):
+                        yield Button("Continue", variant="primary", id="btn-continue")
 
         yield Static(
             "enter confirm  esc back",
@@ -494,31 +507,33 @@ class ConfigScreen(Screen):
         self._selected_autonomy = "semi_supervised"
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="wizard-container"):
-            yield Static("dworkers", classes="wizard-title")
-            yield Static("step 4 of 4", classes="wizard-step-indicator")
-            yield Static("Configuration", classes="wizard-subtitle")
+        with Middle():
+            with Center():
+                with Vertical(classes="wizard-container"):
+                    yield Static("dworkers", classes="wizard-title")
+                    yield Static("step 4 of 4", classes="wizard-step-indicator")
+                    yield Static("Configuration", classes="wizard-subtitle")
 
-            yield Static("Backend mode", classes="wizard-section-title")
-            with RadioSet(id="mode-select", classes="wizard-radio-set"):
-                for i, (mode_id, label, desc) in enumerate(_MODE_OPTIONS):
-                    yield RadioButton(
-                        f"{label} -- {desc}",
-                        value=i == 0,
-                        name=mode_id,
-                    )
+                    yield Static("Backend mode", classes="wizard-section-title")
+                    with RadioSet(id="mode-select", classes="wizard-radio-set"):
+                        for i, (mode_id, label, desc) in enumerate(_MODE_OPTIONS):
+                            yield RadioButton(
+                                f"{label} -- {desc}",
+                                value=i == 0,
+                                name=mode_id,
+                            )
 
-            yield Static("Autonomy level", classes="wizard-section-title")
-            with RadioSet(id="autonomy-select", classes="wizard-radio-set"):
-                for i, (autonomy_id, label, desc) in enumerate(_AUTONOMY_OPTIONS):
-                    yield RadioButton(
-                        f"{label} -- {desc}",
-                        value=i == 0,
-                        name=autonomy_id,
-                    )
+                    yield Static("Autonomy level", classes="wizard-section-title")
+                    with RadioSet(id="autonomy-select", classes="wizard-radio-set"):
+                        for i, (autonomy_id, label, desc) in enumerate(_AUTONOMY_OPTIONS):
+                            yield RadioButton(
+                                f"{label} -- {desc}",
+                                value=i == 0,
+                                name=autonomy_id,
+                            )
 
-            with Center(id="wizard-actions"):
-                yield Button("Save & Start", variant="primary", id="btn-save")
+                    with Center(id="wizard-actions"):
+                        yield Button("Save & Start", variant="primary", id="btn-save")
 
         yield Static(
             "up/down navigate  tab switch section  enter save  esc back",

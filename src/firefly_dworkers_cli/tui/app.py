@@ -17,11 +17,13 @@ import time
 import uuid
 from datetime import UTC, datetime
 
+from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.command import Hit, Hits, Provider
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
+from textual.message import Message
 from textual.widgets import Markdown, Static, TextArea
 
 from firefly_dworkers_cli.config import ConfigManager
@@ -61,6 +63,41 @@ _PALETTE_COMMANDS = [
     ("setup", "Re-run setup wizard"),
     ("quit", "Exit dworkers"),
 ]
+
+
+class PromptInput(TextArea):
+    """Chat input — Enter submits, Shift+Enter inserts newline.
+
+    TextArea's internal ``_on_key`` consumes Enter (inserts newline) and
+    calls ``event.stop()``, so the key never bubbles to the App.  This
+    subclass intercepts Enter *before* the parent handler, posts a
+    :class:`Submitted` message, and lets the App handle it.
+    """
+
+    class Submitted(Message):
+        """Posted when the user presses Enter with non-empty text."""
+
+        def __init__(self, text: str) -> None:
+            super().__init__()
+            self.text = text
+
+    async def _on_key(self, event: events.Key) -> None:
+        if event.key == "enter":
+            text = self.text.strip()
+            if text:
+                self.post_message(self.Submitted(text))
+                self.clear()
+            event.stop()
+            event.prevent_default()
+            return
+        if event.key == "shift+enter":
+            # Insert a newline (what Enter normally does in TextArea)
+            start, end = self.selection
+            self._replace_via_keyboard("\n", start, end)
+            event.stop()
+            event.prevent_default()
+            return
+        await super()._on_key(event)
 
 
 class SlashCommandProvider(Provider):
@@ -158,7 +195,7 @@ class DworkersApp(App):
         with Vertical(id="input-area"):
             with Horizontal(id="input-row"):
                 yield Static("> ", classes="prompt-prefix", id="prompt-prefix")
-                yield TextArea(id="prompt-input")
+                yield PromptInput(id="prompt-input")
             yield Static("Enter to send · Shift+Enter for newline · /help for commands",
                          classes="input-hint", id="input-hint")
 
@@ -229,7 +266,7 @@ class DworkersApp(App):
             conn.update("\u25cf local")
 
         # Focus the input
-        self.query_one("#prompt-input", TextArea).focus()
+        self.query_one("#prompt-input", PromptInput).focus()
         self._update_status_bar()
 
         # Show config load error if it occurred
@@ -247,32 +284,20 @@ class DworkersApp(App):
         if event.text_area.id == "prompt-input":
             self._update_input_hint(event.text_area.text)
 
-    async def on_key(self, event) -> None:
-        """Handle Enter to submit and Escape to cancel streaming."""
-        # Escape / Ctrl+C cancels streaming
+    async def on_prompt_input_submitted(self, event: PromptInput.Submitted) -> None:
+        """Handle Enter-to-submit from the chat input."""
+        if not self._is_streaming:
+            await self._handle_input(event.text)
+
+    async def on_key(self, event: events.Key) -> None:
+        """Handle Escape to cancel streaming."""
         if event.key == "escape" and self._is_streaming:
             self._cancel_streaming.set()
-            # Instant visual feedback
             with contextlib.suppress(Exception):
                 for ind in self.query(".streaming-indicator"):
                     ind.update("Cancelling...")
             event.prevent_default()
             event.stop()
-            return
-
-        input_widget = self.query_one("#prompt-input", TextArea)
-
-        if self.focused is input_widget:
-            if event.key == "shift+enter":
-                # Allow Shift+Enter to insert a newline (default TextArea behavior)
-                return
-            if event.key == "enter":
-                event.prevent_default()
-                event.stop()
-                text = input_widget.text.strip()
-                if text and not self._is_streaming:
-                    input_widget.clear()
-                    await self._handle_input(text)
 
     async def _handle_input(self, text: str) -> None:
         """Route input to slash commands or message sending."""
@@ -1067,4 +1092,4 @@ class DworkersApp(App):
 
     def action_focus_input(self) -> None:
         """Focus the input area."""
-        self.query_one("#prompt-input", TextArea).focus()
+        self.query_one("#prompt-input", PromptInput).focus()
