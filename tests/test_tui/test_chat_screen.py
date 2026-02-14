@@ -1,4 +1,4 @@
-"""Test ChatScreen."""
+"""Test ChatScreen (legacy screen, kept for backwards compatibility)."""
 
 from firefly_dworkers_cli.tui.screens.chat import ChatHeader, ChatScreen
 

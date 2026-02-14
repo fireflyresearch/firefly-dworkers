@@ -9,6 +9,7 @@ getting started to extending the platform with custom workers and tools.
 |-------------------------------------------|-----------------------------------------------|
 | Get up and running quickly                | [Getting Started](getting-started.md)         |
 | Understand the architecture               | [Architecture](architecture.md)               |
+| Generate presentations, documents, or spreadsheets | [Design Pipeline](design-pipeline.md) |
 | Configure a tenant                        | [Configuration Reference](configuration.md)   |
 | Use the CLI                               | [CLI Reference](cli-reference.md)             |
 | Integrate via the REST API                | [API Reference](api-reference.md)             |
@@ -24,6 +25,7 @@ getting started to extending the platform with custom workers and tools.
 - [Architecture](architecture.md) — Hexagonal architecture, layers, and key patterns
 - [Workers](workers/overview.md) — Analyst, Researcher, DataAnalyst, Manager roles
 - [Tools](tools/overview.md) — 30+ pluggable connectors with port/adapter pattern
+- [Design Pipeline](design-pipeline.md) — LLM-powered design intelligence for PPTX, DOCX, XLSX, and PDF
 - [Plans](plans/overview.md) — DAG-based multi-worker workflow templates
 - [Knowledge](knowledge/overview.md) — Document indexing and semantic retrieval
 - [Tenants](tenants/overview.md) — Multi-tenant configuration and isolation

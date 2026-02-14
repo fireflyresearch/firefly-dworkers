@@ -29,6 +29,7 @@
 - [Architecture](architecture.md) -- Hexagonal architecture deep dive with diagrams
 - [Workers](workers/overview.md) -- Worker roles, lifecycle, and instruction building
 - [Tools](tools/overview.md) -- Tool system, port/adapter pattern
+- [Design Pipeline](design-pipeline.md) -- LLM-powered design intelligence for presentations, documents, and spreadsheets
 - [Plans](plans/overview.md) -- DAG-based workflow templates
 - [Knowledge](knowledge/overview.md) -- Document indexing and retrieval
 - [Tenants](tenants/overview.md) -- Multi-tenant configuration
@@ -59,6 +60,7 @@
 |-------|--------|-----------|
 | Workers | `firefly_dworkers.workers` | `BaseWorker`, `WorkerFactory` |
 | Tools | `firefly_dworkers.tools` | `ToolRegistry`, `tool_registry` |
+| Design Pipeline | `firefly_dworkers.design` | `DesignEngine`, `TemplateAnalyzer`, `UnifiedDesignPipeline` |
 | Plans | `firefly_dworkers.plans` | `BasePlan`, `PlanBuilder` |
 | Knowledge | `firefly_dworkers.knowledge` | `KnowledgeRepository`, `KnowledgeBackend` |
 | Tenants | `firefly_dworkers.tenants` | `TenantConfig`, `TenantRegistry` |

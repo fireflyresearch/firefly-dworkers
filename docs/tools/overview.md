@@ -448,30 +448,36 @@ async def _search(self, query: str, max_results: int) -> list[SearchResult]:
 
 ## Design Intelligence Layer
 
-The `design/` package provides LLM-powered creative reasoning for document generation.
+The `design/` package provides LLM-powered creative reasoning for document generation. It includes a complete pipeline from content brief to rendered output across all three output formats.
 
-### DesignEngine
+### Design Pipeline Tools
 
-**Module:** `firefly_dworkers.design.engine`
+| Tool | Registry Key | Category | Output |
+|------|-------------|----------|--------|
+| `DesignPipelineTool` | `design_pipeline` | presentation | `.pptx` |
+| `DocumentPipelineTool` | `document_design_pipeline` | document | `.docx` / `.pdf` |
+| `SpreadsheetPipelineTool` | `spreadsheet_design_pipeline` | spreadsheet | `.xlsx` |
+| `UnifiedDesignPipeline` | `unified_design_pipeline` | design | Any of the above |
 
-Takes a `ContentBrief` and optional `DesignProfile`, uses an LLM to produce a complete `DesignSpec`.
+The `UnifiedDesignPipeline` dispatches to format-specific pipelines based on the `output_type` parameter.
 
-### TemplateAnalyzer
+### Core Components
 
-**Module:** `firefly_dworkers.design.analyzer`
+| Component | Module | Purpose |
+|-----------|--------|---------|
+| `DesignEngine` | `firefly_dworkers.design.engine` | LLM-powered layout and style decisions |
+| `TemplateAnalyzer` | `firefly_dworkers.design.analyzer` | Extracts design DNA from templates (PPTX, DOCX, XLSX) |
+| `ImageResolver` | `firefly_dworkers.design.images` | Resolves image requests to bytes (file, URL, AI, stock) |
+| `ChartRenderer` | `firefly_dworkers.design.charts` | Renders charts as native objects or PNG |
+| Converters | `firefly_dworkers.design.converter` | Bridges design models to tool input models |
 
-Extracts design DNA (colors, fonts, layouts) from existing documents (PPTX, DOCX, XLSX).
-
-### ChartRenderer
-
-**Module:** `firefly_dworkers.design.charts`
-
-Renders charts as native objects (PPTX, XLSX) or PNG images (DOCX, PDF).
+For comprehensive documentation, see [Design Pipeline](../design-pipeline.md).
 
 ---
 
 ## Related Documentation
 
+- [Design Pipeline](../design-pipeline.md) -- Full design intelligence pipeline documentation
 - [Tool Registry](registry.md) -- Creating and registering custom tools
 - [Workers Overview](../workers/overview.md) -- How workers use tools
 - [Configuration](../configuration.md) -- Connector configuration reference

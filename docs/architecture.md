@@ -6,6 +6,7 @@
 - [Three Packages, One Repository](#three-packages-one-repository)
 - [Port / Adapter Pattern](#port--adapter-pattern)
   - [Port Definitions](#port-definitions)
+- [Design Intelligence Layer](#design-intelligence-layer)
 - [ToolRegistry Flow](#toolregistry-flow)
 - [WorkerFactory Flow](#workerfactory-flow)
 - [Knowledge Backend Protocol](#knowledge-backend-protocol)
@@ -47,7 +48,13 @@ The platform is organized into distinct layers, each with clear responsibilities
 |                  WORKER LAYER                              |
 |  BaseWorker  |  WorkerFactory  |  WorkerRegistry          |
 |  AnalystWorker  |  ResearcherWorker  |  DataAnalystWorker  |
-|  ManagerWorker                                            |
+|  ManagerWorker  |  DesignerWorker                         |
++-----------------------------------------------------------+
+                            |
++-----------------------------------------------------------+
+|                  DESIGN INTELLIGENCE LAYER                 |
+|  DesignEngine  |  TemplateAnalyzer  |  Converters         |
+|  UnifiedDesignPipeline  |  ImageResolver                  |
 +-----------------------------------------------------------+
                             |
 +-----------------------------------------------------------+
@@ -65,6 +72,8 @@ The platform is organized into distinct layers, each with clear responsibilities
 |  FireflyAgent  |  BaseTool  |  PipelineBuilder  |  Memory |
 +-----------------------------------------------------------+
 ```
+
+The **Design Intelligence Layer** sits between Workers and Tools. It takes structured content from workers (via `ContentBrief`) and uses LLM-powered design reasoning to produce professionally formatted output. It supports three output formats: presentations (PPTX), documents (DOCX/PDF), and spreadsheets (XLSX). See [Design Pipeline](design-pipeline.md) for full documentation.
 
 ---
 
@@ -169,6 +178,35 @@ Each port extends `fireflyframework_genai.tools.base.BaseTool`:
 | `PresentationTool` | `firefly_dworkers.tools.presentation.base` | `_create`, `_add_slide`, `_save` |
 | `DocumentTool` | `firefly_dworkers.tools.document.base` | `_create`, `_add_section`, `_save` |
 | `SpreadsheetPort` | `firefly_dworkers.tools.spreadsheet.base` | `_create`, `_add_sheet`, `_save`, `_read` |
+
+---
+
+## Design Intelligence Layer
+
+The design intelligence layer (`firefly_dworkers.design`) provides LLM-powered creative reasoning for generating professionally designed output artifacts. It sits between the worker layer (which produces content) and the tool layer (which renders output).
+
+```mermaid
+graph TD
+    W["Workers (ContentBrief)"] --> TA["TemplateAnalyzer"]
+    W --> DE["DesignEngine"]
+    TA --> DP["DesignProfile"]
+    DP --> DE
+    DE --> DS["DesignSpec"]
+    DS --> CV["Converters"]
+    CV --> ST["SlideSpec / SectionSpec / SheetSpec"]
+    ST --> TL["Rendering Tools (PowerPoint, Word, Excel, PDF)"]
+```
+
+The pipeline supports three output formats through format-specific pipelines, unified behind a single dispatcher:
+
+| Pipeline Tool | Registry Key | Output Formats |
+|--------------|-------------|---------------|
+| `DesignPipelineTool` | `design_pipeline` | `.pptx` |
+| `DocumentPipelineTool` | `document_design_pipeline` | `.docx`, `.pdf` |
+| `SpreadsheetPipelineTool` | `spreadsheet_design_pipeline` | `.xlsx` |
+| `UnifiedDesignPipeline` | `unified_design_pipeline` | All of the above |
+
+For full documentation including models, converters, and usage examples, see [Design Pipeline](design-pipeline.md).
 
 ---
 

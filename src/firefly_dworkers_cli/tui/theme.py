@@ -1,189 +1,253 @@
-"""Theme constants and Textual CSS for the dworkers TUI."""
+"""Theme constants and Textual CSS for the dworkers TUI.
 
-# Color tokens
-PRIMARY = "#6C5CE7"
-ACCENT = "#00B894"
-WARNING = "#FDCB6E"
-ERROR = "#E17055"
-SURFACE = "#1E1E2E"
-SURFACE_ALT = "#2A2A3E"
-TEXT = "#CDD6F4"
-TEXT_DIM = "#6C7086"
-AI_BADGE = "#00B894"
-USER_BADGE = "#6C5CE7"
+Designed to match Claude Code's terminal aesthetic: dark background,
+minimal chrome, bordered message boxes, and a persistent status bar.
+"""
+
+# Color tokens — terminal-native dark palette
+BG = "#1a1a2e"
+BG_HEADER = "#16213e"
+BG_INPUT = "#0f0f23"
+BG_MESSAGE = "#1a1a2e"
+BORDER = "#2a2a4a"
+BORDER_USER = "#6366f1"
+BORDER_AI = "#10b981"
+BORDER_SYSTEM = "#64748b"
+BORDER_TOOL = "#f59e0b"
+TEXT = "#e2e8f0"
+TEXT_DIM = "#64748b"
+TEXT_MUTED = "#475569"
+ACCENT = "#6366f1"
+SUCCESS = "#10b981"
+WARNING = "#f59e0b"
+ERROR = "#ef4444"
 
 APP_CSS = """
 Screen {
-    background: #1E1E2E;
-    color: #CDD6F4;
+    background: #1a1a2e;
+    color: #e2e8f0;
 }
 
-#sidebar {
-    width: 32;
-    background: #181825;
-    border-right: solid #313244;
+/* ── Welcome banner ──────────────────────────── */
+
+#welcome {
+    width: 1fr;
+    height: auto;
+    content-align: center middle;
+    padding: 4 8;
+    color: #64748b;
+}
+
+#welcome .welcome-title {
+    text-style: bold;
+    color: #e2e8f0;
+    text-align: center;
+    width: 1fr;
     padding: 1 0;
 }
 
-#sidebar .section-label {
-    color: #6C7086;
+#welcome .welcome-hint {
+    color: #475569;
+    text-align: center;
+    width: 1fr;
+}
+
+/* ── Message list ────────────────────────────── */
+
+#message-list {
+    height: 1fr;
+    padding: 0 1;
+    scrollbar-size: 1 1;
+}
+
+/* ── Message bubbles ─────────────────────────── */
+
+.msg-box {
+    margin: 0 0 1 0;
+    padding: 0 1;
+    width: 1fr;
+    height: auto;
+}
+
+.msg-header {
+    height: 1;
+    padding: 0 0;
+    width: 1fr;
+}
+
+.msg-sender {
+    width: auto;
     text-style: bold;
-    padding: 1 2 0 2;
+    padding: 0 1 0 0;
 }
 
-#sidebar .nav-item {
-    padding: 0 2;
-    height: 3;
-    content-align-vertical: middle;
+.msg-sender-human {
+    color: #6366f1;
 }
 
-#sidebar .nav-item:hover {
-    background: #2A2A3E;
+.msg-sender-ai {
+    color: #10b981;
 }
 
-#sidebar .nav-item.--active {
-    background: #2A2A3E;
-    color: #CDD6F4;
-    border-left: thick #6C5CE7;
+.msg-sender-system {
+    color: #64748b;
 }
 
-#content {
-    background: #1E1E2E;
+.msg-timestamp {
+    width: auto;
+    color: #475569;
+    dock: right;
 }
 
-.badge {
-    background: #00B894;
-    color: #1E1E2E;
+.msg-content {
+    padding: 0;
+    width: 1fr;
+    height: auto;
+}
+
+.msg-divider {
+    height: 1;
+    color: #2a2a4a;
+    width: 1fr;
+    text-align: center;
+    margin: 1 0;
+}
+
+/* ── Tool call boxes ─────────────────────────── */
+
+.tool-call {
+    border: round #f59e0b;
+    margin: 0 2 1 2;
+    padding: 0 1;
+    height: auto;
+}
+
+.tool-call-header {
+    color: #f59e0b;
     text-style: bold;
+    height: 1;
+}
+
+.tool-call-content {
+    color: #94a3b8;
+    height: auto;
+    max-height: 8;
+}
+
+/* ── Streaming indicator ─────────────────────── */
+
+.streaming-indicator {
+    color: #10b981;
+    text-style: italic;
+    padding: 0 0 0 2;
+}
+
+/* ── Input area ──────────────────────────────── */
+
+#input-area {
+    dock: bottom;
+    height: auto;
+    max-height: 10;
+    min-height: 3;
+    background: #0f0f23;
+    border-top: solid #2a2a4a;
     padding: 0 1;
 }
 
-.badge-warning {
-    background: #FDCB6E;
-    color: #1E1E2E;
-}
-
-.badge-error {
-    background: #E17055;
-    color: #1E1E2E;
-}
-
-.message-bubble {
-    background: #2A2A3E;
-    margin: 1 2;
-    padding: 1 2;
-    border: round #313244;
-}
-
-.message-bubble-user {
-    border: round #6C5CE7;
-}
-
-.message-bubble-agent {
-    border: round #00B894;
-}
-
-.input-bar {
-    dock: bottom;
-    height: auto;
+#input-area #prompt-input {
+    width: 1fr;
+    min-height: 1;
     max-height: 8;
-    background: #181825;
-    border-top: solid #313244;
-    padding: 1 2;
+    background: #0f0f23;
+    border: none;
+    color: #e2e8f0;
 }
 
-.stats-card {
-    background: #2A2A3E;
-    border: round #313244;
-    padding: 1 2;
+#input-area #prompt-input:focus {
+    border: none;
+}
+
+#input-area .input-hint {
+    color: #475569;
+    height: 1;
+    padding: 0 1;
+    text-align: right;
+}
+
+/* ── Status bar ──────────────────────────────── */
+
+#status-bar {
+    dock: bottom;
+    height: 1;
+    background: #16213e;
+    color: #64748b;
+    padding: 0 2;
+}
+
+#status-bar .status-item {
+    width: auto;
+    padding: 0 1;
+}
+
+#status-bar .status-model {
+    color: #6366f1;
+    text-style: bold;
+}
+
+#status-bar .status-tokens {
+    color: #64748b;
+}
+
+#status-bar .status-connection {
+    dock: right;
+    width: auto;
+    padding: 0 1;
+}
+
+#status-bar .status-connected {
+    color: #10b981;
+}
+
+#status-bar .status-disconnected {
+    color: #ef4444;
+}
+
+/* ── Header ──────────────────────────────────── */
+
+#header-bar {
+    dock: top;
+    height: 1;
+    background: #16213e;
+    padding: 0 2;
+}
+
+#header-bar .header-title {
+    text-style: bold;
+    width: 1fr;
+}
+
+#header-bar .header-hint {
+    dock: right;
+    width: auto;
+    color: #475569;
+}
+
+/* ── Slash command output ────────────────────── */
+
+.cmd-output {
+    border: round #64748b;
+    margin: 0 2 1 2;
+    padding: 0 1;
     height: auto;
 }
 
-.panel-title {
+.cmd-output-header {
+    color: #64748b;
     text-style: bold;
-    color: #CDD6F4;
-    padding: 1 0;
+    height: 1;
 }
 
-Button {
-    background: #6C5CE7;
-    color: #CDD6F4;
-    border: none;
-    min-width: 12;
-}
-
-Button:hover {
-    background: #7C6DF7;
-}
-
-Button.success {
-    background: #00B894;
-}
-
-Button.warning {
-    background: #FDCB6E;
-    color: #1E1E2E;
-}
-
-Button.error {
-    background: #E17055;
-}
-
-DataTable {
-    background: #1E1E2E;
-}
-
-DataTable > .datatable--header {
-    background: #181825;
-    color: #6C7086;
-    text-style: bold;
-}
-
-DataTable > .datatable--cursor {
-    background: #2A2A3E;
-}
-
-Input {
-    background: #2A2A3E;
-    border: round #313244;
-    color: #CDD6F4;
-}
-
-Input:focus {
-    border: round #6C5CE7;
-}
-
-TextArea {
-    background: #2A2A3E;
-    border: round #313244;
-    color: #CDD6F4;
-}
-
-TextArea:focus {
-    border: round #6C5CE7;
-}
-
-ListView {
-    background: #1E1E2E;
-}
-
-ListView > ListItem {
-    padding: 1 2;
-}
-
-ListView > ListItem.--highlight {
-    background: #2A2A3E;
-}
-
-Tree {
-    background: #1E1E2E;
-}
-
-#user-panel {
-    dock: bottom;
-    height: 4;
-    padding: 0 2;
-    border-top: solid #313244;
-    color: #6C7086;
+.cmd-output-content {
+    height: auto;
 }
 """
