@@ -112,19 +112,18 @@ class ConfigManager:
     def needs_setup(self) -> bool:
         """Return True if no usable configuration exists.
 
-        A config is "usable" when at least one config file exists AND the
-        default model provider has a corresponding API key available (either
-        in the config file or as an environment variable).
+        A config is "usable" when at least one config file exists and can be
+        parsed into a valid TenantConfig. Credential availability is NOT
+        checked here — the user can always re-run ``/setup`` to reconfigure.
         """
         has_global = self.global_config_path.exists()
         has_project = self.project_config_path.exists()
         if not has_global and not has_project:
             return True
 
-        # Try to load and check if the model provider has credentials
         try:
-            config = self._load_merged_config()
-            return not self._has_model_credentials(config)
+            self._load_merged_config()
+            return False
         except Exception:
             logger.debug("Config load failed during needs_setup", exc_info=True)
             return True

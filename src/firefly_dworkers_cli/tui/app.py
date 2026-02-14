@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.command import Hit, Hits, Provider
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.widgets import Markdown, Static, TextArea
@@ -40,11 +41,67 @@ _MENTION_RE = re.compile(r"@(\w+)")
 _STREAMING_TIMEOUT = 300
 
 
+_PALETTE_COMMANDS = [
+    ("help", "Show available commands"),
+    ("team", "List available AI workers"),
+    ("plan", "List or execute workflow plans"),
+    ("project", "Run a multi-worker project"),
+    ("status", "Show session status"),
+    ("config", "Show current configuration"),
+    ("new", "Start a new conversation"),
+    ("conversations", "List saved conversations"),
+    ("models", "Show available models"),
+    ("model", "Switch default model"),
+    ("autonomy", "View or change autonomy level"),
+    ("connectors", "List connector statuses"),
+    ("usage", "Show usage statistics"),
+    ("export", "Export conversation as markdown"),
+    ("clear", "Clear chat display"),
+    ("setup", "Re-run setup wizard"),
+    ("quit", "Exit dworkers"),
+]
+
+
+class SlashCommandProvider(Provider):
+    """Slash commands for the Textual command palette (Ctrl+P)."""
+
+    async def discover(self) -> Hits:
+        for name, desc in _PALETTE_COMMANDS:
+            yield Hit(
+                1.0,
+                f"/{name}",
+                self._make_command(name),
+                help=desc,
+            )
+
+    async def search(self, query: str) -> Hits:
+        matcher = self.matcher(query)
+        for name, desc in _PALETTE_COMMANDS:
+            score = matcher.match(f"{name} {desc}")
+            if score > 0:
+                yield Hit(
+                    score,
+                    matcher.highlight(f"/{name}"),
+                    self._make_command(name),
+                    help=desc,
+                )
+
+    def _make_command(self, name: str):
+        async def callback() -> None:
+            await self.app._handle_input(f"/{name}")
+        return callback
+
+
+def _get_slash_commands() -> type[SlashCommandProvider]:
+    return SlashCommandProvider
+
+
 class DworkersApp(App):
     """Chat-first TUI for dworkers — inspired by Claude Code."""
 
     TITLE = "dworkers"
     CSS = APP_CSS
+    COMMANDS = App.COMMANDS | {_get_slash_commands}
 
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit", show=False),
@@ -83,7 +140,7 @@ class DworkersApp(App):
         # Header bar
         with Horizontal(id="header-bar"):
             yield Static("dworkers", classes="header-title")
-            yield Static("Ctrl+N new | Ctrl+Q quit", classes="header-hint")
+            yield Static("Ctrl+P commands | Ctrl+N new | Ctrl+Q quit", classes="header-hint")
 
         # Welcome banner (shown initially, hidden once chat starts)
         with Vertical(id="welcome"):
