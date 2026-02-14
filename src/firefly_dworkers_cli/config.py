@@ -194,9 +194,11 @@ class ConfigManager:
         model: str = "openai:gpt-4o",
         tenant_id: str = "default",
         tenant_name: str = "Default",
+        mode: str = "auto",
+        default_autonomy: str = "semi_supervised",
     ) -> dict[str, Any]:
         """Build a minimal config dict suitable for saving."""
-        return {
+        config: dict[str, Any] = {
             "id": tenant_id,
             "name": tenant_name,
             "models": {
@@ -218,6 +220,9 @@ class ConfigManager:
                 "allowed_models": ["openai:*", "anthropic:*", "google:*", "mistral:*", "groq:*"],
             },
         }
+        config["mode"] = mode
+        config["default_autonomy"] = default_autonomy
+        return config
 
     # -- Internal helpers -----------------------------------------------------
 

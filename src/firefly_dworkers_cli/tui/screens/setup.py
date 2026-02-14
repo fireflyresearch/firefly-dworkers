@@ -3,8 +3,10 @@
 Launches when no usable configuration exists. Guides the user through:
 1. Detecting available LLM provider API keys from environment
 2. Choosing a default model
-3. Optionally configuring messaging integrations (Slack, Teams)
-4. Saving the configuration globally (~/.dworkers/config.yaml)
+3. Selecting a backend mode (auto / local / remote)
+4. Choosing an autonomy level (semi-supervised / manual / autonomous)
+5. Optionally configuring messaging integrations (Slack, Teams)
+6. Saving the configuration globally (~/.dworkers/config.yaml)
 
 The wizard uses Textual widgets for a clean terminal UI experience.
 """
@@ -47,6 +49,18 @@ _PROVIDER_MODELS: dict[str, list[tuple[str, str]]] = {
         ("groq:mixtral-8x7b-32768", "Mixtral 8x7B"),
     ],
 }
+
+_MODE_OPTIONS = [
+    ("auto", "Auto-detect", "Try remote server, fall back to local"),
+    ("local", "Local", "Run workers in-process (no server needed)"),
+    ("remote", "Remote", "Connect to a dworkers server"),
+]
+
+_AUTONOMY_OPTIONS = [
+    ("semi_supervised", "Semi-supervised (recommended)", "Checkpoints at key decisions"),
+    ("manual", "Manual", "Approve every step — maximum oversight"),
+    ("autonomous", "Autonomous", "No checkpoints — workers run freely"),
+]
 
 _SETUP_CSS = """
 SetupScreen {
@@ -156,6 +170,8 @@ class SetupScreen(Screen):
         self._config_mgr = config_manager or ConfigManager()
         self._detected_providers: dict[str, str] = {}
         self._selected_model: str = ""
+        self._selected_mode: str = ""
+        self._selected_autonomy: str = ""
         self._manual_api_key: str = ""
         self._manual_provider: str = ""
 
@@ -233,10 +249,44 @@ class SetupScreen(Screen):
                             classes="setup-input",
                         )
 
-                # Step 3: Optional integrations
+                # Step 3: Backend mode
                 with Vertical(classes="setup-section"):
                     yield Static(
-                        "Step 3: Integrations (optional)",
+                        "Step 3: Backend Mode", classes="setup-section-title"
+                    )
+                    with RadioSet(id="mode-select", classes="setup-radio-set"):
+                        for i, (mode_id, label, description) in enumerate(
+                            _MODE_OPTIONS
+                        ):
+                            yield RadioButton(
+                                f"{label} — {description}",
+                                value=i == 0,
+                                name=mode_id,
+                            )
+                    self._selected_mode = _MODE_OPTIONS[0][0]
+
+                # Step 4: Autonomy level
+                with Vertical(classes="setup-section"):
+                    yield Static(
+                        "Step 4: Autonomy Level", classes="setup-section-title"
+                    )
+                    with RadioSet(
+                        id="autonomy-select", classes="setup-radio-set"
+                    ):
+                        for i, (autonomy_id, label, description) in enumerate(
+                            _AUTONOMY_OPTIONS
+                        ):
+                            yield RadioButton(
+                                f"{label} — {description}",
+                                value=i == 0,
+                                name=autonomy_id,
+                            )
+                    self._selected_autonomy = _AUTONOMY_OPTIONS[0][0]
+
+                # Step 5: Optional integrations
+                with Vertical(classes="setup-section"):
+                    yield Static(
+                        "Step 5: Integrations (optional)",
                         classes="setup-section-title",
                     )
                     yield Static(
@@ -267,10 +317,16 @@ class SetupScreen(Screen):
         return models
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
-        """Track the selected model."""
+        """Track the selected model, mode, or autonomy level."""
         button = event.pressed
+        radio_set_id = event.radio_set.id
         if button.name:
-            self._selected_model = button.name
+            if radio_set_id == "model-select":
+                self._selected_model = button.name
+            elif radio_set_id == "mode-select":
+                self._selected_mode = button.name
+            elif radio_set_id == "autonomy-select":
+                self._selected_autonomy = button.name
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """Track manual API key or model input."""
@@ -323,7 +379,11 @@ class SetupScreen(Screen):
                     if provider_models:
                         model = provider_models[0][0]
 
-        config_data = self._config_mgr.build_default_config(model=model)
+        config_data = self._config_mgr.build_default_config(
+            model=model,
+            mode=self._selected_mode or "auto",
+            default_autonomy=self._selected_autonomy or "semi_supervised",
+        )
         self._config_mgr.save_global(config_data)
 
         # Load and register
