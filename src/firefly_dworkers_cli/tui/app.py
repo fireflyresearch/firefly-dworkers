@@ -71,6 +71,8 @@ class DworkersApp(App):
         self._router = CommandRouter(
             client=None, store=self._store, config_mgr=self._config_mgr,
         )
+        self._checkpoint_handler = TUICheckpointHandler()
+        self._router.checkpoint_handler = self._checkpoint_handler
         if self._autonomy_override:
             self._router.autonomy_level = self._autonomy_override
 
@@ -158,8 +160,6 @@ class DworkersApp(App):
 
     async def _connect_and_focus(self) -> None:
         """Connect to backend client and focus the input."""
-        self._checkpoint_handler = TUICheckpointHandler()
-        self._router.checkpoint_handler = self._checkpoint_handler
         self._client = await create_client(
             mode=self._mode,
             server_url=self._server_url,
@@ -235,6 +235,9 @@ class DworkersApp(App):
             is_ai=False,
         )
         self._store.add_message(self._conversation.id, user_msg)
+        # Track participants
+        if "user" not in self._conversation.participants:
+            self._conversation.participants.append("user")
         await self._add_user_message(message_list, text)
 
         # Determine target worker role
@@ -317,6 +320,8 @@ class DworkersApp(App):
             is_ai=True,
         )
         self._store.add_message(self._conversation.id, agent_msg)
+        if role not in self._conversation.participants:
+            self._conversation.participants.append(role)
 
         # Update token count (rough estimate)
         token_estimate = self._estimate_tokens(final_content)

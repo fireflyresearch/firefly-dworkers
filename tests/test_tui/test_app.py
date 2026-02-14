@@ -3,6 +3,7 @@
 import asyncio
 
 from firefly_dworkers_cli.tui.app import DworkersApp, _KNOWN_ROLES
+from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
 
 
 class TestDworkersApp:
@@ -73,6 +74,13 @@ class TestAsyncMessageMethods:
     def test_add_system_message_is_async(self):
         app = DworkersApp()
         assert asyncio.iscoroutinefunction(app._add_system_message)
+
+
+class TestCheckpointHandlerInit:
+    def test_checkpoint_handler_exists_at_init(self):
+        app = DworkersApp()
+        assert app._checkpoint_handler is not None
+        assert isinstance(app._checkpoint_handler, TUICheckpointHandler)
 
 
 class TestStreamingCancellation:
