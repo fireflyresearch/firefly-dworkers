@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from firefly_dworkers_cli.tui.commands import CommandRouter
+from firefly_dworkers_cli.tui.commands import WELCOME_TEXT, CommandRouter
 
 
 def _make_store(conversations=None):
@@ -406,3 +406,13 @@ class TestModelText:
         router = CommandRouter(client=None, store=_make_store(), config_mgr=mgr)
         text = router.model_text("anthropic:claude-sonnet-4-5-20250929")
         assert "Switched" in text
+
+
+class TestWelcomeTextMinimal:
+    def test_welcome_text_is_short(self):
+        """Welcome text should be minimal — 5 lines or fewer."""
+        lines = [l for l in WELCOME_TEXT.strip().split("\n") if l.strip()]
+        assert len(lines) <= 5
+
+    def test_welcome_text_mentions_help(self):
+        assert "/help" in WELCOME_TEXT
