@@ -1,19 +1,19 @@
 """Theme constants and Textual CSS for the dworkers TUI.
 
-Designed to match Claude Code's terminal aesthetic: true black background,
-monochrome text, minimal color — only green for success and red for errors.
+Transparent backgrounds let the terminal's native colors show through.
+Monochrome text with minimal color — only green for success and red for errors.
 """
 
-# Color tokens — Claude Code monochrome palette
-BG = "#000000"
-BG_HEADER = "#000000"
-BG_INPUT = "#000000"
-BG_MESSAGE = "#000000"
-BORDER = "#333333"
-BORDER_USER = "#333333"
-BORDER_AI = "#333333"
-BORDER_SYSTEM = "#333333"
-BORDER_TOOL = "#333333"
+# Color tokens — monochrome palette (text only, no backgrounds)
+BG = "transparent"
+BG_HEADER = "transparent"
+BG_INPUT = "transparent"
+BG_MESSAGE = "transparent"
+BORDER = "#444444"
+BORDER_USER = "#444444"
+BORDER_AI = "#444444"
+BORDER_SYSTEM = "#444444"
+BORDER_TOOL = "#444444"
 TEXT = "#d4d4d4"
 TEXT_DIM = "#666666"
 TEXT_MUTED = "#555555"
@@ -24,7 +24,7 @@ ERROR = "#ef4444"
 
 APP_CSS = """
 Screen {
-    background: #000000;
+    background: transparent;
     color: #d4d4d4;
 }
 
@@ -58,6 +58,8 @@ Screen {
     height: 1fr;
     padding: 0 1;
     scrollbar-size: 1 1;
+    scrollbar-background: transparent;
+    scrollbar-color: #444444;
 }
 
 /* ── Message boxes ───────────────────────────── */
@@ -70,7 +72,7 @@ Screen {
 }
 
 .msg-box-ai {
-    border-left: tall #333333;
+    border-left: tall #444444;
     padding: 0 0 0 1;
     margin: 0 0 1 0;
     width: 1fr;
@@ -122,7 +124,7 @@ Screen {
 
 .msg-divider {
     height: 1;
-    color: #333333;
+    color: #444444;
     width: 1fr;
     text-align: center;
     margin: 1 0;
@@ -131,7 +133,7 @@ Screen {
 /* ── Tool call boxes ─────────────────────────── */
 
 .tool-call {
-    border-left: tall #333333;
+    border-left: tall #444444;
     margin: 0 2 1 2;
     padding: 0 1;
     height: auto;
@@ -170,8 +172,7 @@ Screen {
     height: auto;
     max-height: 10;
     min-height: 3;
-    background: #000000;
-    border-top: solid #333333;
+    border-top: solid #444444;
     padding: 0 1;
 }
 
@@ -179,7 +180,7 @@ Screen {
     width: 1fr;
     min-height: 1;
     max-height: 8;
-    background: #000000;
+    background: transparent;
     border: none;
     color: #d4d4d4;
 }
@@ -211,7 +212,6 @@ Screen {
 #status-bar {
     dock: bottom;
     height: 1;
-    background: #000000;
     color: #666666;
     padding: 0 2;
 }
@@ -262,7 +262,6 @@ Screen {
 #header-bar {
     dock: top;
     height: 1;
-    background: #000000;
     padding: 0 2;
 }
 
@@ -280,7 +279,7 @@ Screen {
 /* ── Slash command output ────────────────────── */
 
 .cmd-output {
-    border-left: tall #333333;
+    border-left: tall #444444;
     margin: 0 2 1 2;
     padding: 0 1;
     height: auto;

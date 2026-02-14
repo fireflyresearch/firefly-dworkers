@@ -15,7 +15,7 @@ import contextlib
 import os
 
 from textual.app import ComposeResult
-from textual.containers import Center, VerticalScroll
+from textual.containers import Center, Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Input, RadioButton, RadioSet, Static
 
@@ -78,21 +78,29 @@ ALL_PROVIDERS: list[tuple[str, str]] = [
 
 _WIZARD_CSS = """
 Screen {
-    background: #000000;
+    background: transparent;
     color: #d4d4d4;
+    align: center middle;
 }
 
 .wizard-container {
     width: 60;
     height: auto;
-    max-height: 90%;
-    padding: 1 2;
+    padding: 1 3;
 }
 
 .wizard-title {
     text-align: center;
+    text-style: bold;
     color: #d4d4d4;
-    padding: 1 0;
+    padding: 1 0 0 0;
+    width: 1fr;
+}
+
+.wizard-step-indicator {
+    text-align: center;
+    color: #555555;
+    padding: 0 0 1 0;
     width: 1fr;
 }
 
@@ -110,76 +118,97 @@ Screen {
 
 .wizard-hint {
     color: #555555;
-    padding: 0 0 0 2;
     text-style: italic;
 }
 
 .wizard-detected {
     color: #10b981;
-    padding: 0 0 0 2;
-}
-
-.wizard-not-detected {
-    color: #666666;
-    padding: 0 0 0 2;
-}
-
-.wizard-error {
-    color: #ef4444;
-    padding: 0 0 0 2;
-}
-
-.wizard-radio-set {
-    padding: 0 0 0 2;
-    height: auto;
-    width: 1fr;
-}
-
-.wizard-input {
-    margin: 0 2;
-    width: 1fr;
-    background: #000000;
-    border: tall #333333;
-    color: #d4d4d4;
-}
-
-.wizard-footer {
-    dock: bottom;
-    height: 1;
-    background: #000000;
-    color: #555555;
-    padding: 0 2;
     text-align: center;
-    width: 1fr;
-}
-
-.wizard-step-indicator {
-    text-align: center;
-    color: #555555;
     padding: 0 0 1 0;
     width: 1fr;
 }
 
+.wizard-not-detected {
+    color: #666666;
+}
+
+.wizard-error {
+    color: #ef4444;
+}
+
+RadioSet {
+    background: transparent;
+    border: none;
+    height: auto;
+    width: 1fr;
+    padding: 0;
+}
+
+RadioSet:focus {
+    border: none;
+}
+
+RadioButton {
+    background: transparent;
+    color: #666666;
+}
+
+RadioButton:hover {
+    color: #d4d4d4;
+}
+
+RadioButton.-on {
+    color: #ffffff;
+    text-style: bold;
+}
+
+Input {
+    background: transparent;
+    border: tall #444444;
+    color: #d4d4d4;
+    width: 1fr;
+    margin: 1 0;
+}
+
+Input:focus {
+    border: tall #666666;
+}
+
 #wizard-actions {
-    padding: 1 0;
+    padding: 1 0 0 0;
     width: 1fr;
     height: auto;
     align: center middle;
 }
 
 Button {
-    min-width: 16;
-    background: #000000;
+    min-width: 20;
+    background: transparent;
     color: #d4d4d4;
-    border: tall #333333;
+    border: tall #444444;
 }
 
 Button:hover {
-    background: #111111;
+    border: tall #666666;
 }
 
 Button.-primary {
-    border: tall #d4d4d4;
+    background: #d4d4d4;
+    color: #000000;
+    border: none;
+}
+
+Button.-primary:hover {
+    background: #e5e5e5;
+    color: #000000;
+}
+
+.wizard-footer {
+    dock: bottom;
+    height: 1;
+    color: #555555;
+    text-align: center;
+    width: 1fr;
 }
 """
 
@@ -221,7 +250,7 @@ class ProviderScreen(Screen):
         self._detected = detected
 
     def compose(self) -> ComposeResult:
-        with Center(), VerticalScroll(classes="wizard-container"):
+        with Vertical(classes="wizard-container"):
             yield Static("dworkers", classes="wizard-title")
             yield Static("step 1 of 4", classes="wizard-step-indicator")
             yield Static("Select your LLM provider", classes="wizard-subtitle")
@@ -241,10 +270,10 @@ class ProviderScreen(Screen):
                         name=provider_id,
                     )
 
-            yield Static(
-                "up/down navigate  enter select  esc quit",
-                classes="wizard-footer",
-            )
+        yield Static(
+            "up/down navigate  enter select  esc quit",
+            classes="wizard-footer",
+        )
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         if event.pressed.name:
@@ -270,7 +299,7 @@ class ModelScreen(Screen):
         models = _PROVIDER_MODELS.get(self._provider, [])
         provider_name = dict(ALL_PROVIDERS).get(self._provider, self._provider)
 
-        with Center(), VerticalScroll(classes="wizard-container"):
+        with Vertical(classes="wizard-container"):
             yield Static("dworkers", classes="wizard-title")
             yield Static("step 2 of 4", classes="wizard-step-indicator")
             yield Static(
@@ -300,10 +329,10 @@ class ModelScreen(Screen):
                 with Center(id="wizard-actions"):
                     yield Button("Continue", variant="primary", id="btn-continue")
 
-            yield Static(
-                "up/down navigate  enter select  esc back",
-                classes="wizard-footer",
-            )
+        yield Static(
+            "up/down navigate  enter select  esc back",
+            classes="wizard-footer",
+        )
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         if event.pressed.name == "_custom":
@@ -322,10 +351,10 @@ class ModelScreen(Screen):
                 id="custom-model-input",
                 classes="wizard-input",
             )
-            container.mount(input_widget, before=self.query_one(".wizard-footer"))
-            btn = Button("Continue", variant="primary", id="btn-continue")
+            container.mount(input_widget)
             center = Center(id="wizard-actions")
-            container.mount(center, before=self.query_one(".wizard-footer"))
+            container.mount(center)
+            btn = Button("Continue", variant="primary", id="btn-continue")
             center.mount(btn)
             input_widget.focus()
         except Exception:
@@ -366,7 +395,7 @@ class ApiKeyScreen(Screen):
         env_var = _PROVIDER_ENV_KEYS.get(self._provider, "API_KEY")
         provider_name = dict(ALL_PROVIDERS).get(self._provider, self._provider)
 
-        with Center(), VerticalScroll(classes="wizard-container"):
+        with Vertical(classes="wizard-container"):
             yield Static("dworkers", classes="wizard-title")
             yield Static("step 3 of 4", classes="wizard-step-indicator")
             yield Static("Enter your API key", classes="wizard-subtitle")
@@ -390,10 +419,10 @@ class ApiKeyScreen(Screen):
             with Center(id="wizard-actions"):
                 yield Button("Continue", variant="primary", id="btn-continue")
 
-            yield Static(
-                "enter confirm  esc back",
-                classes="wizard-footer",
-            )
+        yield Static(
+            "enter confirm  esc back",
+            classes="wizard-footer",
+        )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-continue":
@@ -439,7 +468,7 @@ class ConfigScreen(Screen):
         self._selected_autonomy = "semi_supervised"
 
     def compose(self) -> ComposeResult:
-        with Center(), VerticalScroll(classes="wizard-container"):
+        with Vertical(classes="wizard-container"):
             yield Static("dworkers", classes="wizard-title")
             yield Static("step 4 of 4", classes="wizard-step-indicator")
             yield Static("Configuration", classes="wizard-subtitle")
@@ -465,10 +494,10 @@ class ConfigScreen(Screen):
             with Center(id="wizard-actions"):
                 yield Button("Save & Start", variant="primary", id="btn-save")
 
-            yield Static(
-                "up/down navigate  tab switch section  enter save  esc back",
-                classes="wizard-footer",
-            )
+        yield Static(
+            "up/down navigate  tab switch section  enter save  esc back",
+            classes="wizard-footer",
+        )
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         if event.pressed.name:

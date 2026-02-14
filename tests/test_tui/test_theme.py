@@ -15,14 +15,14 @@ from firefly_dworkers_cli.tui.theme import (
 
 
 class TestThemeConstants:
-    def test_bg_is_true_black(self):
-        assert BG == "#000000"
+    def test_bg_is_transparent(self):
+        assert BG == "transparent"
 
-    def test_bg_header_is_true_black(self):
-        assert BG_HEADER == "#000000"
+    def test_bg_header_is_transparent(self):
+        assert BG_HEADER == "transparent"
 
-    def test_bg_input_is_true_black(self):
-        assert BG_INPUT == "#000000"
+    def test_bg_input_is_transparent(self):
+        assert BG_INPUT == "transparent"
 
     def test_text_is_soft_gray(self):
         assert TEXT == "#d4d4d4"
@@ -34,7 +34,7 @@ class TestThemeConstants:
         assert TEXT_MUTED == "#555555"
 
     def test_border_is_subtle(self):
-        assert BORDER == "#333333"
+        assert BORDER == "#444444"
 
     def test_success_is_green(self):
         assert SUCCESS == "#10b981"
@@ -47,8 +47,8 @@ class TestThemeConstants:
         assert "#1a1a2e" not in APP_CSS
         assert "#16213e" not in APP_CSS
 
-    def test_css_has_true_black_background(self):
-        assert "#000000" in APP_CSS
+    def test_css_uses_transparent_background(self):
+        assert "background: transparent" in APP_CSS
 
     def test_no_round_borders_in_css(self):
         assert "border: round" not in APP_CSS
