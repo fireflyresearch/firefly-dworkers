@@ -62,6 +62,7 @@ class DworkersApp(App):
         self._conversation: Conversation | None = None
         self._total_tokens = 0
         self._is_streaming = False
+        self._cancel_streaming = False
         self._router = CommandRouter(
             client=None, store=self._store, config_mgr=self._config_mgr,
         )
@@ -84,7 +85,7 @@ class DworkersApp(App):
         # Input area
         with Vertical(id="input-area"):
             yield TextArea(id="prompt-input")
-            yield Static("Enter to send | Shift+Enter for newline | /help for commands", classes="input-hint")
+            yield Static("Enter to send | Escape to cancel | /help for commands", classes="input-hint")
 
         # Status bar
         with Horizontal(id="status-bar"):
@@ -181,7 +182,14 @@ class DworkersApp(App):
         self._update_status_bar()
 
     async def on_key(self, event) -> None:
-        """Handle Enter to submit (without shift)."""
+        """Handle Enter to submit and Escape to cancel streaming."""
+        # Escape cancels streaming
+        if event.key == "escape" and self._is_streaming:
+            self._cancel_streaming = True
+            event.prevent_default()
+            event.stop()
+            return
+
         input_widget = self.query_one("#prompt-input", TextArea)
 
         if event.key == "enter" and not event.shift:
@@ -260,6 +268,10 @@ class DworkersApp(App):
                         text,
                         conversation_id=self._conversation.id,
                     ):
+                        if self._cancel_streaming:
+                            tokens.append("\n\n_[Cancelled by user]_")
+                            await content_widget.update("".join(tokens))
+                            break
                         if event.type in ("token", "complete"):
                             tokens.append(event.content)
                             await content_widget.update("".join(tokens))
@@ -279,6 +291,7 @@ class DworkersApp(App):
                     await content_widget.update("".join(tokens))
         finally:
             self._is_streaming = False
+            self._cancel_streaming = False
             indicator.remove()
 
         # Save agent message
@@ -489,6 +502,10 @@ class DworkersApp(App):
         self._is_streaming = True
         try:
             async for event in self._client.execute_plan(plan_name):
+                if self._cancel_streaming:
+                    tokens.append("\n\n_[Cancelled by user]_")
+                    await content.update("".join(tokens))
+                    break
                 if event.type in ("token", "complete"):
                     tokens.append(event.content)
                     await content.update("".join(tokens))
@@ -499,7 +516,9 @@ class DworkersApp(App):
         except Exception as e:
             tokens.append(f"\n\n**Error:** {e}")
             await content.update("".join(tokens))
-        self._is_streaming = False
+        finally:
+            self._is_streaming = False
+            self._cancel_streaming = False
 
     def _cmd_load(self, container: VerticalScroll, conv_id: str) -> None:
         """Load a saved conversation by ID."""
@@ -612,6 +631,10 @@ class DworkersApp(App):
         self._is_streaming = True
         try:
             async for event in self._client.run_project(brief):
+                if self._cancel_streaming:
+                    tokens.append("\n\n_[Cancelled by user]_")
+                    await content_widget.update("".join(tokens))
+                    break
                 if event.type in ("project_start", "project_complete"):
                     tokens.append(f"\n**{event.type}:** {event.content}\n")
                 elif event.type == "task_assigned":
@@ -631,6 +654,7 @@ class DworkersApp(App):
             await content_widget.update("".join(tokens))
         finally:
             self._is_streaming = False
+            self._cancel_streaming = False
             indicator.remove()
 
     # ── Messaging commands ────────────────────────────────────
