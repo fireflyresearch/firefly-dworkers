@@ -10,6 +10,7 @@ wizard to configure the LLM provider and API keys.
 
 from __future__ import annotations
 
+import contextlib
 import re
 import uuid
 from datetime import UTC, datetime
@@ -17,6 +18,7 @@ from datetime import UTC, datetime
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.css.query import NoMatches
 from textual.widgets import Markdown, Static, TextArea
 
 from firefly_dworkers_cli.config import ConfigManager
@@ -131,29 +133,26 @@ class DworkersApp(App):
 
     def _update_model_label(self, model_string: str) -> None:
         """Update the status bar model label."""
-        import contextlib
-
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(NoMatches):
             label = model_string.split(":", 1)[1] if ":" in model_string else model_string
             self.query_one(".status-model", Static).update(label)
 
     def _update_status_bar(self) -> None:
         """Refresh all status bar items after state changes."""
-        import contextlib
-
         # Mode
         mode_label = self._mode
-        if self._client and type(self._client).__name__ == "RemoteClient":
+        from firefly_dworkers_cli.tui.backend.remote import RemoteClient
+        if self._client and isinstance(self._client, RemoteClient):
             mode_label = "remote"
         elif self._mode == "auto":
             mode_label = "local"  # auto resolved to local
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(NoMatches):
             self.query_one("#status-mode", Static).update(mode_label)
 
         # Autonomy
         autonomy = self._router.autonomy_level
         display = autonomy.replace("_", "-")
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(NoMatches):
             self.query_one("#status-autonomy", Static).update(display)
 
     async def _connect_and_focus(self) -> None:
@@ -235,7 +234,7 @@ class DworkersApp(App):
             is_ai=False,
         )
         self._store.add_message(self._conversation.id, user_msg)
-        self._add_user_message(message_list, text)
+        await self._add_user_message(message_list, text)
 
         # Determine target worker role
         role = self._extract_role(text) or "analyst"
@@ -332,22 +331,22 @@ class DworkersApp(App):
         message_list.scroll_end(animate=False)
         self._update_input_hint()
 
-    def _add_user_message(self, container: VerticalScroll, text: str) -> None:
+    async def _add_user_message(self, container: VerticalScroll, text: str) -> None:
         """Mount a user message into the message list."""
         msg_box = Vertical(classes="msg-box")
         header = Static("\u25cf You", classes="msg-sender msg-sender-human")
         content = Markdown(text, classes="msg-content")
-        container.mount(msg_box)
-        msg_box.mount(header)
-        msg_box.mount(content)
+        await container.mount(msg_box)
+        await msg_box.mount(header)
+        await msg_box.mount(content)
         container.scroll_end(animate=False)
 
-    def _add_system_message(self, container: VerticalScroll, text: str) -> None:
+    async def _add_system_message(self, container: VerticalScroll, text: str) -> None:
         """Mount a system message into the message list."""
         msg_box = Vertical(classes="cmd-output")
         content = Markdown(text, classes="cmd-output-content")
-        container.mount(msg_box)
-        msg_box.mount(content)
+        await container.mount(msg_box)
+        await msg_box.mount(content)
         container.scroll_end(animate=False)
 
     @staticmethod
@@ -372,12 +371,10 @@ class DworkersApp(App):
 
     def _update_input_hint(self, text: str = "") -> None:
         """Update the input hint to reflect the detected @role target."""
-        import contextlib
-
         role = self._extract_role(text) if text else None
         target = role or "analyst"
         hint = f"@{target} | Enter to send | Escape to cancel | /help"
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(NoMatches):
             self.query_one("#input-hint", Static).update(hint)
 
     # ── Slash commands ───────────────────────────────────────
@@ -390,7 +387,7 @@ class DworkersApp(App):
 
         match command:
             case "/help":
-                self._add_system_message(message_list, self._router.help_text)
+                await self._add_system_message(message_list, self._router.help_text)
 
             case "/team":
                 await self._cmd_team(message_list)
@@ -405,37 +402,37 @@ class DworkersApp(App):
                 if arg:
                     await self._cmd_project(message_list, arg)
                 else:
-                    self._add_system_message(
+                    await self._add_system_message(
                         message_list,
                         "Usage: `/project <brief>`\n\n"
                         "Example: `/project Analyze Q4 sales data and create a report`",
                     )
 
             case "/conversations":
-                self._add_system_message(
+                await self._add_system_message(
                     message_list, self._router.conversations_text(),
                 )
 
             case "/load":
-                self._cmd_load(message_list, arg)
+                await self._cmd_load(message_list, arg)
 
             case "/new":
                 self._conversation = None
                 # Clear message list
                 message_list.remove_children()
-                self._add_system_message(
+                await self._add_system_message(
                     message_list,
                     "Started a new conversation. Type a message to begin.",
                 )
 
             case "/status":
-                self._add_system_message(
+                await self._add_system_message(
                     message_list,
                     self._router.status_text(self._conversation, self._total_tokens),
                 )
 
             case "/config":
-                self._add_system_message(
+                await self._add_system_message(
                     message_list, self._router.config_text(),
                 )
 
@@ -449,32 +446,32 @@ class DworkersApp(App):
                 await self._cmd_channels(message_list, arg)
 
             case "/export":
-                self._add_system_message(
+                await self._add_system_message(
                     message_list,
                     self._router.export_text(self._conversation),
                 )
 
             case "/autonomy":
-                self._add_system_message(
+                await self._add_system_message(
                     message_list,
                     self._router.autonomy_text(new_level=arg or None),
                 )
                 self._update_status_bar()
 
             case "/checkpoints":
-                self._add_system_message(
+                await self._add_system_message(
                     message_list,
                     self._router.checkpoints_text(),
                 )
 
             case "/approve":
-                self._add_system_message(
+                await self._add_system_message(
                     message_list,
                     self._router.approve_text(arg),
                 )
 
             case "/reject":
-                self._cmd_reject(message_list, arg)
+                await self._cmd_reject(message_list, arg)
 
             case "/setup":
                 await self._cmd_setup()
@@ -483,7 +480,7 @@ class DworkersApp(App):
                 self.exit()
 
             case _:
-                self._add_system_message(
+                await self._add_system_message(
                     message_list,
                     f"Unknown command: `{command}`\n\nType `/help` for available commands.",
                 )
@@ -491,19 +488,19 @@ class DworkersApp(App):
     async def _cmd_team(self, container: VerticalScroll) -> None:
         """List available workers."""
         if self._client is None:
-            self._add_system_message(container, "Client not connected.")
+            await self._add_system_message(container, "Client not connected.")
             return
         workers = await self._client.list_workers()
         lines = ["**Team Members:**\n"]
         for w in workers:
             status = "\u2713" if w.enabled else "\u2717"
             lines.append(f"- {status} **{w.name}** (`@{w.role}`) — {w.autonomy}")
-        self._add_system_message(container, "\n".join(lines))
+        await self._add_system_message(container, "\n".join(lines))
 
     async def _cmd_list_plans(self, container: VerticalScroll) -> None:
         """List available plans."""
         if self._client is None:
-            self._add_system_message(container, "Client not connected.")
+            await self._add_system_message(container, "Client not connected.")
             return
         plans = await self._client.list_plans()
         if plans:
@@ -511,17 +508,17 @@ class DworkersApp(App):
             for p in plans:
                 roles = ", ".join(p.worker_roles) if p.worker_roles else "none"
                 lines.append(f"- **{p.name}** ({p.steps} steps) — workers: {roles}")
-            self._add_system_message(container, "\n".join(lines))
+            await self._add_system_message(container, "\n".join(lines))
         else:
-            self._add_system_message(container, "No plans available.")
+            await self._add_system_message(container, "No plans available.")
 
     async def _cmd_execute_plan(self, container: VerticalScroll, plan_name: str) -> None:
         """Execute a named plan with streaming output."""
         if self._client is None:
-            self._add_system_message(container, "Client not connected.")
+            await self._add_system_message(container, "Client not connected.")
             return
 
-        self._add_system_message(container, f"Executing plan: **{plan_name}**...")
+        await self._add_system_message(container, f"Executing plan: **{plan_name}**...")
 
         content = Markdown("", classes="msg-content")
         box = Vertical(classes="msg-box")
@@ -576,11 +573,11 @@ class DworkersApp(App):
         summary = Static(timer.format_summary(token_estimate), classes="response-summary")
         await box.mount(summary)
 
-    def _cmd_load(self, container: VerticalScroll, conv_id: str) -> None:
+    async def _cmd_load(self, container: VerticalScroll, conv_id: str) -> None:
         """Load a saved conversation by ID."""
         conv_id = conv_id.strip()
         if not conv_id:
-            self._add_system_message(
+            await self._add_system_message(
                 container,
                 "Usage: `/load <conversation-id>`\n\n"
                 "Use `/conversations` to see available IDs.",
@@ -589,7 +586,7 @@ class DworkersApp(App):
 
         conv = self._store.get_conversation(conv_id)
         if conv is None:
-            self._add_system_message(
+            await self._add_system_message(
                 container, f"Conversation `{conv_id}` not found."
             )
             return
@@ -606,23 +603,23 @@ class DworkersApp(App):
                     classes="msg-sender msg-sender-ai",
                 )
                 content = Markdown(msg.content, classes="msg-content")
-                container.mount(msg_box)
-                msg_box.mount(header)
-                msg_box.mount(content)
+                await container.mount(msg_box)
+                await msg_box.mount(header)
+                await msg_box.mount(content)
             else:
-                self._add_user_message(container, msg.content)
+                await self._add_user_message(container, msg.content)
 
-        self._add_system_message(
+        await self._add_system_message(
             container,
             f"Loaded conversation: **{conv.title}** ({len(conv.messages)} messages)",
         )
 
-    def _cmd_reject(self, container: VerticalScroll, arg: str) -> None:
+    async def _cmd_reject(self, container: VerticalScroll, arg: str) -> None:
         """Reject a checkpoint, with optional reason after the ID."""
         parts = arg.split(maxsplit=1)
         checkpoint_id = parts[0] if parts else ""
         reason = parts[1] if len(parts) > 1 else ""
-        self._add_system_message(
+        await self._add_system_message(
             container,
             self._router.reject_text(checkpoint_id, reason=reason),
         )
@@ -630,7 +627,7 @@ class DworkersApp(App):
     async def _cmd_connectors(self, container: VerticalScroll) -> None:
         """List all connector statuses."""
         if self._client is None:
-            self._add_system_message(container, "Client not connected.")
+            await self._add_system_message(container, "Client not connected.")
             return
         connectors = await self._client.list_connectors()
         if connectors:
@@ -641,9 +638,9 @@ class DworkersApp(App):
                 lines.append(
                     f"- {status} **{c.name}**{provider} — {c.category}"
                 )
-            self._add_system_message(container, "\n".join(lines))
+            await self._add_system_message(container, "\n".join(lines))
         else:
-            self._add_system_message(container, "No connectors available.")
+            await self._add_system_message(container, "No connectors available.")
 
     async def _cmd_setup(self) -> None:
         """Re-run the setup wizard."""
@@ -659,10 +656,10 @@ class DworkersApp(App):
     async def _cmd_project(self, container: VerticalScroll, brief: str) -> None:
         """Run a multi-worker project from a brief."""
         if self._client is None:
-            self._add_system_message(container, "Client not connected.")
+            await self._add_system_message(container, "Client not connected.")
             return
 
-        self._add_system_message(
+        await self._add_system_message(
             container,
             f"Starting project: **{brief[:60]}{'...' if len(brief) > 60 else ''}**",
         )
@@ -768,7 +765,7 @@ class DworkersApp(App):
         """
         parts = arg.split(maxsplit=2)
         if len(parts) < 3:
-            self._add_system_message(
+            await self._add_system_message(
                 container,
                 "Usage: `/send <tool> <channel> <message>`\n\n"
                 "Examples:\n"
@@ -781,7 +778,7 @@ class DworkersApp(App):
         tool_name, channel, message = parts
         tool = self._get_messaging_tool(tool_name)
         if tool is None:
-            self._add_system_message(
+            await self._add_system_message(
                 container,
                 f"Messaging tool `{tool_name}` is not configured.\n\n"
                 "Available: slack, teams, email.\n"
@@ -789,7 +786,7 @@ class DworkersApp(App):
             )
             return
 
-        self._add_system_message(
+        await self._add_system_message(
             container, f"Sending via **{tool_name}** to `{channel}`..."
         )
         try:
@@ -797,12 +794,12 @@ class DworkersApp(App):
                 action="send", channel=channel, content=message
             )
             msg_id = result.get("id", "unknown")
-            self._add_system_message(
+            await self._add_system_message(
                 container,
                 f"Message sent successfully (id: `{msg_id}`)",
             )
         except Exception as e:
-            self._add_system_message(
+            await self._add_system_message(
                 container, f"**Error sending message:** {e}"
             )
 
@@ -814,7 +811,7 @@ class DworkersApp(App):
         """
         tool_name = arg.strip()
         if not tool_name:
-            self._add_system_message(
+            await self._add_system_message(
                 container,
                 "Usage: `/channels <tool>`\n\n"
                 "Examples:\n"
@@ -826,7 +823,7 @@ class DworkersApp(App):
 
         tool = self._get_messaging_tool(tool_name)
         if tool is None:
-            self._add_system_message(
+            await self._add_system_message(
                 container,
                 f"Messaging tool `{tool_name}` is not configured.\n\n"
                 "Configure via `~/.dworkers/config.yaml` or run `/setup`.",
@@ -840,24 +837,24 @@ class DworkersApp(App):
                 lines = [f"**{tool_name.title()} Channels:**\n"]
                 for ch in channels:
                     lines.append(f"- `{ch}`")
-                self._add_system_message(container, "\n".join(lines))
+                await self._add_system_message(container, "\n".join(lines))
             else:
-                self._add_system_message(
+                await self._add_system_message(
                     container, f"No channels found for {tool_name}."
                 )
         except Exception as e:
-            self._add_system_message(
+            await self._add_system_message(
                 container, f"**Error listing channels:** {e}"
             )
 
     # ── Actions ──────────────────────────────────────────────
 
-    def action_new_conversation(self) -> None:
+    async def action_new_conversation(self) -> None:
         """Start a new conversation."""
         self._conversation = None
         message_list = self.query_one("#message-list", VerticalScroll)
         message_list.remove_children()
-        self._add_system_message(
+        await self._add_system_message(
             message_list,
             "Started a new conversation. Type a message to begin.",
         )

@@ -1,5 +1,7 @@
 """Test DworkersApp chat-first shell."""
 
+import asyncio
+
 from firefly_dworkers_cli.tui.app import DworkersApp, _KNOWN_ROLES
 
 
@@ -61,3 +63,13 @@ class TestDworkersApp:
     def test_autonomy_override_none_keeps_default(self):
         app = DworkersApp()
         assert app._router.autonomy_level == "semi_supervised"
+
+
+class TestAsyncMessageMethods:
+    def test_add_user_message_is_async(self):
+        app = DworkersApp()
+        assert asyncio.iscoroutinefunction(app._add_user_message)
+
+    def test_add_system_message_is_async(self):
+        app = DworkersApp()
+        assert asyncio.iscoroutinefunction(app._add_system_message)
