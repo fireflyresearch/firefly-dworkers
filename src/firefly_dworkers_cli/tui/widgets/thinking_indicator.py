@@ -11,7 +11,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from textual.widgets import Static
 
-SPINNER_FRAMES = ["·", "\u2726", "\u2733", "\u2736", "\u273b", "\u273d"]
+SPINNER_FRAMES = ["\u00b7  ", "\u00b7\u00b7 ", "\u00b7\u00b7\u00b7", " \u00b7\u00b7", "  \u00b7", "   "]
 
 THINKING_VERBS = [
     "Thinking",
@@ -100,7 +100,7 @@ class ThinkingIndicator(Static):
     def _update_elapsed(self) -> None:
         """Refresh the display with the current elapsed time."""
         if self._timer is not None:
-            self.update(f"streaming... ({self._timer.format_elapsed()})")
+            self.update(f"\u00b7\u00b7\u00b7 {self._timer.format_elapsed()}")
 
     def stop(self) -> None:
         """Halt all animation timers."""

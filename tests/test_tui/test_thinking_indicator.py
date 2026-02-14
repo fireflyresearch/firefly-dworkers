@@ -34,10 +34,10 @@ class TestThinkingIndicatorConstants:
         assert len(SPINNER_FRAMES) >= 4
         assert len(THINKING_VERBS) >= 4
 
-    def test_spinner_frames_are_single_chars(self) -> None:
-        """Every spinner frame should be exactly one character."""
+    def test_spinner_frames_are_dots(self) -> None:
+        """Spinner should use simple dot animation."""
         for frame in SPINNER_FRAMES:
-            assert len(frame) == 1, f"Expected single char, got {frame!r}"
+            assert all(c == "\u00b7" or c == " " for c in frame), f"Frame '{frame}' contains non-dot characters"
 
     def test_thinking_verbs_are_capitalized(self) -> None:
         """Every thinking verb should start with an uppercase letter."""
@@ -205,5 +205,5 @@ class TestSetStreamingMode:
         indicator.update = spy_update  # type: ignore[assignment]
         indicator._update_elapsed()
         assert len(captured) == 1
-        assert "streaming..." in captured[0]
+        assert "\u00b7\u00b7\u00b7" in captured[0]
         assert "3.7s" in captured[0]
