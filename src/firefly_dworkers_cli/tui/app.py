@@ -256,13 +256,13 @@ class DworkersApp(App):
 
         input_widget = self.query_one("#prompt-input", TextArea)
 
-        if event.key == "enter" and not event.shift and self.focused is input_widget:
-                event.prevent_default()
-                event.stop()
-                text = input_widget.text.strip()
-                if text and not self._is_streaming:
-                    input_widget.clear()
-                    await self._handle_input(text)
+        if event.key == "enter" and self.focused is input_widget:
+            event.prevent_default()
+            event.stop()
+            text = input_widget.text.strip()
+            if text and not self._is_streaming:
+                input_widget.clear()
+                await self._handle_input(text)
 
     async def _handle_input(self, text: str) -> None:
         """Route input to slash commands or message sending."""
