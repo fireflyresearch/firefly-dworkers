@@ -49,10 +49,23 @@ class LocalClient:
     installed.
     """
 
+    _workers_imported: bool = False
+
+    @classmethod
+    def _ensure_workers_registered(cls) -> None:
+        """Import the workers package once to trigger self-registration."""
+        if not cls._workers_imported:
+            try:
+                import firefly_dworkers.workers  # noqa: F401 — triggers @worker_factory.register
+                cls._workers_imported = True
+            except Exception:
+                logger.debug("Failed to import workers package", exc_info=True)
+
     # -- Workers --------------------------------------------------------------
 
     async def list_workers(self, tenant_id: str = "default") -> list[WorkerInfo]:
         try:
+            self._ensure_workers_registered()
             from firefly_dworkers.tenants.registry import tenant_registry
             from firefly_dworkers.workers.factory import worker_factory
 
@@ -90,6 +103,7 @@ class LocalClient:
         conversation_id: str | None = None,
     ) -> AsyncIterator[StreamEvent]:
         try:
+            self._ensure_workers_registered()
             from firefly_dworkers.tenants.registry import tenant_registry
             from firefly_dworkers.types import WorkerRole
             from firefly_dworkers.workers.factory import worker_factory

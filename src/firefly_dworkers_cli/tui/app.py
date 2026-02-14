@@ -3,6 +3,9 @@
 The entire app is a single chat view: messages scroll upward, input is
 docked at the bottom, and a status bar shows model/connection info.
 All features (settings, team, plans, etc.) are accessible via slash commands.
+
+On first run (or when no usable config exists), the app launches a setup
+wizard to configure the LLM provider and API keys.
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Markdown, Static, TextArea
 
+from firefly_dworkers_cli.config import ConfigManager
 from firefly_dworkers_cli.tui.backend.client import DworkersClient, create_client
 from firefly_dworkers_cli.tui.backend.models import ChatMessage, Conversation
 from firefly_dworkers_cli.tui.backend.store import ConversationStore
@@ -36,6 +40,8 @@ _WELCOME_TEXT = """\
     /team          List available workers
     /plan          List workflow plans
     /conversations List saved conversations
+    /config        Current configuration
+    /connectors    Connector statuses
     /status        Current session info
     /export        Export conversation
     /new           Start a new conversation
@@ -44,21 +50,29 @@ _WELCOME_TEXT = """\
 
 _HELP_TEXT = """\
 Available commands:
-  /help            Show this help message
-  /team            List available AI workers and their status
-  /plan            List available workflow plans
-  /plan <name>     Execute a named plan
-  /conversations   List all saved conversations
-  /new             Start a fresh conversation
-  /status          Show current session status
-  /export          Export current conversation as markdown
-  /quit            Exit dworkers
+  /help              Show this help message
+  /team              List available AI workers and their status
+  /plan              List available workflow plans
+  /plan <name>       Execute a named plan
+  /project <brief>   Run a multi-worker project
+  /conversations     List all saved conversations
+  /new               Start a fresh conversation
+  /status            Show current session status
+  /config            Show current configuration
+  /connectors        List all connector statuses
+  /send <tool> <ch>  Send a message via Slack/Teams/email
+  /channels <tool>   List channels for a messaging tool
+  /export            Export current conversation as markdown
+  /setup             Re-run the setup wizard
+  /quit              Exit dworkers
 
 Tips:
   - Use @analyst, @researcher, @data_analyst, @manager, @designer
     to route your message to a specific worker role
   - Default worker is @analyst if no role is specified
   - Messages support markdown formatting
+  - Use /send slack #general <message> to send via Slack
+  - Use /channels slack to list Slack channels
 """
 
 
@@ -77,6 +91,7 @@ class DworkersApp(App):
 
     def __init__(self) -> None:
         super().__init__()
+        self._config_mgr = ConfigManager()
         self._store = ConversationStore()
         self._client: DworkersClient | None = None
         self._conversation: Conversation | None = None
@@ -109,7 +124,44 @@ class DworkersApp(App):
             yield Static("\u25cf connected", classes="status-connection status-connected", id="conn-status")
 
     async def on_mount(self) -> None:
-        """Connect to backend and focus input."""
+        """Load config, optionally run setup wizard, then connect to backend."""
+        # Check if setup is needed
+        if self._config_mgr.needs_setup():
+            from firefly_dworkers_cli.tui.screens.setup import SetupScreen
+
+            await self.push_screen(
+                SetupScreen(self._config_mgr),
+                callback=self._on_setup_complete,
+            )
+        else:
+            # Load existing config and register in tenant_registry
+            try:
+                config = self._config_mgr.load()
+                self._update_model_label(config.models.default)
+            except Exception:
+                pass
+            await self._connect_and_focus()
+
+    def _on_setup_complete(self, result: object) -> None:
+        """Callback when setup wizard finishes."""
+        if result is not None and hasattr(result, "models"):
+            self._update_model_label(result.models.default)
+        self.call_after_refresh(self._connect_and_focus)
+
+    def _update_model_label(self, model_string: str) -> None:
+        """Update the status bar model label."""
+        try:
+            # Show just the model name, not provider prefix
+            if ":" in model_string:
+                label = model_string.split(":", 1)[1]
+            else:
+                label = model_string
+            self.query_one(".status-model", Static).update(label)
+        except Exception:
+            pass
+
+    async def _connect_and_focus(self) -> None:
+        """Connect to backend client and focus the input."""
         self._client = await create_client()
 
         # Update connection status
@@ -117,8 +169,7 @@ class DworkersApp(App):
         client_type = type(self._client).__name__
         if client_type == "RemoteClient":
             conn.update("\u25cf remote")
-            model_label = self.query_one(".status-model", Static)
-            model_label.update("remote")
+            self._update_model_label("remote")
         else:
             conn.update("\u25cf local")
 
@@ -203,7 +254,7 @@ class DworkersApp(App):
 
         if self._client is not None:
             try:
-                async for event in await self._client.run_worker(
+                async for event in self._client.run_worker(
                     role,
                     text,
                     conversation_id=self._conversation.id,
@@ -270,9 +321,8 @@ class DworkersApp(App):
         container.scroll_end(animate=False)
 
     def _extract_role(self, text: str) -> str | None:
-        """Check for @analyst, @researcher, etc. in the message text."""
-        match = _MENTION_RE.search(text)
-        if match:
+        """Return the first known @role mention in the message text."""
+        for match in _MENTION_RE.finditer(text):
             mention = match.group(1).lower()
             if mention in _KNOWN_ROLES:
                 return mention
@@ -308,6 +358,16 @@ class DworkersApp(App):
                 else:
                     await self._cmd_list_plans(message_list)
 
+            case "/project":
+                if arg:
+                    await self._cmd_project(message_list, arg)
+                else:
+                    self._add_system_message(
+                        message_list,
+                        "Usage: `/project <brief>`\n\n"
+                        "Example: `/project Analyze Q4 sales data and create a report`",
+                    )
+
             case "/conversations":
                 self._cmd_conversations(message_list)
 
@@ -323,8 +383,23 @@ class DworkersApp(App):
             case "/status":
                 self._cmd_status(message_list)
 
+            case "/config":
+                self._cmd_config(message_list)
+
+            case "/connectors":
+                await self._cmd_connectors(message_list)
+
+            case "/send":
+                await self._cmd_send(message_list, arg)
+
+            case "/channels":
+                await self._cmd_channels(message_list, arg)
+
             case "/export":
                 self._cmd_export(message_list)
+
+            case "/setup":
+                await self._cmd_setup()
 
             case "/quit":
                 self.exit()
@@ -380,7 +455,7 @@ class DworkersApp(App):
         tokens: list[str] = []
         self._is_streaming = True
         try:
-            async for event in await self._client.execute_plan(plan_name):
+            async for event in self._client.execute_plan(plan_name):
                 if event.type in ("token", "complete"):
                     tokens.append(event.content)
                     await content.update("".join(tokens))
@@ -436,6 +511,225 @@ class DworkersApp(App):
             ts = msg.timestamp.strftime("%Y-%m-%d %H:%M")
             lines.append(f"**{msg.sender}** ({ts}):\n\n{msg.content}\n\n---\n")
         self._add_system_message(container, "\n".join(lines))
+
+    def _cmd_config(self, container: VerticalScroll) -> None:
+        """Show current configuration."""
+        config = self._config_mgr.config
+        if config is None:
+            self._add_system_message(container, "No configuration loaded.")
+            return
+        enabled_connectors = config.connectors.enabled_connectors()
+        connector_names = ", ".join(sorted(enabled_connectors.keys())) or "none"
+        api_keys = self._config_mgr.detect_api_keys()
+        providers = ", ".join(p.title() for p in sorted(api_keys)) or "none"
+        lines = [
+            "**Current Configuration:**\n",
+            f"- **Tenant:** {config.name} (`{config.id}`)",
+            f"- **Default Model:** `{config.models.default}`",
+            f"- **Research Model:** `{config.models.research or 'same as default'}`",
+            f"- **Analysis Model:** `{config.models.analysis or 'same as default'}`",
+            f"- **Available Providers:** {providers}",
+            f"- **Enabled Connectors:** {connector_names}",
+            f"- **Global Config:** `{self._config_mgr.global_config_path}`",
+            f"- **Project Config:** `{self._config_mgr.project_config_path}`",
+        ]
+        self._add_system_message(container, "\n".join(lines))
+
+    async def _cmd_connectors(self, container: VerticalScroll) -> None:
+        """List all connector statuses."""
+        if self._client is None:
+            self._add_system_message(container, "Client not connected.")
+            return
+        connectors = await self._client.list_connectors()
+        if connectors:
+            lines = ["**Connectors:**\n"]
+            for c in connectors:
+                status = "\u2713" if c.configured else "\u2717"
+                provider = f" ({c.provider})" if c.provider else ""
+                lines.append(
+                    f"- {status} **{c.name}**{provider} — {c.category}"
+                )
+            self._add_system_message(container, "\n".join(lines))
+        else:
+            self._add_system_message(container, "No connectors available.")
+
+    async def _cmd_setup(self) -> None:
+        """Re-run the setup wizard."""
+        from firefly_dworkers_cli.tui.screens.setup import SetupScreen
+
+        await self.push_screen(
+            SetupScreen(self._config_mgr),
+            callback=self._on_setup_complete,
+        )
+
+    # ── Project commands ──────────────────────────────────────
+
+    async def _cmd_project(self, container: VerticalScroll, brief: str) -> None:
+        """Run a multi-worker project from a brief."""
+        if self._client is None:
+            self._add_system_message(container, "Client not connected.")
+            return
+
+        self._add_system_message(
+            container,
+            f"Starting project: **{brief[:60]}{'...' if len(brief) > 60 else ''}**",
+        )
+
+        content_widget = Markdown("", classes="msg-content")
+        msg_box = Vertical(classes="msg-box")
+        header = Static(
+            "\u2726 Project Orchestrator",
+            classes="msg-sender msg-sender-ai",
+        )
+        await container.mount(msg_box)
+        await msg_box.mount(header)
+        await msg_box.mount(content_widget)
+
+        indicator = Static(
+            "\u25cf\u25cf\u25cf orchestrating...", classes="streaming-indicator"
+        )
+        await msg_box.mount(indicator)
+        container.scroll_end(animate=False)
+
+        tokens: list[str] = []
+        self._is_streaming = True
+        try:
+            async for event in self._client.run_project(brief):
+                if event.type in ("project_start", "project_complete"):
+                    tokens.append(f"\n**{event.type}:** {event.content}\n")
+                elif event.type == "task_assigned":
+                    tokens.append(f"\n> Task assigned: {event.content}\n")
+                elif event.type == "task_complete":
+                    tokens.append(f"\n> Task complete: {event.content}\n")
+                elif event.type in ("token", "complete"):
+                    tokens.append(event.content)
+                elif event.type == "error":
+                    tokens.append(f"\n\n**Error:** {event.content}")
+                else:
+                    tokens.append(f"\n{event.content}")
+                await content_widget.update("".join(tokens))
+                container.scroll_end(animate=False)
+        except Exception as e:
+            tokens.append(f"\n\n**Error:** {e}")
+            await content_widget.update("".join(tokens))
+        self._is_streaming = False
+        indicator.remove()
+
+    # ── Messaging commands ────────────────────────────────────
+
+    def _get_messaging_tool(self, tool_name: str):
+        """Create a messaging tool instance from the config."""
+        config = self._config_mgr.config
+        if config is None:
+            return None
+
+        try:
+            from firefly_dworkers.tools.registry import tool_registry
+        except ImportError:
+            return None
+
+        if not tool_registry.has(tool_name):
+            return None
+
+        # Get connector config for this tool
+        connector_cfg = getattr(config.connectors, tool_name, None)
+        if connector_cfg is None:
+            return None
+
+        # Build kwargs from connector config
+        kwargs = connector_cfg.model_dump(exclude={"enabled", "provider", "credential_ref", "timeout"})
+        kwargs = {k: v for k, v in kwargs.items() if v}  # filter empty
+        return tool_registry.create(tool_name, **kwargs)
+
+    async def _cmd_send(self, container: VerticalScroll, arg: str) -> None:
+        """Send a message via a messaging tool.
+
+        Usage: /send <tool> <channel> <message>
+        Example: /send slack #general Hello from dworkers!
+        """
+        parts = arg.split(maxsplit=2)
+        if len(parts) < 3:
+            self._add_system_message(
+                container,
+                "Usage: `/send <tool> <channel> <message>`\n\n"
+                "Examples:\n"
+                "- `/send slack #general Hello!`\n"
+                "- `/send teams general Check this out`\n"
+                "- `/send email user@example.com Report attached`",
+            )
+            return
+
+        tool_name, channel, message = parts
+        tool = self._get_messaging_tool(tool_name)
+        if tool is None:
+            self._add_system_message(
+                container,
+                f"Messaging tool `{tool_name}` is not configured.\n\n"
+                "Available: slack, teams, email.\n"
+                "Configure via `~/.dworkers/config.yaml` or run `/setup`.",
+            )
+            return
+
+        self._add_system_message(
+            container, f"Sending via **{tool_name}** to `{channel}`..."
+        )
+        try:
+            result = await tool.execute(
+                action="send", channel=channel, content=message
+            )
+            msg_id = result.get("id", "unknown")
+            self._add_system_message(
+                container,
+                f"Message sent successfully (id: `{msg_id}`)",
+            )
+        except Exception as e:
+            self._add_system_message(
+                container, f"**Error sending message:** {e}"
+            )
+
+    async def _cmd_channels(self, container: VerticalScroll, arg: str) -> None:
+        """List channels for a messaging tool.
+
+        Usage: /channels <tool>
+        Example: /channels slack
+        """
+        tool_name = arg.strip()
+        if not tool_name:
+            self._add_system_message(
+                container,
+                "Usage: `/channels <tool>`\n\n"
+                "Examples:\n"
+                "- `/channels slack`\n"
+                "- `/channels teams`\n"
+                "- `/channels email`",
+            )
+            return
+
+        tool = self._get_messaging_tool(tool_name)
+        if tool is None:
+            self._add_system_message(
+                container,
+                f"Messaging tool `{tool_name}` is not configured.\n\n"
+                "Configure via `~/.dworkers/config.yaml` or run `/setup`.",
+            )
+            return
+
+        try:
+            result = await tool.execute(action="list_channels")
+            channels = result.get("channels", [])
+            if channels:
+                lines = [f"**{tool_name.title()} Channels:**\n"]
+                for ch in channels:
+                    lines.append(f"- `{ch}`")
+                self._add_system_message(container, "\n".join(lines))
+            else:
+                self._add_system_message(
+                    container, f"No channels found for {tool_name}."
+                )
+        except Exception as e:
+            self._add_system_message(
+                container, f"**Error listing channels:** {e}"
+            )
 
     # ── Actions ──────────────────────────────────────────────
 
