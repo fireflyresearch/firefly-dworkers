@@ -142,6 +142,13 @@ Screen {
     padding: 0 0 0 2;
 }
 
+.response-summary {
+    color: #475569;
+    text-style: italic;
+    padding: 0 0 0 2;
+    height: 1;
+}
+
 /* ── Input area ──────────────────────────────── */
 
 #input-area {

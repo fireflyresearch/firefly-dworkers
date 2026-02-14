@@ -25,7 +25,9 @@ from firefly_dworkers_cli.tui.backend.models import ChatMessage, Conversation
 from firefly_dworkers_cli.tui.backend.store import ConversationStore
 from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
 from firefly_dworkers_cli.tui.commands import CommandRouter
+from firefly_dworkers_cli.tui.response_timer import ResponseTimer
 from firefly_dworkers_cli.tui.theme import APP_CSS
+from firefly_dworkers_cli.tui.widgets.thinking_indicator import ThinkingIndicator
 
 # Known worker roles for @mention detection.
 _KNOWN_ROLES = {"analyst", "researcher", "data_analyst", "manager", "designer"}
@@ -252,13 +254,16 @@ class DworkersApp(App):
         content_widget = Markdown("", classes="msg-content")
         await msg_box.mount(content_widget)
 
-        indicator = Static("\u25cf\u25cf\u25cf working...", classes="streaming-indicator")
+        indicator = ThinkingIndicator()
         await msg_box.mount(indicator)
         message_list.scroll_end(animate=False)
 
         # Stream from client
+        timer = ResponseTimer()
+        timer.start()
         self._is_streaming = True
         tokens: list[str] = []
+        first_token_marked = False
 
         try:
             if self._client is not None:
@@ -273,6 +278,10 @@ class DworkersApp(App):
                             await content_widget.update("".join(tokens))
                             break
                         if event.type in ("token", "complete"):
+                            if not first_token_marked:
+                                first_token_marked = True
+                                timer.mark_first_token()
+                                indicator.set_streaming_mode(timer)
                             tokens.append(event.content)
                             await content_widget.update("".join(tokens))
                             message_list.scroll_end(animate=False)
@@ -290,8 +299,10 @@ class DworkersApp(App):
                     tokens.append(f"\n\n**Connection error:** {e}")
                     await content_widget.update("".join(tokens))
         finally:
+            timer.stop()
             self._is_streaming = False
             self._cancel_streaming = False
+            indicator.stop()
             indicator.remove()
 
         # Save agent message
@@ -308,10 +319,15 @@ class DworkersApp(App):
         self._store.add_message(self._conversation.id, agent_msg)
 
         # Update token count (rough estimate)
-        self._total_tokens += len(final_content.split()) * 2
+        token_estimate = self._estimate_tokens(final_content)
+        self._total_tokens += token_estimate
         self.query_one("#token-count", Static).update(
             f"{self._total_tokens:,} tokens"
         )
+
+        # Response summary footer
+        summary = Static(timer.format_summary(token_estimate), classes="response-summary")
+        await msg_box.mount(summary)
 
         message_list.scroll_end(animate=False)
         self._update_input_hint()
@@ -333,6 +349,11 @@ class DworkersApp(App):
         container.mount(msg_box)
         msg_box.mount(content)
         container.scroll_end(animate=False)
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        """Rough token estimate: ~2 tokens per whitespace-delimited word."""
+        return len(text.split()) * 2
 
     def _extract_role(self, text: str) -> str | None:
         """Return the first known @role mention in the message text."""
@@ -509,7 +530,14 @@ class DworkersApp(App):
         await box.mount(header)
         await box.mount(content)
 
+        indicator = ThinkingIndicator()
+        await box.mount(indicator)
+        container.scroll_end(animate=False)
+
+        timer = ResponseTimer()
+        timer.start()
         tokens: list[str] = []
+        first_token_marked = False
         self._is_streaming = True
         try:
             async for event in self._client.execute_plan(plan_name):
@@ -518,6 +546,10 @@ class DworkersApp(App):
                     await content.update("".join(tokens))
                     break
                 if event.type in ("token", "complete"):
+                    if not first_token_marked:
+                        first_token_marked = True
+                        timer.mark_first_token()
+                        indicator.set_streaming_mode(timer)
                     tokens.append(event.content)
                     await content.update("".join(tokens))
                     container.scroll_end(animate=False)
@@ -528,8 +560,21 @@ class DworkersApp(App):
             tokens.append(f"\n\n**Error:** {e}")
             await content.update("".join(tokens))
         finally:
+            timer.stop()
             self._is_streaming = False
             self._cancel_streaming = False
+            indicator.stop()
+            indicator.remove()
+
+        # Response summary
+        final_content = "".join(tokens)
+        token_estimate = self._estimate_tokens(final_content)
+        self._total_tokens += token_estimate
+        self.query_one("#token-count", Static).update(
+            f"{self._total_tokens:,} tokens"
+        )
+        summary = Static(timer.format_summary(token_estimate), classes="response-summary")
+        await box.mount(summary)
 
     def _cmd_load(self, container: VerticalScroll, conv_id: str) -> None:
         """Load a saved conversation by ID."""
@@ -632,13 +677,14 @@ class DworkersApp(App):
         await msg_box.mount(header)
         await msg_box.mount(content_widget)
 
-        indicator = Static(
-            "\u25cf\u25cf\u25cf orchestrating...", classes="streaming-indicator"
-        )
+        indicator = ThinkingIndicator()
         await msg_box.mount(indicator)
         container.scroll_end(animate=False)
 
+        timer = ResponseTimer()
+        timer.start()
         tokens: list[str] = []
+        first_token_marked = False
         self._is_streaming = True
         try:
             async for event in self._client.run_project(brief):
@@ -647,12 +693,20 @@ class DworkersApp(App):
                     await content_widget.update("".join(tokens))
                     break
                 if event.type in ("project_start", "project_complete"):
+                    if not first_token_marked:
+                        first_token_marked = True
+                        timer.mark_first_token()
+                        indicator.set_streaming_mode(timer)
                     tokens.append(f"\n**{event.type}:** {event.content}\n")
                 elif event.type == "task_assigned":
                     tokens.append(f"\n> Task assigned: {event.content}\n")
                 elif event.type == "task_complete":
                     tokens.append(f"\n> Task complete: {event.content}\n")
                 elif event.type in ("token", "complete"):
+                    if not first_token_marked:
+                        first_token_marked = True
+                        timer.mark_first_token()
+                        indicator.set_streaming_mode(timer)
                     tokens.append(event.content)
                 elif event.type == "error":
                     tokens.append(f"\n\n**Error:** {event.content}")
@@ -664,9 +718,21 @@ class DworkersApp(App):
             tokens.append(f"\n\n**Error:** {e}")
             await content_widget.update("".join(tokens))
         finally:
+            timer.stop()
             self._is_streaming = False
             self._cancel_streaming = False
+            indicator.stop()
             indicator.remove()
+
+        # Response summary
+        final_content = "".join(tokens)
+        token_estimate = self._estimate_tokens(final_content)
+        self._total_tokens += token_estimate
+        self.query_one("#token-count", Static).update(
+            f"{self._total_tokens:,} tokens"
+        )
+        summary = Static(timer.format_summary(token_estimate), classes="response-summary")
+        await msg_box.mount(summary)
 
     # ── Messaging commands ────────────────────────────────────
 
