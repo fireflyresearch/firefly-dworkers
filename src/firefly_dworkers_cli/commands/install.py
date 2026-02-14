@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -73,17 +75,23 @@ def install(
     install_spec = f"firefly-dworkers[{extras_str}]"
 
     console.print()
+
+    # Prefer uv, fall back to pip
+    if shutil.which("uv") or Path(sys.executable).parent.joinpath("uv").exists():
+        install_cmd = [sys.executable, "-m", "uv", "pip", "install", install_spec]
+        tool_name = "uv pip"
+    else:
+        install_cmd = [sys.executable, "-m", "pip", "install", install_spec]
+        tool_name = "pip"
+
     info_panel(
         "Installing",
-        f"Running: [bold]uv pip install {install_spec}[/bold]",
+        f"Running: [bold]{tool_name} install {install_spec}[/bold]",
         console=console,
     )
     console.print()
 
-    result = subprocess.run(
-        [sys.executable, "-m", "uv", "pip", "install", install_spec],
-        check=False,
-    )
+    result = subprocess.run(install_cmd, check=False)
 
     console.print()
     if result.returncode == 0:
@@ -91,7 +99,7 @@ def install(
     else:
         error_panel(
             "Installation Failed",
-            f"uv pip install exited with code {result.returncode}.",
+            f"{tool_name} install exited with code {result.returncode}.",
             console=console,
         )
         raise typer.Exit(code=result.returncode)

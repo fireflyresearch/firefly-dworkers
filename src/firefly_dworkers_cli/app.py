@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import click
 import typer
 
 from firefly_dworkers_cli.commands.check import check
@@ -49,7 +50,8 @@ def main(
     autonomy: str | None = typer.Option(  # noqa: B008
         None,
         "--autonomy",
-        help="Override autonomy level (manual/semi_supervised/autonomous).",
+        help="Override autonomy level.",
+        click_type=click.Choice(["manual", "semi_supervised", "autonomous"]),
     ),
 ) -> None:
     """Firefly Dworkers -- Digital Workers as a Service CLI."""
