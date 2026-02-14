@@ -36,6 +36,9 @@ from firefly_dworkers_cli.tui.widgets.thinking_indicator import ThinkingIndicato
 _KNOWN_ROLES = {"analyst", "researcher", "data_analyst", "manager", "designer"}
 _MENTION_RE = re.compile(r"@(\w+)")
 
+# Streaming timeout in seconds (5 minutes).
+_STREAMING_TIMEOUT = 300
+
 
 class DworkersApp(App):
     """Chat-first TUI for dworkers — inspired by Claude Code."""
@@ -105,7 +108,7 @@ class DworkersApp(App):
             yield Static("\u2502", classes="status-sep")
             yield Static("semi-supervised", classes="status-item status-autonomy", id="status-autonomy")
             yield Static("\u2502", classes="status-sep")
-            yield Static("0 tokens", classes="status-item status-tokens", id="token-count")
+            yield Static("~0 tokens", classes="status-item status-tokens", id="token-count")
             yield Static("\u25cf connected", classes="status-connection status-connected", id="conn-status")
 
     async def on_mount(self) -> None:
@@ -271,35 +274,39 @@ class DworkersApp(App):
         try:
             if self._client is not None:
                 try:
-                    async for event in self._client.run_worker(
-                        role,
-                        text,
-                        conversation_id=self._conversation.id,
-                    ):
-                        if self._cancel_streaming.is_set():
-                            tokens.append("\n\n_[Cancelled by user]_")
-                            await content_widget.update("".join(tokens))
-                            break
-                        if event.type in ("token", "complete"):
-                            if not first_token_marked:
-                                first_token_marked = True
-                                timer.mark_first_token()
-                                indicator.set_streaming_mode(timer)
-                            tokens.append(event.content)
-                            await content_widget.update("".join(tokens))
-                            message_list.scroll_end(animate=False)
-                        elif event.type == "tool_call":
-                            tool_box = Vertical(classes="tool-call")
-                            await message_list.mount(tool_box)
-                            await tool_box.mount(
-                                Static(f"\u2699 {event.content}", classes="tool-call-header")
-                            )
-                            message_list.scroll_end(animate=False)
-                        elif event.type == "error":
-                            tokens.append(f"\n\n**Error:** {event.content}")
-                            await content_widget.update("".join(tokens))
+                    async with asyncio.timeout(_STREAMING_TIMEOUT):
+                        async for event in self._client.run_worker(
+                            role,
+                            text,
+                            conversation_id=self._conversation.id,
+                        ):
+                            if self._cancel_streaming.is_set():
+                                tokens.append("\n\n_[Cancelled by user]_")
+                                await content_widget.update("".join(tokens))
+                                break
+                            if event.type in ("token", "complete"):
+                                if not first_token_marked:
+                                    first_token_marked = True
+                                    timer.mark_first_token()
+                                    indicator.set_streaming_mode(timer)
+                                tokens.append(event.content)
+                                await content_widget.update("".join(tokens))
+                                message_list.scroll_end(animate=False)
+                            elif event.type == "tool_call":
+                                tool_box = Vertical(classes="tool-call")
+                                await message_list.mount(tool_box)
+                                await tool_box.mount(
+                                    Static(f"\u2699 {event.content}", classes="tool-call-header")
+                                )
+                                message_list.scroll_end(animate=False)
+                            elif event.type == "error":
+                                tokens.append(f"\n\n**Error:** {event.content}")
+                                await content_widget.update("".join(tokens))
+                except TimeoutError:
+                    tokens.append("\n\n**Error:** Response timed out after 5 minutes.")
+                    await content_widget.update("".join(tokens))
                 except Exception as e:
-                    tokens.append(f"\n\n**Connection error:** {e}")
+                    tokens.append(f"\n\n**Error:** {e}")
                     await content_widget.update("".join(tokens))
         finally:
             timer.stop()
@@ -327,7 +334,7 @@ class DworkersApp(App):
         token_estimate = self._estimate_tokens(final_content)
         self._total_tokens += token_estimate
         self.query_one("#token-count", Static).update(
-            f"{self._total_tokens:,} tokens"
+            f"~{self._total_tokens:,} tokens"
         )
 
         # Response summary footer
@@ -604,25 +611,30 @@ class DworkersApp(App):
         first_token_marked = False
         self._is_streaming = True
         try:
-            async for event in self._client.execute_plan(plan_name):
-                if self._cancel_streaming.is_set():
-                    tokens.append("\n\n_[Cancelled by user]_")
-                    await content.update("".join(tokens))
-                    break
-                if event.type in ("token", "complete"):
-                    if not first_token_marked:
-                        first_token_marked = True
-                        timer.mark_first_token()
-                        indicator.set_streaming_mode(timer)
-                    tokens.append(event.content)
-                    await content.update("".join(tokens))
-                    container.scroll_end(animate=False)
-                elif event.type == "error":
-                    tokens.append(f"\n\n**Error:** {event.content}")
-                    await content.update("".join(tokens))
-        except Exception as e:
-            tokens.append(f"\n\n**Error:** {e}")
-            await content.update("".join(tokens))
+            try:
+                async with asyncio.timeout(_STREAMING_TIMEOUT):
+                    async for event in self._client.execute_plan(plan_name):
+                        if self._cancel_streaming.is_set():
+                            tokens.append("\n\n_[Cancelled by user]_")
+                            await content.update("".join(tokens))
+                            break
+                        if event.type in ("token", "complete"):
+                            if not first_token_marked:
+                                first_token_marked = True
+                                timer.mark_first_token()
+                                indicator.set_streaming_mode(timer)
+                            tokens.append(event.content)
+                            await content.update("".join(tokens))
+                            container.scroll_end(animate=False)
+                        elif event.type == "error":
+                            tokens.append(f"\n\n**Error:** {event.content}")
+                            await content.update("".join(tokens))
+            except TimeoutError:
+                tokens.append("\n\n**Error:** Response timed out after 5 minutes.")
+                await content.update("".join(tokens))
+            except Exception as e:
+                tokens.append(f"\n\n**Error:** {e}")
+                await content.update("".join(tokens))
         finally:
             timer.stop()
             self._is_streaming = False
@@ -635,7 +647,7 @@ class DworkersApp(App):
         token_estimate = self._estimate_tokens(final_content)
         self._total_tokens += token_estimate
         self.query_one("#token-count", Static).update(
-            f"{self._total_tokens:,} tokens"
+            f"~{self._total_tokens:,} tokens"
         )
         summary = Static(timer.format_summary(token_estimate), classes="response-summary")
         await box.mount(summary)
@@ -751,36 +763,41 @@ class DworkersApp(App):
         first_token_marked = False
         self._is_streaming = True
         try:
-            async for event in self._client.run_project(brief):
-                if self._cancel_streaming.is_set():
-                    tokens.append("\n\n_[Cancelled by user]_")
-                    await content_widget.update("".join(tokens))
-                    break
-                if event.type in ("project_start", "project_complete"):
-                    if not first_token_marked:
-                        first_token_marked = True
-                        timer.mark_first_token()
-                        indicator.set_streaming_mode(timer)
-                    tokens.append(f"\n**{event.type}:** {event.content}\n")
-                elif event.type == "task_assigned":
-                    tokens.append(f"\n> Task assigned: {event.content}\n")
-                elif event.type == "task_complete":
-                    tokens.append(f"\n> Task complete: {event.content}\n")
-                elif event.type in ("token", "complete"):
-                    if not first_token_marked:
-                        first_token_marked = True
-                        timer.mark_first_token()
-                        indicator.set_streaming_mode(timer)
-                    tokens.append(event.content)
-                elif event.type == "error":
-                    tokens.append(f"\n\n**Error:** {event.content}")
-                else:
-                    tokens.append(f"\n{event.content}")
+            try:
+                async with asyncio.timeout(_STREAMING_TIMEOUT):
+                    async for event in self._client.run_project(brief):
+                        if self._cancel_streaming.is_set():
+                            tokens.append("\n\n_[Cancelled by user]_")
+                            await content_widget.update("".join(tokens))
+                            break
+                        if event.type in ("project_start", "project_complete"):
+                            if not first_token_marked:
+                                first_token_marked = True
+                                timer.mark_first_token()
+                                indicator.set_streaming_mode(timer)
+                            tokens.append(f"\n**{event.type}:** {event.content}\n")
+                        elif event.type == "task_assigned":
+                            tokens.append(f"\n> Task assigned: {event.content}\n")
+                        elif event.type == "task_complete":
+                            tokens.append(f"\n> Task complete: {event.content}\n")
+                        elif event.type in ("token", "complete"):
+                            if not first_token_marked:
+                                first_token_marked = True
+                                timer.mark_first_token()
+                                indicator.set_streaming_mode(timer)
+                            tokens.append(event.content)
+                        elif event.type == "error":
+                            tokens.append(f"\n\n**Error:** {event.content}")
+                        else:
+                            tokens.append(f"\n{event.content}")
+                        await content_widget.update("".join(tokens))
+                        container.scroll_end(animate=False)
+            except TimeoutError:
+                tokens.append("\n\n**Error:** Response timed out after 5 minutes.")
                 await content_widget.update("".join(tokens))
-                container.scroll_end(animate=False)
-        except Exception as e:
-            tokens.append(f"\n\n**Error:** {e}")
-            await content_widget.update("".join(tokens))
+            except Exception as e:
+                tokens.append(f"\n\n**Error:** {e}")
+                await content_widget.update("".join(tokens))
         finally:
             timer.stop()
             self._is_streaming = False
@@ -793,7 +810,7 @@ class DworkersApp(App):
         token_estimate = self._estimate_tokens(final_content)
         self._total_tokens += token_estimate
         self.query_one("#token-count", Static).update(
-            f"{self._total_tokens:,} tokens"
+            f"~{self._total_tokens:,} tokens"
         )
         summary = Static(timer.format_summary(token_estimate), classes="response-summary")
         await msg_box.mount(summary)
