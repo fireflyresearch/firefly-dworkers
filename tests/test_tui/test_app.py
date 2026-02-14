@@ -73,3 +73,13 @@ class TestAsyncMessageMethods:
     def test_add_system_message_is_async(self):
         app = DworkersApp()
         assert asyncio.iscoroutinefunction(app._add_system_message)
+
+
+class TestStreamingCancellation:
+    def test_cancel_streaming_is_asyncio_event(self):
+        app = DworkersApp()
+        assert isinstance(app._cancel_streaming, asyncio.Event)
+
+    def test_cancel_streaming_starts_unset(self):
+        app = DworkersApp()
+        assert not app._cancel_streaming.is_set()

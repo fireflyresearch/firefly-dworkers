@@ -10,6 +10,7 @@ wizard to configure the LLM provider and API keys.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import re
 import uuid
@@ -66,7 +67,7 @@ class DworkersApp(App):
         self._conversation: Conversation | None = None
         self._total_tokens = 0
         self._is_streaming = False
-        self._cancel_streaming = False
+        self._cancel_streaming = asyncio.Event()
         self._router = CommandRouter(
             client=None, store=self._store, config_mgr=self._config_mgr,
         )
@@ -188,7 +189,7 @@ class DworkersApp(App):
         """Handle Enter to submit and Escape to cancel streaming."""
         # Escape cancels streaming
         if event.key == "escape" and self._is_streaming:
-            self._cancel_streaming = True
+            self._cancel_streaming.set()
             event.prevent_default()
             event.stop()
             return
@@ -272,7 +273,7 @@ class DworkersApp(App):
                         text,
                         conversation_id=self._conversation.id,
                     ):
-                        if self._cancel_streaming:
+                        if self._cancel_streaming.is_set():
                             tokens.append("\n\n_[Cancelled by user]_")
                             await content_widget.update("".join(tokens))
                             break
@@ -300,7 +301,7 @@ class DworkersApp(App):
         finally:
             timer.stop()
             self._is_streaming = False
-            self._cancel_streaming = False
+            self._cancel_streaming.clear()
             indicator.stop()
             indicator.remove()
 
@@ -538,7 +539,7 @@ class DworkersApp(App):
         self._is_streaming = True
         try:
             async for event in self._client.execute_plan(plan_name):
-                if self._cancel_streaming:
+                if self._cancel_streaming.is_set():
                     tokens.append("\n\n_[Cancelled by user]_")
                     await content.update("".join(tokens))
                     break
@@ -559,7 +560,7 @@ class DworkersApp(App):
         finally:
             timer.stop()
             self._is_streaming = False
-            self._cancel_streaming = False
+            self._cancel_streaming.clear()
             indicator.stop()
             indicator.remove()
 
@@ -685,7 +686,7 @@ class DworkersApp(App):
         self._is_streaming = True
         try:
             async for event in self._client.run_project(brief):
-                if self._cancel_streaming:
+                if self._cancel_streaming.is_set():
                     tokens.append("\n\n_[Cancelled by user]_")
                     await content_widget.update("".join(tokens))
                     break
@@ -717,7 +718,7 @@ class DworkersApp(App):
         finally:
             timer.stop()
             self._is_streaming = False
-            self._cancel_streaming = False
+            self._cancel_streaming.clear()
             indicator.stop()
             indicator.remove()
 
