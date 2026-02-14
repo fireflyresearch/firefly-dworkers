@@ -42,6 +42,19 @@ class ChartSpec(BaseModel):
     stacked: bool = False
 
 
+class ContentZone(BaseModel):
+    """Safe content area for a slide, in EMU."""
+
+    left: int = 0
+    top: int = 0
+    width: int = 0
+    height: int = 0
+    title_ph_idx: int | None = None
+    body_ph_idx: int | None = None
+    placeholder_map: dict[str, int] = Field(default_factory=dict)
+    # e.g. {"title": 21, "subtitle": 19, "date": 20}
+
+
 class SlideSpec(BaseModel):
     """Specification for creating a slide."""
 
@@ -61,6 +74,7 @@ class SlideSpec(BaseModel):
     transition: str = ""
     content_blocks: list[ContentBlock] = Field(default_factory=list)
     images: list[ImagePlacement] = Field(default_factory=list)
+    content_zone: ContentZone | None = None
 
 
 class PlaceholderInfo(BaseModel):

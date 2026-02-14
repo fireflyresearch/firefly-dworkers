@@ -1,4 +1,4 @@
-"""Spreadsheet tools -- Excel and Google Sheets."""
+"""Spreadsheet tools -- Excel, Google Sheets, and design pipeline."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from firefly_dworkers.tools.spreadsheet.models import (
     SpreadsheetOperation,
     WorkbookData,
 )
+from firefly_dworkers.tools.spreadsheet.pipeline import SpreadsheetPipelineTool
 
 __all__ = [
     "CellData",
@@ -22,6 +23,7 @@ __all__ = [
     "SheetData",
     "SheetSpec",
     "SpreadsheetOperation",
+    "SpreadsheetPipelineTool",
     "SpreadsheetPort",
     "WorkbookData",
 ]

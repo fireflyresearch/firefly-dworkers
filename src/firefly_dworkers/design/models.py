@@ -134,6 +134,31 @@ class ContentBrief(BaseModel):
     image_requests: list[ImageRequest] = Field(default_factory=list)
 
 
+class PlaceholderZone(BaseModel):
+    """Position and size of a single placeholder within a layout."""
+
+    idx: int
+    name: str = ""
+    ph_type: str = ""  # title, body, subtitle, date_time, footer, custom
+    left: float = 0.0  # inches
+    top: float = 0.0  # inches
+    width: float = 0.0  # inches
+    height: float = 0.0  # inches
+
+
+class LayoutZone(BaseModel):
+    """Extracted zone information for a single slide layout."""
+
+    layout_name: str
+    placeholders: list[PlaceholderZone] = Field(default_factory=list)
+    content_left: float = 0.0  # inches — safe content area
+    content_top: float = 0.0
+    content_width: float = 0.0
+    content_height: float = 0.0
+    title_ph_idx: int | None = None  # which ph is the true title
+    body_ph_idx: int | None = None  # which ph is the largest body area
+
+
 class DesignProfile(BaseModel):
     """Design DNA extracted from reference templates."""
 
@@ -152,6 +177,7 @@ class DesignProfile(BaseModel):
     line_spacing: float = 1.15
     styles: list[str] = Field(default_factory=list)
     master_slide_names: list[str] = Field(default_factory=list)
+    layout_zones: dict[str, LayoutZone] = Field(default_factory=dict)
 
 
 class ResolvedChart(BaseModel):

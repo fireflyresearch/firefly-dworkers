@@ -177,13 +177,33 @@ class PowerPointTool(PresentationTool):
         for spec in slides:
             layout = self._find_layout(prs, spec.layout)
             slide = prs.slides.add_slide(layout)
+            cz = spec.content_zone  # may be None
 
-            if slide.shapes.title and spec.title:
+            # ── Title placement (zone-aware) ──
+            title_filled = False
+            if cz and cz.title_ph_idx is not None and spec.title:
+                for shape in slide.placeholders:
+                    if shape.placeholder_format.idx == cz.title_ph_idx:
+                        shape.text_frame.text = spec.title
+                        if spec.title_style:
+                            self._apply_text_style(shape.text_frame, spec.title_style)
+                        title_filled = True
+                        break
+            if not title_filled and slide.shapes.title and spec.title:
                 slide.shapes.title.text = spec.title
                 if spec.title_style:
                     self._apply_text_style(slide.shapes.title.text_frame, spec.title_style)
 
-            body_ph = self._find_body_placeholder(slide)
+            # ── Fill additional mapped placeholders (cover slides, etc.) ──
+            if cz and cz.placeholder_map:
+                ph_map = cz.placeholder_map
+                for shape in slide.placeholders:
+                    idx = shape.placeholder_format.idx
+                    if idx == ph_map.get("subtitle") and spec.subtitle:
+                        shape.text_frame.text = spec.subtitle
+
+            # ── Body placeholder (zone-aware) ──
+            body_ph = self._find_body_placeholder(slide, cz)
             if body_ph:
                 if spec.bullet_points:
                     from pptx.util import Pt as _Pt
@@ -207,13 +227,13 @@ class PowerPointTool(PresentationTool):
                     self._apply_text_style(body_ph.text_frame, spec.body_style)
 
             if spec.table:
-                self._add_table(slide, spec.table)
+                self._add_table(slide, spec.table, cz)
 
             if spec.chart:
-                self._add_chart(slide, spec.chart)
+                self._add_chart(slide, spec.chart, cz)
 
             if spec.image_path:
-                self._add_image(slide, spec.image_path)
+                self._add_image(slide, spec.image_path, cz)
 
             for img in spec.images:
                 if img.file_path:
@@ -336,26 +356,44 @@ class PowerPointTool(PresentationTool):
         return prs.slide_layouts[0]
 
     @staticmethod
-    def _find_body_placeholder(slide: Any) -> Any:
+    def _find_body_placeholder(slide: Any, content_zone: Any = None) -> Any:
         """Find the body/content placeholder in a slide.
 
-        Tries standard idx 1 first, then idx 13 (common in custom templates),
-        then any non-title text placeholder.
+        When *content_zone* is provided, uses its ``body_ph_idx`` for a
+        direct lookup.  Falls back to largest non-title text placeholder
+        by area, then legacy idx-based search.
         """
+        if content_zone and content_zone.body_ph_idx is not None:
+            for shape in slide.placeholders:
+                if shape.placeholder_format.idx == content_zone.body_ph_idx:
+                    return shape
+        # Fallback: largest non-title text placeholder by area
+        best, best_area = None, 0
+        for shape in slide.placeholders:
+            if shape.placeholder_format.idx == 0:
+                continue
+            if not shape.has_text_frame:
+                continue
+            area = (shape.width or 0) * (shape.height or 0)
+            if area > best_area:
+                best_area = area
+                best = shape
+        if best is not None:
+            return best
+        # Legacy fallback
         for target_idx in (1, 13, 14):
             for shape in slide.placeholders:
                 if shape.placeholder_format.idx == target_idx:
                     return shape
-        # Fallback: any non-title placeholder with a text frame
         for shape in slide.placeholders:
             if shape.placeholder_format.idx != 0 and shape.has_text_frame:
                 return shape
         return None
 
     @staticmethod
-    def _add_table(slide: Any, table_spec: Any) -> None:
+    def _add_table(slide: Any, table_spec: Any, content_zone: Any = None) -> None:
         from pptx.enum.text import PP_ALIGN
-        from pptx.util import Inches, Pt
+        from pptx.util import Emu, Inches, Pt
 
         if hasattr(table_spec, "headers"):
             headers = table_spec.headers
@@ -380,9 +418,16 @@ class PowerPointTool(PresentationTool):
         header_font_size = float(_attr("header_font_size", 10.0))
         cell_font_size = float(_attr("cell_font_size", 9.0))
 
+        if content_zone and content_zone.left:
+            tbl_left = Emu(content_zone.left)
+            tbl_top = Emu(content_zone.top)
+            tbl_width = Emu(content_zone.width)
+        else:
+            tbl_left, tbl_top, tbl_width = Inches(1), Inches(2), Inches(8)
+
         row_height = Inches(0.35)
         table_shape = slide.shapes.add_table(
-            n_rows, n_cols, Inches(1), Inches(2), Inches(8), row_height * n_rows
+            n_rows, n_cols, tbl_left, tbl_top, tbl_width, row_height * n_rows
         )
         table = table_shape.table
 
@@ -437,7 +482,7 @@ class PowerPointTool(PresentationTool):
                 _set_cell_margins(cell)
 
     @staticmethod
-    def _add_chart(slide: Any, chart_spec: Any) -> None:
+    def _add_chart(slide: Any, chart_spec: Any, content_zone: Any = None) -> None:
         """Add a native chart to a slide using ChartRenderer."""
         from firefly_dworkers.design.charts import ChartRenderer
         from firefly_dworkers.design.models import DataSeries, ResolvedChart
@@ -453,14 +498,29 @@ class PowerPointTool(PresentationTool):
             show_data_labels=chart_spec.show_data_labels,
             stacked=chart_spec.stacked,
         )
-        renderer.render_for_pptx(resolved, slide)
+        kwargs: dict[str, float] = {}
+        if content_zone and content_zone.left:
+            kwargs = dict(
+                left=float(content_zone.left),
+                top=float(content_zone.top),
+                width=float(content_zone.width),
+                height=float(content_zone.height),
+            )
+        renderer.render_for_pptx(resolved, slide, **kwargs)
 
     @staticmethod
-    def _add_image(slide: Any, image_path: str) -> None:
+    def _add_image(slide: Any, image_path: str, content_zone: Any = None) -> None:
         """Add a single image from a file path to a slide."""
-        from pptx.util import Inches
+        from pptx.util import Emu, Inches
 
-        slide.shapes.add_picture(image_path, Inches(1), Inches(2), Inches(4), Inches(3))
+        if content_zone and content_zone.left:
+            left = Emu(content_zone.left)
+            top = Emu(content_zone.top)
+            width = Emu(int(content_zone.width * 0.5))
+            height = Emu(int(content_zone.height * 0.6))
+        else:
+            left, top, width, height = Inches(1), Inches(2), Inches(4), Inches(3)
+        slide.shapes.add_picture(image_path, left, top, width, height)
 
     @staticmethod
     def _add_image_placement(slide: Any, img: Any) -> None:

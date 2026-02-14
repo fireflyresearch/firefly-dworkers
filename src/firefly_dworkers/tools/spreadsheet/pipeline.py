@@ -1,23 +1,20 @@
-"""DesignPipelineTool -- full pipeline from content brief to rendered PPTX.
+"""SpreadsheetPipelineTool -- full pipeline from content brief to rendered XLSX.
 
 Orchestrates:
 1. Template analysis → DesignProfile
 2. DesignEngine.design(brief, profile) → DesignSpec
 3. Autonomy checkpoint: design_spec_approval
-4. Image resolution
-5. DesignSpec → SlideSpec conversion
-6. Autonomy checkpoint: pre_render
-7. PowerPoint rendering
-8. Optional VLM validation
-9. Save to output_path
-10. Autonomy checkpoint: deliverable
+4. DesignSpec → SheetSpec conversion
+5. Autonomy checkpoint: pre_render
+6. Excel rendering
+7. Save to output_path
+8. Autonomy checkpoint: deliverable
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import tempfile
 from collections.abc import Sequence
 from typing import Any
 
@@ -39,16 +36,15 @@ from firefly_dworkers.types import AutonomyLevel
 logger = logging.getLogger(__name__)
 
 
-@tool_registry.register("design_pipeline", category="presentation")
-class DesignPipelineTool(BaseTool):
-    """Full design pipeline: content brief → DesignEngine → conversion → PPTX rendering."""
+@tool_registry.register("spreadsheet_design_pipeline", category="spreadsheet")
+class SpreadsheetPipelineTool(BaseTool):
+    """Full design pipeline: content brief → DesignEngine → conversion → XLSX rendering."""
 
     def __init__(
         self,
         *,
         model: Any = "",
         vlm_model: str = "",
-        enable_validation: bool = False,
         autonomy_level: AutonomyLevel = AutonomyLevel.AUTONOMOUS,
         checkpoint_handler: Any = None,
         timeout: float = 300.0,
@@ -58,33 +54,33 @@ class DesignPipelineTool(BaseTool):
             ParameterSpec(
                 name="title",
                 type_annotation="str",
-                description="Presentation title.",
+                description="Spreadsheet title (used in content brief).",
                 required=True,
             ),
             ParameterSpec(
                 name="sections",
                 type_annotation="list",
-                description="List of content section dicts with heading, content, bullet_points, etc.",
+                description="List of content section dicts with heading, content, etc.",
                 required=True,
             ),
             ParameterSpec(
                 name="template_path",
                 type_annotation="str",
-                description="Path to a PPTX template file for design extraction.",
+                description="Path to an XLSX template file for design extraction.",
                 required=False,
                 default="",
             ),
             ParameterSpec(
                 name="output_path",
                 type_annotation="str",
-                description="Path to save the generated PPTX file.",
+                description="Path to save the generated XLSX file.",
                 required=False,
                 default="",
             ),
             ParameterSpec(
                 name="audience",
                 type_annotation="str",
-                description="Target audience for the presentation.",
+                description="Target audience for the spreadsheet.",
                 required=False,
                 default="",
             ),
@@ -98,7 +94,7 @@ class DesignPipelineTool(BaseTool):
             ParameterSpec(
                 name="purpose",
                 type_annotation="str",
-                description="Purpose of the presentation.",
+                description="Purpose of the spreadsheet.",
                 required=False,
                 default="",
             ),
@@ -106,13 +102,6 @@ class DesignPipelineTool(BaseTool):
                 name="datasets",
                 type_annotation="list",
                 description="List of dataset dicts for chart generation.",
-                required=False,
-                default=[],
-            ),
-            ParameterSpec(
-                name="image_requests",
-                type_annotation="list",
-                description="List of image request dicts (file, url, ai_generate, stock).",
                 required=False,
                 default=[],
             ),
@@ -133,13 +122,13 @@ class DesignPipelineTool(BaseTool):
         ]
 
         super().__init__(
-            "design_pipeline",
+            "spreadsheet_design_pipeline",
             description=(
                 "Full design pipeline: content brief → DesignEngine → "
-                "conversion → PPTX rendering. Produces professional "
-                "presentations from structured content."
+                "conversion → XLSX rendering. Produces professional "
+                "spreadsheets from structured content."
             ),
-            tags=["presentation", "design", "pipeline"],
+            tags=["spreadsheet", "design", "pipeline"],
             parameters=params,
             timeout=timeout,
             guards=guards,
@@ -147,7 +136,6 @@ class DesignPipelineTool(BaseTool):
 
         self._model = model
         self._vlm_model = vlm_model
-        self._enable_validation = enable_validation
         self._autonomy_level = autonomy_level
         self._checkpoint_handler = checkpoint_handler
         self._last_artifact: bytes | None = None
@@ -158,7 +146,7 @@ class DesignPipelineTool(BaseTool):
         return self._last_artifact
 
     async def _execute(self, **kwargs: Any) -> dict[str, Any]:
-        """Execute the full design pipeline."""
+        """Execute the full spreadsheet design pipeline."""
         # 1. Build ContentBrief from kwargs
         brief = self._build_brief(kwargs)
 
@@ -180,83 +168,52 @@ class DesignPipelineTool(BaseTool):
         # 4. Checkpoint: design_spec_approval
         if not await self._maybe_checkpoint(
             "design_spec_approval",
-            {"title": brief.title, "slide_count": len(spec.slides), "chart_count": len(spec.charts)},
+            {
+                "title": brief.title,
+                "sheet_count": len(spec.sheets),
+                "chart_count": len(spec.charts),
+            },
         ):
             return {"success": False, "reason": "Design spec rejected at checkpoint"}
 
-        # 5. Resolve images (if any image_requests)
-        if brief.image_requests:
-            from firefly_dworkers.design.images import ImageResolver
+        # 5. Convert DesignSpec → list[SheetSpec]
+        from firefly_dworkers.design.converter import convert_design_spec_to_sheet_specs
 
-            resolver = ImageResolver()
-            spec.images = await resolver.resolve_all(brief.image_requests)
+        sheet_specs = convert_design_spec_to_sheet_specs(spec)
 
-        # 6. Convert DesignSpec → list[SlideSpec]
-        from firefly_dworkers.design.converter import convert_design_spec_to_slide_specs
-
-        slide_specs = convert_design_spec_to_slide_specs(spec)
-
-        # 7. Checkpoint: pre_render
+        # 6. Checkpoint: pre_render
         if not await self._maybe_checkpoint(
             "pre_render",
-            {"slide_count": len(slide_specs)},
+            {"sheet_count": len(sheet_specs)},
         ):
             return {"success": False, "reason": "Pre-render rejected at checkpoint"}
 
-        # 8. PowerPointTool().create(template, slides) → bytes
-        if not tool_registry.has("powerpoint"):
-            raise ValueError("PowerPoint tool not registered")
+        # 7. ExcelTool().create(sheets=sheet_specs) → bytes
+        excel_tool = tool_registry.create("excel")
+        xlsx_bytes = await excel_tool.create(sheets=sheet_specs)
 
-        pptx_tool = tool_registry.create("powerpoint")
-        pptx_bytes = await pptx_tool.create(template=template_path, slides=slide_specs)
+        self._last_artifact = xlsx_bytes
 
-        # 8.5 VLM visual refinement (when validation enabled)
-        if self._enable_validation and self._vlm_model:
-            try:
-                from firefly_dworkers.design.refinement import VisualRefiner
-
-                refiner = VisualRefiner(
-                    vlm_model=self._vlm_model,
-                    max_iterations=2,
-                    score_threshold=7.0,
-                )
-                pptx_bytes = await refiner.refine(
-                    pptx_bytes,
-                    layout_zones=profile.layout_zones if profile else None,
-                )
-            except Exception:
-                logger.warning("Visual refinement failed, using unrefined output")
-
-        self._last_artifact = pptx_bytes
-
-        # 9. Optional VLM validation
-        validation_result = None
-        if self._enable_validation and self._vlm_model:
-            validation_result = await self._validate_output(pptx_bytes)
-
-        # 10. Save to output_path if provided
+        # 8. Save to output_path if provided
         output_path = kwargs.get("output_path", "")
         if output_path:
             with open(output_path, "wb") as f:
-                f.write(pptx_bytes)
+                f.write(xlsx_bytes)
             output_path = os.path.abspath(output_path)
 
-        # 11. Checkpoint: deliverable
+        # 9. Checkpoint: deliverable
         await self._maybe_checkpoint(
             "deliverable",
-            {"output_path": output_path, "bytes_length": len(pptx_bytes)},
+            {"output_path": output_path, "bytes_length": len(xlsx_bytes)},
         )
 
         result: dict[str, Any] = {
             "success": True,
-            "slide_count": len(slide_specs),
-            "bytes_length": len(pptx_bytes),
+            "sheet_count": len(sheet_specs),
+            "bytes_length": len(xlsx_bytes),
         }
         if output_path:
             result["output_path"] = output_path
-        if validation_result is not None:
-            result["validation_score"] = validation_result.overall_score
-            result["validation_summary"] = validation_result.summary
         return result
 
     # -- Brief construction --------------------------------------------------
@@ -269,13 +226,10 @@ class DesignPipelineTool(BaseTool):
             if isinstance(s, ContentSection):
                 sections.append(s)
             elif isinstance(s, dict):
-                # Handle nested models
-                key_metrics = []
-                for m in s.get("key_metrics", []):
-                    key_metrics.append(
-                        KeyMetric(**m) if isinstance(m, dict) else m
-                    )
-
+                key_metrics = [
+                    KeyMetric(**m) if isinstance(m, dict) else m
+                    for m in s.get("key_metrics", [])
+                ]
                 table_data = None
                 if s.get("table_data"):
                     td = s["table_data"]
@@ -291,7 +245,6 @@ class DesignPipelineTool(BaseTool):
                         image_ref=s.get("image_ref", ""),
                         table_data=table_data,
                         emphasis=s.get("emphasis", "normal"),
-                        speaker_notes=s.get("speaker_notes", ""),
                     )
                 )
 
@@ -322,7 +275,7 @@ class DesignPipelineTool(BaseTool):
                 image_requests.append(ImageRequest(**ir))
 
         return ContentBrief(
-            output_type=OutputType.PRESENTATION,
+            output_type=OutputType.SPREADSHEET,
             title=kwargs["title"],
             sections=sections,
             audience=kwargs.get("audience", ""),
@@ -349,25 +302,5 @@ class DesignPipelineTool(BaseTool):
         if self._checkpoint_handler is None:
             return True
         return await self._checkpoint_handler.on_checkpoint(
-            "design_pipeline", checkpoint_type, deliverable
+            "spreadsheet_design_pipeline", checkpoint_type, deliverable
         )
-
-    # -- VLM validation helper -----------------------------------------------
-
-    async def _validate_output(self, pptx_bytes: bytes) -> Any:
-        """Run VLM validation on the generated PPTX."""
-        from firefly_dworkers.design.validator import SlideValidator
-
-        # Write to temp file for the validator
-        with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as tmp:
-            tmp.write(pptx_bytes)
-            tmp_path = tmp.name
-
-        try:
-            validator = SlideValidator(model=self._vlm_model)
-            return await validator.validate(tmp_path)
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass

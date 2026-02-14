@@ -718,3 +718,219 @@ class TestPowerPointTableStyling:
         xml = table.cell(0, 0)._tc.xml
         assert "marL" in xml
         assert "marT" in xml
+
+
+# ── Zone-aware placement tests ──────────────────────────────────────────
+
+from firefly_dworkers.tools.presentation.models import ContentZone
+
+
+def _make_content_zone(
+    left_inches: float = 0.5,
+    top_inches: float = 1.5,
+    width_inches: float = 9.0,
+    height_inches: float = 5.0,
+    title_ph_idx: int | None = 0,
+    body_ph_idx: int | None = 1,
+    **extra_map: int,
+) -> ContentZone:
+    """Helper to create a ContentZone in EMU from inch values."""
+    EMU = 914400
+    ph_map: dict[str, int] = {}
+    if title_ph_idx is not None:
+        ph_map["title"] = title_ph_idx
+    if body_ph_idx is not None:
+        ph_map["body"] = body_ph_idx
+    ph_map.update(extra_map)
+    return ContentZone(
+        left=int(left_inches * EMU),
+        top=int(top_inches * EMU),
+        width=int(width_inches * EMU),
+        height=int(height_inches * EMU),
+        title_ph_idx=title_ph_idx,
+        body_ph_idx=body_ph_idx,
+        placeholder_map=ph_map,
+    )
+
+
+class TestZoneAwareTitlePlacement:
+    async def test_title_uses_zone_title_ph_idx(self) -> None:
+        """When content_zone has title_ph_idx, title is written to that placeholder."""
+        pptx_mod = pytest.importorskip("pptx")
+        tool = PowerPointTool()
+        # Default pptx has ph[0] as title — zone also says ph[0]
+        cz = _make_content_zone(title_ph_idx=0)
+        slides = [SlideSpec(title="Zone Title", content="body", content_zone=cz).model_dump()]
+        result = await tool.execute(action="create", slides=slides)
+        assert result["success"] is True
+        prs = pptx_mod.Presentation(io.BytesIO(tool.artifact_bytes))
+        # Title should be filled
+        assert prs.slides[0].shapes.title.text == "Zone Title"
+
+    async def test_title_fallback_without_zone(self) -> None:
+        """Without content_zone, falls back to slide.shapes.title."""
+        pptx_mod = pytest.importorskip("pptx")
+        tool = PowerPointTool()
+        slides = [SlideSpec(title="Fallback Title", content="body").model_dump()]
+        result = await tool.execute(action="create", slides=slides)
+        assert result["success"] is True
+        prs = pptx_mod.Presentation(io.BytesIO(tool.artifact_bytes))
+        assert prs.slides[0].shapes.title.text == "Fallback Title"
+
+
+class TestZoneAwareBodyPlacement:
+    async def test_body_uses_zone_body_ph_idx(self) -> None:
+        """When content_zone has body_ph_idx, content goes to that placeholder."""
+        pptx_mod = pytest.importorskip("pptx")
+        tool = PowerPointTool()
+        cz = _make_content_zone(body_ph_idx=1)
+        slides = [SlideSpec(title="T", content="Zone body", content_zone=cz).model_dump()]
+        result = await tool.execute(action="create", slides=slides)
+        assert result["success"] is True
+        prs = pptx_mod.Presentation(io.BytesIO(tool.artifact_bytes))
+        body_ph = None
+        for shape in prs.slides[0].placeholders:
+            if shape.placeholder_format.idx == 1:
+                body_ph = shape
+                break
+        assert body_ph is not None
+        assert body_ph.text_frame.text == "Zone body"
+
+    async def test_body_fallback_largest_area(self) -> None:
+        """Without zone, body picks largest non-title text placeholder."""
+        pptx_mod = pytest.importorskip("pptx")
+        tool = PowerPointTool()
+        slides = [SlideSpec(title="T", content="Fallback body").model_dump()]
+        result = await tool.execute(action="create", slides=slides)
+        assert result["success"] is True
+        prs = pptx_mod.Presentation(io.BytesIO(tool.artifact_bytes))
+        # Should still find a body placeholder via fallback
+        body_found = False
+        for shape in prs.slides[0].placeholders:
+            if shape.has_text_frame and shape.text_frame.text == "Fallback body":
+                body_found = True
+                break
+        assert body_found
+
+
+class TestZoneAwareChartPlacement:
+    async def test_chart_positioned_in_content_zone(self) -> None:
+        """When content_zone is set, chart should use zone coordinates."""
+        pptx_mod = pytest.importorskip("pptx")
+        tool = PowerPointTool()
+        cz = _make_content_zone(left_inches=1.5, top_inches=2.0, width_inches=7.0, height_inches=4.0)
+        slides = [
+            SlideSpec(
+                title="Chart",
+                chart=ChartSpec(
+                    chart_type="bar",
+                    title="Sales",
+                    categories=["A", "B"],
+                    series=[{"name": "S1", "values": [10, 20]}],
+                ),
+                content_zone=cz,
+            ).model_dump(),
+        ]
+        result = await tool.execute(action="create", slides=slides)
+        assert result["success"] is True
+        prs = pptx_mod.Presentation(io.BytesIO(tool.artifact_bytes))
+        chart_shapes = [s for s in prs.slides[0].shapes if s.has_chart]
+        assert len(chart_shapes) >= 1
+        chart_shape = chart_shapes[0]
+        # Chart should be positioned at the zone coordinates
+        EMU = 914400
+        assert chart_shape.left == int(1.5 * EMU)
+        assert chart_shape.top == int(2.0 * EMU)
+
+
+class TestZoneAwareTablePlacement:
+    async def test_table_positioned_in_content_zone(self) -> None:
+        """When content_zone is set, table should use zone left/top/width."""
+        pptx_mod = pytest.importorskip("pptx")
+        tool = PowerPointTool()
+        cz = _make_content_zone(left_inches=1.5, top_inches=2.0, width_inches=7.0, height_inches=4.0)
+        slides = [
+            SlideSpec(
+                title="Table",
+                table=TableSpec(headers=["A", "B"], rows=[["1", "2"]]),
+                content_zone=cz,
+            ).model_dump(),
+        ]
+        result = await tool.execute(action="create", slides=slides)
+        assert result["success"] is True
+        prs = pptx_mod.Presentation(io.BytesIO(tool.artifact_bytes))
+        table_shapes = [s for s in prs.slides[0].shapes if s.has_table]
+        assert len(table_shapes) >= 1
+        tbl_shape = table_shapes[0]
+        EMU = 914400
+        assert tbl_shape.left == int(1.5 * EMU)
+        assert tbl_shape.top == int(2.0 * EMU)
+
+
+class TestZoneAwareImagePlacement:
+    async def test_image_positioned_in_content_zone(self) -> None:
+        """When content_zone is set, image should be within zone bounds."""
+        pptx_mod = pytest.importorskip("pptx")
+        png_data = _make_minimal_png()
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            f.write(png_data)
+            tmp_path = f.name
+
+        try:
+            tool = PowerPointTool()
+            cz = _make_content_zone(left_inches=1.5, top_inches=2.0, width_inches=7.0, height_inches=4.0)
+            slides = [
+                SlideSpec(title="Image", image_path=tmp_path, content_zone=cz).model_dump(),
+            ]
+            result = await tool.execute(action="create", slides=slides)
+            assert result["success"] is True
+            prs = pptx_mod.Presentation(io.BytesIO(tool.artifact_bytes))
+            pic_shapes = [s for s in prs.slides[0].shapes if s.shape_type == 13]  # noqa: PLR2004
+            assert len(pic_shapes) >= 1
+            EMU = 914400
+            pic = pic_shapes[0]
+            assert pic.left == int(1.5 * EMU)
+            assert pic.top == int(2.0 * EMU)
+        finally:
+            os.unlink(tmp_path)
+
+
+class TestZoneFallbackPreservesDefaults:
+    async def test_all_positions_fallback_without_zone(self) -> None:
+        """Without content_zone, all elements use existing hardcoded defaults."""
+        pptx_mod = pytest.importorskip("pptx")
+        from pptx.util import Inches
+
+        png_data = _make_minimal_png()
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            f.write(png_data)
+            tmp_path = f.name
+
+        try:
+            tool = PowerPointTool()
+            slides = [
+                SlideSpec(
+                    title="Defaults",
+                    content="text",
+                    table=TableSpec(headers=["H"], rows=[["r"]]),
+                    image_path=tmp_path,
+                ).model_dump(),
+            ]
+            result = await tool.execute(action="create", slides=slides)
+            assert result["success"] is True
+            prs = pptx_mod.Presentation(io.BytesIO(tool.artifact_bytes))
+            slide = prs.slides[0]
+
+            # Table at default position: Inches(1), Inches(2)
+            table_shapes = [s for s in slide.shapes if s.has_table]
+            assert len(table_shapes) >= 1
+            assert table_shapes[0].left == Inches(1)
+            assert table_shapes[0].top == Inches(2)
+
+            # Image at default position: Inches(1), Inches(2)
+            pic_shapes = [s for s in slide.shapes if s.shape_type == 13]  # noqa: PLR2004
+            assert len(pic_shapes) >= 1
+            assert pic_shapes[0].left == Inches(1)
+            assert pic_shapes[0].top == Inches(2)
+        finally:
+            os.unlink(tmp_path)

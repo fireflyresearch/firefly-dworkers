@@ -27,6 +27,7 @@ from firefly_dworkers.design.models import (
     DataSet,
     DesignProfile,
     DesignSpec,
+    LayoutZone,
     OutputType,
     ResolvedChart,
 )
@@ -280,6 +281,7 @@ class DesignEngine:
             system_prompt=self._build_layout_system_prompt(
                 brief.output_type,
                 available_layouts=profile.available_layouts or None,
+                layout_zones=profile.layout_zones or None,
             ),
         )
 
@@ -291,6 +293,7 @@ class DesignEngine:
     def _build_layout_system_prompt(
         output_type: OutputType,
         available_layouts: list[str] | None = None,
+        layout_zones: dict[str, LayoutZone] | None = None,
     ) -> str:
         """Build the system prompt for layout design based on output type."""
         base = (
@@ -311,6 +314,48 @@ class DesignEngine:
                 "Choose appropriate layouts like 'Title Slide', "
                 "'Title and Content', 'Two Content', 'Section Header', etc."
             )
+
+        # Classify layouts by structural properties when zone data available
+        if available_layouts and layout_zones:
+            # Cover layouts: have a non-standard title ph (idx > 10) and no body
+            cover_layouts = [
+                name for name, zone in layout_zones.items()
+                if zone.title_ph_idx is not None
+                and zone.title_ph_idx > 10
+                and zone.body_ph_idx is None
+            ]
+            # Content layouts: have a body placeholder
+            content_layouts = [
+                name for name, zone in layout_zones.items()
+                if zone.body_ph_idx is not None
+            ]
+            # Back cover: layouts with no body and no title (or minimal phs)
+            back_layouts = [
+                name for name in available_layouts
+                if name in layout_zones
+                and layout_zones[name].title_ph_idx is not None
+                and layout_zones[name].body_ph_idx is None
+                and name not in cover_layouts
+                and len([
+                    ph for ph in layout_zones[name].placeholders
+                    if ph.ph_type not in ("date_time", "slide_number", "footer")
+                ]) <= 2
+            ]
+            if cover_layouts:
+                layout_instruction += (
+                    f"\nFor the FIRST slide (cover/title), use: "
+                    f"{', '.join(repr(n) for n in cover_layouts)}."
+                )
+            if content_layouts:
+                layout_instruction += (
+                    f"\nFor content slides, use: "
+                    f"{', '.join(repr(n) for n in content_layouts)}."
+                )
+            if back_layouts:
+                layout_instruction += (
+                    f"\nFor the LAST slide (back cover), use: "
+                    f"{', '.join(repr(n) for n in back_layouts)}."
+                )
 
         type_instructions = {
             OutputType.PRESENTATION: (

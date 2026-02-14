@@ -1,16 +1,15 @@
-"""DesignPipelineTool -- full pipeline from content brief to rendered PPTX.
+"""DocumentPipelineTool -- full pipeline from content brief to rendered DOCX/PDF.
 
 Orchestrates:
 1. Template analysis → DesignProfile
 2. DesignEngine.design(brief, profile) → DesignSpec
 3. Autonomy checkpoint: design_spec_approval
 4. Image resolution
-5. DesignSpec → SlideSpec conversion
+5. DesignSpec → SectionSpec conversion
 6. Autonomy checkpoint: pre_render
-7. PowerPoint rendering
-8. Optional VLM validation
-9. Save to output_path
-10. Autonomy checkpoint: deliverable
+7. Word or PDF rendering
+8. Save to output_path
+9. Autonomy checkpoint: deliverable
 """
 
 from __future__ import annotations
@@ -39,16 +38,54 @@ from firefly_dworkers.types import AutonomyLevel
 logger = logging.getLogger(__name__)
 
 
-@tool_registry.register("design_pipeline", category="presentation")
-class DesignPipelineTool(BaseTool):
-    """Full design pipeline: content brief → DesignEngine → conversion → PPTX rendering."""
+def _sections_to_html(section_specs: list[Any]) -> str:
+    """Convert a list of SectionSpecs to simple HTML for PDF rendering."""
+    parts: list[str] = []
+    for sec in section_specs:
+        if sec.page_break_before:
+            parts.append('<div style="page-break-before: always;"></div>')
+        if sec.heading:
+            level = min(sec.heading_level, 6)
+            parts.append(f"<h{level}>{sec.heading}</h{level}>")
+        if sec.content:
+            parts.append(f"<p>{sec.content}</p>")
+        for point in sec.bullet_points:
+            parts.append(f"<li>{point}</li>")
+        if sec.bullet_points:
+            parts[-len(sec.bullet_points)] = "<ul>" + parts[-len(sec.bullet_points)]
+            parts[-1] = parts[-1] + "</ul>"
+        for item in sec.numbered_list:
+            parts.append(f"<li>{item}</li>")
+        if sec.numbered_list:
+            parts[-len(sec.numbered_list)] = "<ol>" + parts[-len(sec.numbered_list)]
+            parts[-1] = parts[-1] + "</ol>"
+        if sec.callout:
+            parts.append(f'<div class="callout">{sec.callout}</div>')
+        if sec.table:
+            parts.append(_table_to_html(sec.table))
+    return "\n".join(parts)
+
+
+def _table_to_html(table: Any) -> str:
+    """Convert a TableData to an HTML table."""
+    rows = ["<table>"]
+    if table.headers:
+        rows.append("<tr>" + "".join(f"<th>{h}</th>" for h in table.headers) + "</tr>")
+    for row in table.rows:
+        rows.append("<tr>" + "".join(f"<td>{c}</td>" for c in row) + "</tr>")
+    rows.append("</table>")
+    return "\n".join(rows)
+
+
+@tool_registry.register("document_design_pipeline", category="document")
+class DocumentPipelineTool(BaseTool):
+    """Full design pipeline: content brief → DesignEngine → conversion → DOCX/PDF rendering."""
 
     def __init__(
         self,
         *,
         model: Any = "",
         vlm_model: str = "",
-        enable_validation: bool = False,
         autonomy_level: AutonomyLevel = AutonomyLevel.AUTONOMOUS,
         checkpoint_handler: Any = None,
         timeout: float = 300.0,
@@ -58,7 +95,7 @@ class DesignPipelineTool(BaseTool):
             ParameterSpec(
                 name="title",
                 type_annotation="str",
-                description="Presentation title.",
+                description="Document title.",
                 required=True,
             ),
             ParameterSpec(
@@ -70,21 +107,28 @@ class DesignPipelineTool(BaseTool):
             ParameterSpec(
                 name="template_path",
                 type_annotation="str",
-                description="Path to a PPTX template file for design extraction.",
+                description="Path to a DOCX template file for design extraction.",
                 required=False,
                 default="",
             ),
             ParameterSpec(
                 name="output_path",
                 type_annotation="str",
-                description="Path to save the generated PPTX file.",
+                description="Path to save the generated document.",
                 required=False,
                 default="",
             ),
             ParameterSpec(
+                name="output_format",
+                type_annotation="str",
+                description="Output format: 'docx' or 'pdf'. Default: 'docx'.",
+                required=False,
+                default="docx",
+            ),
+            ParameterSpec(
                 name="audience",
                 type_annotation="str",
-                description="Target audience for the presentation.",
+                description="Target audience for the document.",
                 required=False,
                 default="",
             ),
@@ -98,7 +142,7 @@ class DesignPipelineTool(BaseTool):
             ParameterSpec(
                 name="purpose",
                 type_annotation="str",
-                description="Purpose of the presentation.",
+                description="Purpose of the document.",
                 required=False,
                 default="",
             ),
@@ -133,13 +177,13 @@ class DesignPipelineTool(BaseTool):
         ]
 
         super().__init__(
-            "design_pipeline",
+            "document_design_pipeline",
             description=(
                 "Full design pipeline: content brief → DesignEngine → "
-                "conversion → PPTX rendering. Produces professional "
-                "presentations from structured content."
+                "conversion → DOCX/PDF rendering. Produces professional "
+                "documents from structured content."
             ),
-            tags=["presentation", "design", "pipeline"],
+            tags=["document", "design", "pipeline"],
             parameters=params,
             timeout=timeout,
             guards=guards,
@@ -147,7 +191,6 @@ class DesignPipelineTool(BaseTool):
 
         self._model = model
         self._vlm_model = vlm_model
-        self._enable_validation = enable_validation
         self._autonomy_level = autonomy_level
         self._checkpoint_handler = checkpoint_handler
         self._last_artifact: bytes | None = None
@@ -158,9 +201,10 @@ class DesignPipelineTool(BaseTool):
         return self._last_artifact
 
     async def _execute(self, **kwargs: Any) -> dict[str, Any]:
-        """Execute the full design pipeline."""
+        """Execute the full document design pipeline."""
         # 1. Build ContentBrief from kwargs
-        brief = self._build_brief(kwargs)
+        output_format = kwargs.get("output_format", "docx")
+        brief = self._build_brief(kwargs, output_format=output_format)
 
         # 2. Analyze template → DesignProfile (if template_path provided)
         profile = None
@@ -180,7 +224,11 @@ class DesignPipelineTool(BaseTool):
         # 4. Checkpoint: design_spec_approval
         if not await self._maybe_checkpoint(
             "design_spec_approval",
-            {"title": brief.title, "slide_count": len(spec.slides), "chart_count": len(spec.charts)},
+            {
+                "title": brief.title,
+                "section_count": len(spec.document_sections),
+                "chart_count": len(spec.charts),
+            },
         ):
             return {"success": False, "reason": "Design spec rejected at checkpoint"}
 
@@ -191,91 +239,70 @@ class DesignPipelineTool(BaseTool):
             resolver = ImageResolver()
             spec.images = await resolver.resolve_all(brief.image_requests)
 
-        # 6. Convert DesignSpec → list[SlideSpec]
-        from firefly_dworkers.design.converter import convert_design_spec_to_slide_specs
+        # 6. Convert DesignSpec → list[SectionSpec]
+        from firefly_dworkers.design.converter import convert_design_spec_to_section_specs
 
-        slide_specs = convert_design_spec_to_slide_specs(spec)
+        section_specs = convert_design_spec_to_section_specs(spec)
 
         # 7. Checkpoint: pre_render
         if not await self._maybe_checkpoint(
             "pre_render",
-            {"slide_count": len(slide_specs)},
+            {"section_count": len(section_specs)},
         ):
             return {"success": False, "reason": "Pre-render rejected at checkpoint"}
 
-        # 8. PowerPointTool().create(template, slides) → bytes
-        if not tool_registry.has("powerpoint"):
-            raise ValueError("PowerPoint tool not registered")
+        # 8. Render: WordTool or PDFTool based on output_format
+        if output_format == "pdf":
+            html_content = _sections_to_html(section_specs)
+            if brief.title:
+                html_content = f"<h1>{brief.title}</h1>\n{html_content}"
+            pdf_tool = tool_registry.create("pdf")
+            doc_bytes = await pdf_tool.generate(html_content, content_type="html")
+        else:
+            word_tool = tool_registry.create("word")
+            doc_bytes = await word_tool.create(title=brief.title, sections=section_specs)
 
-        pptx_tool = tool_registry.create("powerpoint")
-        pptx_bytes = await pptx_tool.create(template=template_path, slides=slide_specs)
+        self._last_artifact = doc_bytes
 
-        # 8.5 VLM visual refinement (when validation enabled)
-        if self._enable_validation and self._vlm_model:
-            try:
-                from firefly_dworkers.design.refinement import VisualRefiner
-
-                refiner = VisualRefiner(
-                    vlm_model=self._vlm_model,
-                    max_iterations=2,
-                    score_threshold=7.0,
-                )
-                pptx_bytes = await refiner.refine(
-                    pptx_bytes,
-                    layout_zones=profile.layout_zones if profile else None,
-                )
-            except Exception:
-                logger.warning("Visual refinement failed, using unrefined output")
-
-        self._last_artifact = pptx_bytes
-
-        # 9. Optional VLM validation
-        validation_result = None
-        if self._enable_validation and self._vlm_model:
-            validation_result = await self._validate_output(pptx_bytes)
-
-        # 10. Save to output_path if provided
+        # 9. Save to output_path if provided
         output_path = kwargs.get("output_path", "")
         if output_path:
             with open(output_path, "wb") as f:
-                f.write(pptx_bytes)
+                f.write(doc_bytes)
             output_path = os.path.abspath(output_path)
 
-        # 11. Checkpoint: deliverable
+        # 10. Checkpoint: deliverable
         await self._maybe_checkpoint(
             "deliverable",
-            {"output_path": output_path, "bytes_length": len(pptx_bytes)},
+            {"output_path": output_path, "bytes_length": len(doc_bytes)},
         )
 
         result: dict[str, Any] = {
             "success": True,
-            "slide_count": len(slide_specs),
-            "bytes_length": len(pptx_bytes),
+            "section_count": len(section_specs),
+            "bytes_length": len(doc_bytes),
+            "output_format": output_format,
         }
         if output_path:
             result["output_path"] = output_path
-        if validation_result is not None:
-            result["validation_score"] = validation_result.overall_score
-            result["validation_summary"] = validation_result.summary
         return result
 
     # -- Brief construction --------------------------------------------------
 
     @staticmethod
-    def _build_brief(kwargs: dict[str, Any]) -> ContentBrief:
+    def _build_brief(kwargs: dict[str, Any], *, output_format: str = "docx") -> ContentBrief:
         """Build a ContentBrief from tool kwargs."""
+        output_type = OutputType.PDF if output_format == "pdf" else OutputType.DOCUMENT
+
         sections = []
         for s in kwargs.get("sections", []):
             if isinstance(s, ContentSection):
                 sections.append(s)
             elif isinstance(s, dict):
-                # Handle nested models
-                key_metrics = []
-                for m in s.get("key_metrics", []):
-                    key_metrics.append(
-                        KeyMetric(**m) if isinstance(m, dict) else m
-                    )
-
+                key_metrics = [
+                    KeyMetric(**m) if isinstance(m, dict) else m
+                    for m in s.get("key_metrics", [])
+                ]
                 table_data = None
                 if s.get("table_data"):
                     td = s["table_data"]
@@ -291,7 +318,6 @@ class DesignPipelineTool(BaseTool):
                         image_ref=s.get("image_ref", ""),
                         table_data=table_data,
                         emphasis=s.get("emphasis", "normal"),
-                        speaker_notes=s.get("speaker_notes", ""),
                     )
                 )
 
@@ -322,7 +348,7 @@ class DesignPipelineTool(BaseTool):
                 image_requests.append(ImageRequest(**ir))
 
         return ContentBrief(
-            output_type=OutputType.PRESENTATION,
+            output_type=output_type,
             title=kwargs["title"],
             sections=sections,
             audience=kwargs.get("audience", ""),
@@ -349,25 +375,5 @@ class DesignPipelineTool(BaseTool):
         if self._checkpoint_handler is None:
             return True
         return await self._checkpoint_handler.on_checkpoint(
-            "design_pipeline", checkpoint_type, deliverable
+            "document_design_pipeline", checkpoint_type, deliverable
         )
-
-    # -- VLM validation helper -----------------------------------------------
-
-    async def _validate_output(self, pptx_bytes: bytes) -> Any:
-        """Run VLM validation on the generated PPTX."""
-        from firefly_dworkers.design.validator import SlideValidator
-
-        # Write to temp file for the validator
-        with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as tmp:
-            tmp.write(pptx_bytes)
-            tmp_path = tmp.name
-
-        try:
-            validator = SlideValidator(model=self._vlm_model)
-            return await validator.validate(tmp_path)
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
