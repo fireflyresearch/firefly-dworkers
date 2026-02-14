@@ -288,6 +288,24 @@ class SetupScreen(Screen):
 
     def _save_config(self) -> None:
         """Save configuration and dismiss the setup screen."""
+        # Validate: need either detected providers or a valid manual key
+        if self._manual_api_key:
+            provider = self._detect_provider_from_key(self._manual_api_key)
+            if provider is None:
+                self._show_error(
+                    "Unrecognized API key format. "
+                    "Expected prefixes: sk- (OpenAI), sk-ant-/ant- (Anthropic), gsk_ (Groq)."
+                )
+                return
+            if len(self._manual_api_key.strip()) < 10:
+                self._show_error("API key seems too short. Please check and try again.")
+                return
+        elif not self._detected_providers:
+            self._show_error(
+                "No API keys detected. Please enter an API key or set one in your environment."
+            )
+            return
+
         # Determine model
         model = self._selected_model or "openai:gpt-4o"
 
@@ -311,6 +329,18 @@ class SetupScreen(Screen):
         # Load and register
         config = self._config_mgr.load()
         self.dismiss(config)
+
+    def _show_error(self, message: str) -> None:
+        """Display a validation error on the setup screen."""
+        try:
+            error_label = self.query_one("#setup-error", Label)
+            error_label.update(message)
+            error_label.display = True
+        except Exception:
+            # Error label doesn't exist yet — mount one
+            container = self.query_one("#setup-container")
+            label = Label(message, id="setup-error", classes="setup-error")
+            container.mount(label, before=self.query_one("#setup-actions"))
 
     def _skip_setup(self) -> None:
         """Skip setup, create a minimal default config."""

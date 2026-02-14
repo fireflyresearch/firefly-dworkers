@@ -40,6 +40,7 @@ _WELCOME_TEXT = """\
     /team          List available workers
     /plan          List workflow plans
     /conversations List saved conversations
+    /load <id>     Load a saved conversation
     /config        Current configuration
     /connectors    Connector statuses
     /status        Current session info
@@ -56,6 +57,7 @@ Available commands:
   /plan <name>       Execute a named plan
   /project <brief>   Run a multi-worker project
   /conversations     List all saved conversations
+  /load <id>         Load a saved conversation
   /new               Start a fresh conversation
   /status            Show current session status
   /config            Show current configuration
@@ -176,10 +178,6 @@ class DworkersApp(App):
         # Focus the input
         self.query_one("#prompt-input", TextArea).focus()
 
-    def on_text_area_changed(self, event: TextArea.Changed) -> None:
-        """Auto-grow the text area as user types."""
-        pass  # TextArea handles this naturally
-
     async def on_key(self, event) -> None:
         """Handle Enter to submit (without shift)."""
         input_widget = self.query_one("#prompt-input", TextArea)
@@ -252,34 +250,34 @@ class DworkersApp(App):
         self._is_streaming = True
         tokens: list[str] = []
 
-        if self._client is not None:
-            try:
-                async for event in self._client.run_worker(
-                    role,
-                    text,
-                    conversation_id=self._conversation.id,
-                ):
-                    if event.type in ("token", "complete"):
-                        tokens.append(event.content)
-                        await content_widget.update("".join(tokens))
-                        message_list.scroll_end(animate=False)
-                    elif event.type == "tool_call":
-                        # Show tool call box
-                        tool_box = Vertical(classes="tool-call")
-                        await message_list.mount(tool_box)
-                        await tool_box.mount(
-                            Static(f"\u2699 {event.content}", classes="tool-call-header")
-                        )
-                        message_list.scroll_end(animate=False)
-                    elif event.type == "error":
-                        tokens.append(f"\n\n**Error:** {event.content}")
-                        await content_widget.update("".join(tokens))
-            except Exception as e:
-                tokens.append(f"\n\n**Connection error:** {e}")
-                await content_widget.update("".join(tokens))
-
-        self._is_streaming = False
-        indicator.remove()
+        try:
+            if self._client is not None:
+                try:
+                    async for event in self._client.run_worker(
+                        role,
+                        text,
+                        conversation_id=self._conversation.id,
+                    ):
+                        if event.type in ("token", "complete"):
+                            tokens.append(event.content)
+                            await content_widget.update("".join(tokens))
+                            message_list.scroll_end(animate=False)
+                        elif event.type == "tool_call":
+                            tool_box = Vertical(classes="tool-call")
+                            await message_list.mount(tool_box)
+                            await tool_box.mount(
+                                Static(f"\u2699 {event.content}", classes="tool-call-header")
+                            )
+                            message_list.scroll_end(animate=False)
+                        elif event.type == "error":
+                            tokens.append(f"\n\n**Error:** {event.content}")
+                            await content_widget.update("".join(tokens))
+                except Exception as e:
+                    tokens.append(f"\n\n**Connection error:** {e}")
+                    await content_widget.update("".join(tokens))
+        finally:
+            self._is_streaming = False
+            indicator.remove()
 
         # Save agent message
         final_content = "".join(tokens)
@@ -370,6 +368,9 @@ class DworkersApp(App):
 
             case "/conversations":
                 self._cmd_conversations(message_list)
+
+            case "/load":
+                self._cmd_load(message_list, arg)
 
             case "/new":
                 self._conversation = None
@@ -479,6 +480,47 @@ class DworkersApp(App):
             self._add_system_message(container, "\n".join(lines))
         else:
             self._add_system_message(container, "No saved conversations.")
+
+    def _cmd_load(self, container: VerticalScroll, conv_id: str) -> None:
+        """Load a saved conversation by ID."""
+        conv_id = conv_id.strip()
+        if not conv_id:
+            self._add_system_message(
+                container,
+                "Usage: `/load <conversation-id>`\n\n"
+                "Use `/conversations` to see available IDs.",
+            )
+            return
+
+        conv = self._store.get_conversation(conv_id)
+        if conv is None:
+            self._add_system_message(
+                container, f"Conversation `{conv_id}` not found."
+            )
+            return
+
+        self._conversation = conv
+        container.remove_children()
+
+        # Replay messages into the UI
+        for msg in conv.messages:
+            if msg.is_ai:
+                msg_box = Vertical(classes="msg-box")
+                header = Static(
+                    f"\u2726 {msg.sender}",
+                    classes="msg-sender msg-sender-ai",
+                )
+                content = Markdown(msg.content, classes="msg-content")
+                container.mount(msg_box)
+                msg_box.mount(header)
+                msg_box.mount(content)
+            else:
+                self._add_user_message(container, msg.content)
+
+        self._add_system_message(
+            container,
+            f"Loaded conversation: **{conv.title}** ({len(conv.messages)} messages)",
+        )
 
     def _cmd_status(self, container: VerticalScroll) -> None:
         """Show current session status."""
@@ -612,8 +654,9 @@ class DworkersApp(App):
         except Exception as e:
             tokens.append(f"\n\n**Error:** {e}")
             await content_widget.update("".join(tokens))
-        self._is_streaming = False
-        indicator.remove()
+        finally:
+            self._is_streaming = False
+            indicator.remove()
 
     # ── Messaging commands ────────────────────────────────────
 

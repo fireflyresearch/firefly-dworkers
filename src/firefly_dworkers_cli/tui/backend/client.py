@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import AsyncIterator
 from typing import Any, Protocol, runtime_checkable
 
@@ -69,16 +70,21 @@ class DworkersClient(Protocol):
 
 
 async def create_client() -> DworkersClient:
-    """Auto-detect: try remote server first, fall back to local."""
+    """Auto-detect: try remote server first, fall back to local.
+
+    The remote server URL can be configured via the ``DWORKERS_SERVER_URL``
+    environment variable (default: ``http://localhost:8000``).
+    """
+    server_url = os.environ.get("DWORKERS_SERVER_URL", "http://localhost:8000")
     try:
         import httpx
 
         async with httpx.AsyncClient() as http:
-            resp = await http.get("http://localhost:8000/health", timeout=1.0)
+            resp = await http.get(f"{server_url}/health", timeout=1.0)
             if resp.status_code == 200:
                 from firefly_dworkers_cli.tui.backend.remote import RemoteClient
 
-                return RemoteClient(base_url="http://localhost:8000")
+                return RemoteClient(base_url=server_url)
     except Exception:
         pass
 

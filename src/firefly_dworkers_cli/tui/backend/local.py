@@ -176,12 +176,53 @@ class LocalClient:
         tenant_id: str = "default",
     ) -> AsyncIterator[StreamEvent]:
         try:
+            self._ensure_workers_registered()
+            from firefly_dworkers.plans.builder import PlanBuilder
             from firefly_dworkers.plans.registry import plan_registry
+            from firefly_dworkers.tenants.registry import tenant_registry
 
             plan = plan_registry.get(name)
+            config = tenant_registry.get(tenant_id)
+
+            step_names = [s.step_id for s in plan.steps]
+            yield StreamEvent(
+                type="token",
+                content=(
+                    f"**Executing plan:** {plan.name}\n"
+                    f"**Steps ({len(plan.steps)}):** {', '.join(step_names)}\n\n"
+                ),
+            )
+
+            # Build and run the pipeline
+            builder = PlanBuilder(plan, config)
+            engine = builder.build()
+            result = await engine.run(inputs=inputs or {})
+
+            # Report results per node
+            for node_id, node_result in result.outputs.items():
+                if node_result.skipped:
+                    yield StreamEvent(
+                        type="token",
+                        content=f"**{node_id}:** _skipped_\n\n",
+                    )
+                elif node_result.success:
+                    output = str(node_result.output) if node_result.output else "(no output)"
+                    yield StreamEvent(
+                        type="token",
+                        content=f"**{node_id}:** {output}\n\n",
+                    )
+                else:
+                    yield StreamEvent(
+                        type="token",
+                        content=f"**{node_id}:** Error — {node_result.error}\n\n",
+                    )
+
+            # Final summary
+            status = "completed successfully" if result.success else "completed with errors"
+            duration = f"{result.total_duration_ms:.0f}ms" if result.total_duration_ms else "N/A"
             yield StreamEvent(
                 type="complete",
-                content=f"Plan '{plan.name}' acknowledged ({len(plan.steps)} steps).",
+                content=f"\n---\n**Plan {status}** in {duration}.",
             )
         except Exception as exc:
             logger.warning("execute_plan failed: %s", exc, exc_info=True)
