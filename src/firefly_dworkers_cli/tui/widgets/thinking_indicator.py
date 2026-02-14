@@ -1,8 +1,7 @@
 """Animated thinking indicator widget.
 
-Displays a cycling spinner and rotating "thinking" verbs while the AI
-is processing, then transitions to an elapsed-time display once token
-streaming begins.
+Displays a "Thinking ..." animation while the AI is processing,
+then transitions to an elapsed-time display once token streaming begins.
 """
 
 from __future__ import annotations
@@ -11,18 +10,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from textual.widgets import Static
 
-SPINNER_FRAMES = ["\u00b7  ", "\u00b7\u00b7 ", "\u00b7\u00b7\u00b7", " \u00b7\u00b7", "  \u00b7", "   "]
-
-THINKING_VERBS = [
-    "Thinking",
-    "Reasoning",
-    "Analyzing",
-    "Processing",
-    "Contemplating",
-    "Synthesizing",
-    "Evaluating",
-    "Considering",
-]
+SPINNER_FRAMES = [".  ", ".. ", "...", ".. ", ".  ", "   "]
 
 
 @runtime_checkable
@@ -35,10 +23,7 @@ class _HasFormatElapsed(Protocol):
 class ThinkingIndicator(Static):
     """Animated spinner that shows the AI is working.
 
-    While mounted the widget cycles through two independent animations:
-
-    * **Spinner frames** rotate every ~100 ms.
-    * **Thinking verbs** rotate every ~3 s (every 30 spinner ticks).
+    Displays ``Thinking ...`` with animated dots every ~100 ms.
 
     Call :meth:`set_streaming_mode` once the first response token arrives
     to switch to an elapsed-time counter, or :meth:`stop` to halt all
@@ -47,13 +32,11 @@ class ThinkingIndicator(Static):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(
-            f"{THINKING_VERBS[0]}{SPINNER_FRAMES[0]}",
+            f"Thinking {SPINNER_FRAMES[0]}",
             classes="streaming-indicator",
             **kwargs,
         )
         self._spinner_index: int = 0
-        self._verb_index: int = 0
-        self._tick_count: int = 0
         self._spinner_timer: Any | None = None
         self._elapsed_timer: Any | None = None
         self._timer: _HasFormatElapsed | None = None
@@ -73,12 +56,7 @@ class ThinkingIndicator(Static):
         if not self._is_running:
             return
         self._spinner_index = (self._spinner_index + 1) % len(SPINNER_FRAMES)
-        self._tick_count += 1
-        if self._tick_count % 30 == 0:
-            self._verb_index = (self._verb_index + 1) % len(THINKING_VERBS)
-        self.update(
-            f"{THINKING_VERBS[self._verb_index]}{SPINNER_FRAMES[self._spinner_index]}"
-        )
+        self.update(f"Thinking {SPINNER_FRAMES[self._spinner_index]}")
 
     # -- Public API -----------------------------------------------------------
 

@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 
 from firefly_dworkers_cli.tui.widgets.thinking_indicator import (
     SPINNER_FRAMES,
-    THINKING_VERBS,
     ThinkingIndicator,
 )
 
@@ -29,20 +28,14 @@ class _FakeTimer:
 class TestThinkingIndicatorConstants:
     """Verify the module-level constant lists."""
 
-    def test_spinner_and_verb_constants(self) -> None:
-        """Both constant lists must have at least 4 entries."""
+    def test_spinner_frames_count(self) -> None:
+        """Spinner frame list must have at least 4 entries."""
         assert len(SPINNER_FRAMES) >= 4
-        assert len(THINKING_VERBS) >= 4
 
     def test_spinner_frames_are_dots(self) -> None:
         """Spinner should use simple dot animation."""
         for frame in SPINNER_FRAMES:
-            assert all(c == "\u00b7" or c == " " for c in frame), f"Frame '{frame}' contains non-dot characters"
-
-    def test_thinking_verbs_are_capitalized(self) -> None:
-        """Every thinking verb should start with an uppercase letter."""
-        for verb in THINKING_VERBS:
-            assert verb[0].isupper(), f"Expected capitalized, got {verb!r}"
+            assert all(c == "." or c == " " for c in frame), f"Frame '{frame}' contains non-dot characters"
 
 
 class TestThinkingIndicatorInit:
@@ -53,18 +46,11 @@ class TestThinkingIndicatorInit:
         indicator = ThinkingIndicator()
         assert "streaming-indicator" in indicator.classes
 
-    def test_initial_verb(self) -> None:
-        """The first verb index must point to 'Thinking'."""
-        indicator = ThinkingIndicator()
-        assert THINKING_VERBS[indicator._verb_index] == "Thinking"
-
     def test_initial_state(self) -> None:
-        """Freshly created indicator should be in running state with zeroed indices."""
+        """Freshly created indicator should be in running state with zeroed index."""
         indicator = ThinkingIndicator()
         assert indicator._is_running is True
         assert indicator._spinner_index == 0
-        assert indicator._verb_index == 0
-        assert indicator._tick_count == 0
         assert indicator._timer is None
 
 
@@ -84,39 +70,6 @@ class TestTick:
         for _ in range(len(SPINNER_FRAMES)):
             indicator._tick()
         assert indicator._spinner_index == 0
-
-    def test_animate_cycles_verb_after_30_ticks(self) -> None:
-        """The verb should advance after exactly 30 ``_tick()`` calls."""
-        indicator = ThinkingIndicator()
-        for _ in range(29):
-            indicator._tick()
-        assert indicator._verb_index == 0  # still first verb
-
-        indicator._tick()  # tick 30
-        assert indicator._verb_index == 1  # now second verb
-
-    def test_animate_cycles_verb_multiple_times(self) -> None:
-        """Verb should keep cycling at every 30-tick boundary."""
-        indicator = ThinkingIndicator()
-        for _ in range(60):
-            indicator._tick()
-        assert indicator._verb_index == 2  # third verb
-
-    def test_animate_increments_tick_count(self) -> None:
-        """Each ``_tick()`` call should bump the tick counter."""
-        indicator = ThinkingIndicator()
-        indicator._tick()
-        indicator._tick()
-        indicator._tick()
-        assert indicator._tick_count == 3
-
-    def test_animate_verb_wraps_around(self) -> None:
-        """Verb index wraps after cycling through all verbs."""
-        indicator = ThinkingIndicator()
-        total_ticks = 30 * len(THINKING_VERBS)
-        for _ in range(total_ticks):
-            indicator._tick()
-        assert indicator._verb_index == 0  # wrapped back to start
 
 
 class TestStop:
@@ -138,7 +91,6 @@ class TestStop:
         indicator.stop()
         indicator._tick()  # should be a no-op
         assert indicator._spinner_index == 1
-        assert indicator._tick_count == 1  # unchanged
 
     def test_stop_is_idempotent(self) -> None:
         """Calling ``stop()`` multiple times should not raise."""

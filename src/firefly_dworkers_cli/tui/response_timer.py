@@ -68,5 +68,13 @@ class ResponseTimer:
         return f"{self.elapsed:.1f}s"
 
     def format_summary(self, token_count: int) -> str:
-        """Summary string, e.g. ``'Thought for 2.1s \u00b7 1,247 tokens'``."""
-        return f"Thought for {self.format_elapsed()} \u00b7 {token_count:,} tokens"
+        """Summary string showing thinking time and token rate."""
+        parts = []
+        if self.thinking_time > 0:
+            parts.append(f"{self.thinking_time:.1f}s thinking")
+        parts.append(f"{self.elapsed:.1f}s total")
+        parts.append(f"{token_count:,} tokens")
+        if self.streaming_time > 0 and token_count > 0:
+            rate = token_count / self.streaming_time
+            parts.append(f"{rate:.0f} tok/s")
+        return " \u00b7 ".join(parts)
