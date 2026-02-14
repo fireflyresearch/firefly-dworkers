@@ -114,7 +114,7 @@ async def create_client(
         if mode == "remote":
             raise ConnectionError(
                 f"Cannot reach dworkers server at {resolved_url}"
-            )
+            ) from None
 
     if mode == "remote":
         # Server responded but with a non-200 status.

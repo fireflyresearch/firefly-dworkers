@@ -126,36 +126,30 @@ class DworkersApp(App):
 
     def _update_model_label(self, model_string: str) -> None:
         """Update the status bar model label."""
-        try:
-            # Show just the model name, not provider prefix
-            if ":" in model_string:
-                label = model_string.split(":", 1)[1]
-            else:
-                label = model_string
+        import contextlib
+
+        with contextlib.suppress(Exception):
+            label = model_string.split(":", 1)[1] if ":" in model_string else model_string
             self.query_one(".status-model", Static).update(label)
-        except Exception:
-            pass
 
     def _update_status_bar(self) -> None:
         """Refresh all status bar items after state changes."""
+        import contextlib
+
         # Mode
         mode_label = self._mode
         if self._client and type(self._client).__name__ == "RemoteClient":
             mode_label = "remote"
         elif self._mode == "auto":
             mode_label = "local"  # auto resolved to local
-        try:
+        with contextlib.suppress(Exception):
             self.query_one("#status-mode", Static).update(mode_label)
-        except Exception:
-            pass
 
         # Autonomy
         autonomy = self._router.autonomy_level
         display = autonomy.replace("_", "-")
-        try:
+        with contextlib.suppress(Exception):
             self.query_one("#status-autonomy", Static).update(display)
-        except Exception:
-            pass
 
     async def _connect_and_focus(self) -> None:
         """Connect to backend client and focus the input."""
@@ -192,9 +186,7 @@ class DworkersApp(App):
 
         input_widget = self.query_one("#prompt-input", TextArea)
 
-        if event.key == "enter" and not event.shift:
-            # Only handle if the input is focused
-            if self.focused is input_widget:
+        if event.key == "enter" and not event.shift and self.focused is input_widget:
                 event.prevent_default()
                 event.stop()
                 text = input_widget.text.strip()
@@ -493,7 +485,7 @@ class DworkersApp(App):
 
         content = Markdown("", classes="msg-content")
         box = Vertical(classes="msg-box")
-        header = Static(f"\u2726 Planner", classes="msg-sender msg-sender-ai")
+        header = Static("\u2726 Planner", classes="msg-sender msg-sender-ai")
         await container.mount(box)
         await box.mount(header)
         await box.mount(content)
