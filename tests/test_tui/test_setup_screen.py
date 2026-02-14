@@ -1,41 +1,20 @@
-"""Tests for the setup wizard screen."""
+"""Tests for the multi-screen setup wizard."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from firefly_dworkers_cli.config import ConfigManager
+from firefly_dworkers_cli.config import ConfigManager, _PROVIDER_ENV_KEYS
 from firefly_dworkers_cli.tui.screens.setup import (
-    SetupScreen,
+    ALL_PROVIDERS,
+    SetupWizard,
+    ProviderScreen,
+    ModelScreen,
+    ApiKeyScreen,
+    ConfigScreen,
     _AUTONOMY_OPTIONS,
     _MODE_OPTIONS,
     _PROVIDER_MODELS,
+    _detect_provider_from_key,
 )
-
-
-class TestSetupScreen:
-    def test_instantiates(self):
-        screen = SetupScreen()
-        assert screen._selected_model == ""
-        assert screen._manual_api_key == ""
-
-    def test_instantiates_with_config_manager(self, tmp_path):
-        mgr = ConfigManager(project_dir=tmp_path)
-        screen = SetupScreen(config_manager=mgr)
-        assert screen._config_mgr is mgr
-
-    def test_detect_provider_from_key_openai(self):
-        assert SetupScreen._detect_provider_from_key("sk-abc123def456") == "openai"
-
-    def test_detect_provider_from_key_anthropic(self):
-        assert SetupScreen._detect_provider_from_key("ant-abc123") == "anthropic"
-        assert SetupScreen._detect_provider_from_key("sk-ant-abc123") == "anthropic"
-
-    def test_detect_provider_from_key_groq(self):
-        assert SetupScreen._detect_provider_from_key("gsk_abc123") == "groq"
-
-    def test_detect_provider_from_key_unknown(self):
-        assert SetupScreen._detect_provider_from_key("unknown-key") == "unknown"
 
 
 class TestProviderModels:
@@ -55,7 +34,7 @@ class TestProviderModels:
 
 
 class TestModeOptions:
-    def test_setup_screen_has_mode_options(self):
+    def test_has_three_mode_options(self):
         assert len(_MODE_OPTIONS) == 3
         labels = [opt[0] for opt in _MODE_OPTIONS]
         assert "auto" in labels
@@ -64,7 +43,7 @@ class TestModeOptions:
 
 
 class TestAutonomyOptions:
-    def test_setup_screen_has_autonomy_options(self):
+    def test_has_three_autonomy_options(self):
         assert len(_AUTONOMY_OPTIONS) == 3
         labels = [opt[0] for opt in _AUTONOMY_OPTIONS]
         assert "manual" in labels
@@ -72,29 +51,98 @@ class TestAutonomyOptions:
         assert "autonomous" in labels
 
 
-class TestProviderDetectionExtended:
-    def test_detect_google_key(self):
-        assert SetupScreen._detect_provider_from_key("AIzaSyAbc123def456") == "google"
+class TestProviderDetection:
+    def test_detect_openai(self):
+        assert _detect_provider_from_key("sk-abc123def456") == "openai"
 
-    def test_detect_mistral_key(self):
-        assert SetupScreen._detect_provider_from_key("mistral-abc123def456") == "mistral"
+    def test_detect_anthropic(self):
+        assert _detect_provider_from_key("ant-abc123def") == "anthropic"
+        assert _detect_provider_from_key("sk-ant-abc123") == "anthropic"
+
+    def test_detect_groq(self):
+        assert _detect_provider_from_key("gsk_abc123def") == "groq"
+
+    def test_detect_google(self):
+        assert _detect_provider_from_key("AIzaSyAbc123def456") == "google"
+
+    def test_detect_mistral(self):
+        assert _detect_provider_from_key("mistral-abc123def456") == "mistral"
 
     def test_unknown_key_accepted(self):
-        result = SetupScreen._detect_provider_from_key("some-random-key-format-12345")
-        assert result == "unknown"
+        assert _detect_provider_from_key("some-random-key-format-12345") == "unknown"
 
     def test_short_key_rejected(self):
-        assert SetupScreen._detect_provider_from_key("short") is None
+        assert _detect_provider_from_key("short") is None
 
 
-class TestBuildDefaultConfigModeAutonomy:
-    def test_build_default_config_includes_mode_and_autonomy(self, tmp_path):
+class TestAllProviders:
+    def test_all_providers_list(self):
+        assert len(ALL_PROVIDERS) == 6
+        names = [p[0] for p in ALL_PROVIDERS]
+        assert "openai" in names
+        assert "anthropic" in names
+        assert "google" in names
+        assert "mistral" in names
+        assert "groq" in names
+        assert "other" in names
+
+
+class TestSetupWizard:
+    def test_instantiates(self):
+        wizard = SetupWizard()
+        assert wizard._selected_provider == ""
+        assert wizard._selected_model == ""
+        assert wizard._api_key == ""
+        assert wizard._selected_mode == "auto"
+        assert wizard._selected_autonomy == "semi_supervised"
+
+    def test_instantiates_with_config_manager(self, tmp_path):
+        mgr = ConfigManager(project_dir=tmp_path)
+        wizard = SetupWizard(config_manager=mgr)
+        assert wizard._config_mgr is mgr
+
+
+class TestProviderScreen:
+    def test_instantiates(self):
+        screen = ProviderScreen({})
+        assert screen._detected is not None
+
+    def test_instantiates_with_detected(self):
+        screen = ProviderScreen({"openai": "sk-test"})
+        assert "openai" in screen._detected
+
+
+class TestModelScreen:
+    def test_instantiates_known_provider(self):
+        screen = ModelScreen("openai")
+        assert screen._provider == "openai"
+
+    def test_instantiates_unknown_provider(self):
+        screen = ModelScreen("other")
+        assert screen._provider == "other"
+
+
+class TestApiKeyScreen:
+    def test_instantiates(self):
+        screen = ApiKeyScreen("anthropic")
+        assert screen._provider == "anthropic"
+
+
+class TestConfigScreen:
+    def test_instantiates(self):
+        screen = ConfigScreen()
+        assert screen._selected_mode == "auto"
+        assert screen._selected_autonomy == "semi_supervised"
+
+
+class TestBuildDefaultConfig:
+    def test_includes_mode_and_autonomy(self, tmp_path):
         mgr = ConfigManager(project_dir=tmp_path)
         config = mgr.build_default_config(mode="local", default_autonomy="manual")
         assert config["mode"] == "local"
         assert config["default_autonomy"] == "manual"
 
-    def test_build_default_config_mode_and_autonomy_defaults(self, tmp_path):
+    def test_defaults(self, tmp_path):
         mgr = ConfigManager(project_dir=tmp_path)
         config = mgr.build_default_config()
         assert config["mode"] == "auto"
