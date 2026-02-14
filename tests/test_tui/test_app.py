@@ -34,3 +34,30 @@ class TestDworkersApp:
     def test_extract_role_first_known_mention_wins(self):
         app = DworkersApp()
         assert app._extract_role("@researcher and @analyst") == "researcher"
+
+    def test_app_accepts_mode_parameter(self):
+        app = DworkersApp(mode="local")
+        assert app._mode == "local"
+
+    def test_app_accepts_autonomy_override(self):
+        app = DworkersApp(autonomy_override="autonomous")
+        assert app._autonomy_override == "autonomous"
+
+    def test_app_defaults(self):
+        app = DworkersApp()
+        assert app._mode == "auto"
+        assert app._autonomy_override is None
+        assert app._server_url is None
+
+    def test_app_accepts_server_url(self):
+        app = DworkersApp(mode="remote", server_url="https://example.com")
+        assert app._mode == "remote"
+        assert app._server_url == "https://example.com"
+
+    def test_autonomy_override_applied_to_router(self):
+        app = DworkersApp(autonomy_override="autonomous")
+        assert app._router.autonomy_level == "autonomous"
+
+    def test_autonomy_override_none_keeps_default(self):
+        app = DworkersApp()
+        assert app._router.autonomy_level == "semi_supervised"

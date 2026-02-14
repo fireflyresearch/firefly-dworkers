@@ -44,8 +44,17 @@ class DworkersApp(App):
         Binding("escape", "focus_input", "Focus Input", show=False),
     ]
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        mode: str = "auto",
+        autonomy_override: str | None = None,
+        server_url: str | None = None,
+    ) -> None:
         super().__init__()
+        self._mode = mode
+        self._autonomy_override = autonomy_override
+        self._server_url = server_url
         self._config_mgr = ConfigManager()
         self._store = ConversationStore()
         self._client: DworkersClient | None = None
@@ -55,6 +64,8 @@ class DworkersApp(App):
         self._router = CommandRouter(
             client=None, store=self._store, config_mgr=self._config_mgr,
         )
+        if self._autonomy_override:
+            self._router.autonomy_level = self._autonomy_override
 
     def compose(self) -> ComposeResult:
         # Header bar
@@ -120,7 +131,7 @@ class DworkersApp(App):
 
     async def _connect_and_focus(self) -> None:
         """Connect to backend client and focus the input."""
-        self._client = await create_client()
+        self._client = await create_client(mode=self._mode, server_url=self._server_url)
         self._router.client = self._client
 
         # Update connection status

@@ -36,12 +36,40 @@ def main(
         callback=_version_callback,
         is_eager=True,
     ),
+    local: bool = typer.Option(  # noqa: B008
+        False,
+        "--local",
+        help="Force local mode (skip server probe).",
+    ),
+    remote: str | None = typer.Option(  # noqa: B008
+        None,
+        "--remote",
+        help="Force remote mode. Optionally pass server URL.",
+    ),
+    autonomy: str | None = typer.Option(  # noqa: B008
+        None,
+        "--autonomy",
+        help="Override autonomy level (manual/semi_supervised/autonomous).",
+    ),
 ) -> None:
     """Firefly Dworkers -- Digital Workers as a Service CLI."""
     if ctx.invoked_subcommand is None:
         from firefly_dworkers_cli.tui import DworkersApp
 
-        DworkersApp().run()
+        mode = "auto"
+        server_url = None
+        if local:
+            mode = "local"
+        elif remote is not None:
+            mode = "remote"
+            if remote and remote != "True":
+                server_url = remote
+
+        DworkersApp(
+            mode=mode,
+            autonomy_override=autonomy,
+            server_url=server_url,
+        ).run()
 
 
 app.command(name="init")(init)
