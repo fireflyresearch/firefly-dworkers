@@ -276,7 +276,11 @@ class LocalClient:
     # -- Usage ----------------------------------------------------------------
 
     async def get_usage_stats(self, tenant_id: str = "default") -> UsageStats:
-        # No built-in usage tracking in core yet; return defaults.
+        """Return usage statistics.
+
+        Token tracking is done client-side in app.py via word-count
+        heuristic. Core-level usage tracking is planned for a future release.
+        """
         return UsageStats()
 
     # -- Conversations --------------------------------------------------------

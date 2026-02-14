@@ -291,7 +291,7 @@ class SetupScreen(Screen):
                     )
                     yield Static(
                         "You can configure Slack, Teams, and other integrations later "
-                        "using /connect in the chat.",
+                        "using /connectors and /setup in the chat.",
                         classes="setup-hint",
                     )
 
