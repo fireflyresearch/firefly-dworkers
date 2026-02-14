@@ -113,3 +113,28 @@ class TestDocumentDesignerWorker:
             auto_register=False,
         )
         assert worker.autonomy_level == AutonomyLevel.AUTONOMOUS
+
+    def test_checkpoint_handler_passed(self) -> None:
+        """checkpoint_handler kwarg should be set on the worker."""
+
+        class _FakeHandler:
+            async def on_checkpoint(self, *a: object, **kw: object) -> bool:
+                return True
+
+        handler = _FakeHandler()
+        config = _make_config()
+        worker = DocumentDesignerWorker(
+            config,
+            model=TestModel(),
+            checkpoint_handler=handler,
+            auto_register=False,
+        )
+        assert worker.checkpoint_handler is handler
+
+    def test_no_checkpoint_handler_default(self) -> None:
+        """Without checkpoint_handler, worker.checkpoint_handler is None."""
+        config = _make_config()
+        worker = DocumentDesignerWorker(
+            config, model=TestModel(), auto_register=False
+        )
+        assert worker.checkpoint_handler is None

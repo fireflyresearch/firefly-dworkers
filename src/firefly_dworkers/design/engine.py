@@ -90,9 +90,12 @@ class DesignEngine:
         self,
         model: Any = "",
         tenant_config: Any | None = None,
+        *,
+        use_llm_chart_selection: bool = False,
     ) -> None:
         self._model = model
         self._config = tenant_config
+        self._use_llm_chart_selection = use_llm_chart_selection
 
     # ── Public API ──────────────────────────────────────────────────────
 
@@ -111,7 +114,7 @@ class DesignEngine:
         if profile is None:
             profile = await self._generate_autonomous_profile(brief)
 
-        charts = self._resolve_chart_types(brief.datasets, profile)
+        charts = await self._resolve_chart_types(brief.datasets, profile)
         spec = await self._design_layout(brief, profile)
 
         # Ensure the spec carries the correct output_type and profile,
@@ -178,25 +181,32 @@ class DesignEngine:
 
     # ── Chart type selection (heuristic, no LLM) ───────────────────────
 
-    def _resolve_chart_types(
+    async def _resolve_chart_types(
         self,
         datasets: list[DataSet],
         profile: DesignProfile,
     ) -> dict[str, ResolvedChart]:
         """Select the best chart type for each dataset using heuristics.
 
-        Rules (in priority order):
-        1. Use ``dataset.suggested_chart_type`` if provided.
-        2. Time-series categories -> line chart.
-        3. Single series with <= 6 categories -> pie chart.
-        4. Two numeric columns (2 series, no categories) -> scatter.
-        5. Multiple series -> grouped bar chart.
-        6. Default -> bar chart.
+        When the heuristic returns default 'bar' AND use_llm_chart_selection=True
+        AND no suggested_chart_type, call LLM for enhanced selection.
         """
         charts: dict[str, ResolvedChart] = {}
 
         for ds in datasets:
             chart_type = self._select_chart_type(ds)
+
+            # LLM enhancement: when heuristic defaults to "bar" and no explicit type
+            if (
+                chart_type == "bar"
+                and self._use_llm_chart_selection
+                and not ds.suggested_chart_type
+            ):
+                try:
+                    chart_type = await self._llm_select_chart_type(ds)
+                except Exception:
+                    pass  # Heuristic result stands
+
             colors = list(profile.color_palette) if profile.color_palette else []
 
             charts[ds.name] = ResolvedChart(
@@ -208,6 +218,24 @@ class DesignEngine:
             )
 
         return charts
+
+    async def _llm_select_chart_type(self, ds: DataSet) -> str:
+        """Ask LLM for best chart type. Returns: bar|line|pie|scatter|area|doughnut|waterfall."""
+        agent: Agent[None, str] = Agent(
+            self._model or "test",
+            output_type=str,
+            system_prompt=(
+                "You are a data visualization expert. Given a dataset description, "
+                "select the SINGLE best chart type. Respond with exactly one of: "
+                "bar, line, pie, scatter, area, doughnut, waterfall."
+            ),
+        )
+        prompt = f"Dataset: {ds.name}\nDescription: {ds.description}\n"
+        prompt += f"Categories: {ds.categories[:10]}\nSeries count: {len(ds.series)}"
+        result = await agent.run(prompt)
+        chart_type = result.output.strip().lower()
+        valid = {"bar", "line", "pie", "scatter", "area", "doughnut", "waterfall"}
+        return chart_type if chart_type in valid else "bar"
 
     @staticmethod
     def _select_chart_type(ds: DataSet) -> str:

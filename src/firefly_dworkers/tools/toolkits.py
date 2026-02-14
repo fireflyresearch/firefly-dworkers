@@ -362,13 +362,24 @@ def manager_toolkit(config: TenantConfig) -> ToolKit:
     )
 
 
-def designer_toolkit(config: TenantConfig) -> ToolKit:
+def designer_toolkit(
+    config: TenantConfig,
+    *,
+    autonomy_level: Any = None,
+    checkpoint_handler: Any = None,
+) -> ToolKit:
     """Build a ToolKit for the *designer* worker role.
 
     Includes all productivity tools (presentation, document, spreadsheet),
-    vision tools, storage connectors, and report generation.
+    vision tools, storage connectors, report generation, and the design
+    pipeline tool when registered.
+
+    Parameters:
+        config: Tenant configuration.
+        autonomy_level: Autonomy level for design pipeline checkpoints.
+        checkpoint_handler: Handler for autonomy checkpoints.
     """
-    tools: list[BaseTool] = []
+    tools: list[Any] = []
     tools.extend(_build_presentation_tools(config))
     tools.extend(_build_document_tools(config))
     tools.extend(_build_spreadsheet_tools(config))
@@ -380,6 +391,20 @@ def designer_toolkit(config: TenantConfig) -> ToolKit:
             tool_registry.create("report_generation"),
         ]
     )
+
+    # Add design pipeline tool if registered
+    if tool_registry.has("design_pipeline"):
+        model = config.models.default
+        vlm_model = getattr(config.models, "vision", "") or ""
+        pipeline_kwargs: dict[str, Any] = {
+            "model": model,
+            "vlm_model": vlm_model,
+        }
+        if autonomy_level is not None:
+            pipeline_kwargs["autonomy_level"] = autonomy_level
+        if checkpoint_handler is not None:
+            pipeline_kwargs["checkpoint_handler"] = checkpoint_handler
+        tools.append(tool_registry.create("design_pipeline", **pipeline_kwargs))
 
     return ToolKit(
         f"designer-{config.id}",

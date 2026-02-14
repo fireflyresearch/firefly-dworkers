@@ -57,6 +57,7 @@ class BaseWorker(FireflyAgent):
         self._autonomy_level = autonomy_level or AutonomyLevel(worker_settings.autonomy)
         self._tenant_config = tenant_config
         self._instructions_text = instructions if isinstance(instructions, str) else ""
+        self._checkpoint_handler: Any = None
 
         # Build guard + cost middleware from tenant config and merge with user
         # middleware (guards come first, then cost, then user middleware).
@@ -175,3 +176,28 @@ class BaseWorker(FireflyAgent):
     def tenant_config(self) -> TenantConfig:
         """The tenant configuration bound to this worker."""
         return self._tenant_config
+
+    @property
+    def checkpoint_handler(self) -> Any:
+        """The checkpoint handler for autonomy checkpoints, or ``None``."""
+        return self._checkpoint_handler
+
+    @checkpoint_handler.setter
+    def checkpoint_handler(self, handler: Any) -> None:
+        self._checkpoint_handler = handler
+
+    async def maybe_checkpoint(
+        self,
+        phase: str,
+        deliverable: Any,
+        *,
+        checkpoint_type: str = "intermediate_step",
+    ) -> bool:
+        """Submit checkpoint if autonomy level requires it. Returns True if approved."""
+        from firefly_dworkers.autonomy.levels import should_checkpoint
+
+        if not should_checkpoint(self._autonomy_level, checkpoint_type):
+            return True
+        if self._checkpoint_handler is None:
+            return True
+        return await self._checkpoint_handler.on_checkpoint(self.name, phase, deliverable)

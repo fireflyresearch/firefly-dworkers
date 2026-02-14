@@ -17,6 +17,7 @@ from firefly_dworkers.tools.toolkits import (
     _build_web_tools,
     analyst_toolkit,
     data_analyst_toolkit,
+    designer_toolkit,
     manager_toolkit,
     researcher_toolkit,
 )
@@ -465,3 +466,57 @@ class TestProductivityTools:
         tools = _build_document_tools(cfg)
         tool_names = [t.name for t in tools]
         assert "pdf" in tool_names
+
+
+class TestDesignerToolkit:
+    """Tests for designer_toolkit factory including design pipeline."""
+
+    def _make_config(self, **connector_overrides: dict) -> TenantConfig:
+        connectors = {
+            "web_search": {"enabled": True, "provider": "tavily", "api_key": "test-key"},
+            **connector_overrides,
+        }
+        return TenantConfig(id="test", name="Test", connectors=connectors)
+
+    def test_designer_toolkit_type(self) -> None:
+        kit = designer_toolkit(self._make_config())
+        assert isinstance(kit, ToolKit)
+
+    def test_designer_toolkit_has_report_generation(self) -> None:
+        kit = designer_toolkit(self._make_config())
+        tool_names = [t.name for t in kit.tools]
+        assert "report_generation" in tool_names
+
+    def test_designer_toolkit_includes_pipeline(self) -> None:
+        """Design pipeline tool should be included in designer toolkit."""
+        kit = designer_toolkit(self._make_config())
+        tool_names = [t.name for t in kit.tools]
+        assert "design_pipeline" in tool_names
+
+    def test_designer_toolkit_tags(self) -> None:
+        kit = designer_toolkit(self._make_config())
+        assert "designer" in kit.tags
+
+    def test_designer_toolkit_name(self) -> None:
+        kit = designer_toolkit(self._make_config())
+        assert "test" in kit.name
+
+    def test_designer_toolkit_passes_checkpoint_handler(self) -> None:
+        """Checkpoint handler should be passed to the pipeline tool."""
+        from firefly_dworkers.types import AutonomyLevel
+
+        class _FakeHandler:
+            async def on_checkpoint(self, *a: object, **kw: object) -> bool:
+                return True
+
+        handler = _FakeHandler()
+        kit = designer_toolkit(
+            self._make_config(),
+            autonomy_level=AutonomyLevel.SEMI_SUPERVISED,
+            checkpoint_handler=handler,
+        )
+        # Find the pipeline tool
+        pipeline = next((t for t in kit.tools if t.name == "design_pipeline"), None)
+        assert pipeline is not None
+        assert pipeline._checkpoint_handler is handler
+        assert pipeline._autonomy_level == AutonomyLevel.SEMI_SUPERVISED

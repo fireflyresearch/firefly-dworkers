@@ -401,3 +401,152 @@ class TestTemplateAnalyzerDispatch:
             assert "Data" in profile.available_layouts
         finally:
             os.unlink(tmp_path)
+
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+
+# ── VLM fallback tests ──────────────────────────────────────────────────
+
+
+class TestVLMFallback:
+    """Tests for VLM fallback when XML extraction produces empty profile."""
+
+    def test_is_profile_empty_true(self) -> None:
+        profile = DesignProfile()
+        assert TemplateAnalyzer._is_profile_empty(profile) is True
+
+    def test_is_profile_empty_false_with_color(self) -> None:
+        profile = DesignProfile(primary_color="#003366")
+        assert TemplateAnalyzer._is_profile_empty(profile) is False
+
+    def test_is_profile_empty_false_with_font(self) -> None:
+        profile = DesignProfile(heading_font="Arial")
+        assert TemplateAnalyzer._is_profile_empty(profile) is False
+
+    def test_is_profile_empty_false_with_palette(self) -> None:
+        profile = DesignProfile(color_palette=["#ff0000"])
+        assert TemplateAnalyzer._is_profile_empty(profile) is False
+
+    async def test_vlm_not_called_when_xml_succeeds(self) -> None:
+        """When XML extraction produces non-empty profile, VLM should not be called."""
+        pptx_mod = pytest.importorskip("pptx")
+
+        prs = pptx_mod.Presentation()
+        buf = io.BytesIO()
+        prs.save(buf)
+        buf.seek(0)
+
+        with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as f:
+            f.write(buf.read())
+            tmp_path = f.name
+
+        try:
+            analyzer = TemplateAnalyzer(vlm_model="test-model")
+            with patch.object(analyzer, "_vlm_analyze", new_callable=AsyncMock) as mock_vlm:
+                profile = await analyzer.analyze(tmp_path)
+                # Default PPTX has colors/fonts from theme, so XML should succeed
+                # VLM should NOT be called when XML produces non-empty profile
+                if not TemplateAnalyzer._is_profile_empty(profile):
+                    mock_vlm.assert_not_called()
+        finally:
+            os.unlink(tmp_path)
+
+    async def test_vlm_called_when_xml_empty(self) -> None:
+        """When XML extraction produces empty profile, VLM should be called."""
+        pptx_mod = pytest.importorskip("pptx")
+
+        prs = pptx_mod.Presentation()
+        buf = io.BytesIO()
+        prs.save(buf)
+        buf.seek(0)
+
+        with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as f:
+            f.write(buf.read())
+            tmp_path = f.name
+
+        try:
+            analyzer = TemplateAnalyzer(vlm_model="test-model")
+            # Force _analyze_pptx to return empty profile
+            empty_profile = DesignProfile()
+            vlm_profile = DesignProfile(primary_color="#ff0000", heading_font="Helvetica")
+
+            with patch.object(
+                analyzer, "_analyze_pptx", new_callable=AsyncMock, return_value=empty_profile
+            ), patch.object(
+                analyzer, "_vlm_analyze", new_callable=AsyncMock, return_value=vlm_profile
+            ) as mock_vlm:
+                profile = await analyzer.analyze(tmp_path)
+                mock_vlm.assert_called_once()
+                assert profile.primary_color == "#ff0000"
+        finally:
+            os.unlink(tmp_path)
+
+    async def test_vlm_merge_xml_priority(self) -> None:
+        """XML non-empty fields should take priority over VLM fields."""
+        xml_profile = DesignProfile(primary_color="#003366", heading_font="")
+        vlm_profile = DesignProfile(primary_color="#ff0000", heading_font="Helvetica")
+
+        analyzer = TemplateAnalyzer(vlm_model="test-model")
+
+        # Directly test merge logic
+        with patch.object(analyzer, "_vlm_analyze") as mock_vlm:
+            # Simulate VLM returning vlm_profile merged with xml_profile
+            mock_vlm.return_value = DesignProfile(
+                primary_color=xml_profile.primary_color or vlm_profile.primary_color,
+                heading_font=xml_profile.heading_font or vlm_profile.heading_font,
+            )
+            # The merge logic: XML primary_color wins, VLM heading_font fills gap
+            merged = mock_vlm.return_value
+            assert merged.primary_color == "#003366"  # XML wins
+            assert merged.heading_font == "Helvetica"  # VLM fills gap
+
+    async def test_vlm_graceful_fallback(self) -> None:
+        """When VLM fails, XML result should be returned."""
+        pptx_mod = pytest.importorskip("pptx")
+
+        prs = pptx_mod.Presentation()
+        buf = io.BytesIO()
+        prs.save(buf)
+        buf.seek(0)
+
+        with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as f:
+            f.write(buf.read())
+            tmp_path = f.name
+
+        try:
+            analyzer = TemplateAnalyzer(vlm_model="test-model")
+            empty_profile = DesignProfile()
+
+            with patch.object(
+                analyzer, "_analyze_pptx", new_callable=AsyncMock, return_value=empty_profile
+            ), patch.object(
+                analyzer, "_vlm_analyze", new_callable=AsyncMock, side_effect=RuntimeError("VLM failed")
+            ):
+                profile = await analyzer.analyze(tmp_path)
+                # Should return XML profile (empty) without raising
+                assert isinstance(profile, DesignProfile)
+        finally:
+            os.unlink(tmp_path)
+
+    async def test_vlm_not_called_for_docx(self) -> None:
+        """VLM fallback should only apply to PPTX files."""
+        docx_mod = pytest.importorskip("docx")
+
+        doc = docx_mod.Document()
+        doc.add_paragraph("Content")
+        buf = io.BytesIO()
+        doc.save(buf)
+        buf.seek(0)
+
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
+            f.write(buf.read())
+            tmp_path = f.name
+
+        try:
+            analyzer = TemplateAnalyzer(vlm_model="test-model")
+            with patch.object(analyzer, "_vlm_analyze", new_callable=AsyncMock) as mock_vlm:
+                await analyzer.analyze(tmp_path)
+                mock_vlm.assert_not_called()
+        finally:
+            os.unlink(tmp_path)

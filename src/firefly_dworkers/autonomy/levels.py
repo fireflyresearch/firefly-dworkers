@@ -4,7 +4,13 @@ from pydantic import BaseModel
 
 from firefly_dworkers.types import AutonomyLevel
 
-_SEMI_SUPERVISED_CHECKPOINTS = frozenset({"phase_transition", "deliverable", "final_output"})
+_SEMI_SUPERVISED_CHECKPOINTS = frozenset({
+    "phase_transition",
+    "deliverable",
+    "final_output",
+    "design_spec_approval",
+    "pre_render",
+})
 
 
 class AutonomyConfig(BaseModel):

@@ -238,7 +238,7 @@ class TestAutonomousProfile:
 class TestChartTypeSelection:
     """Tests for _resolve_chart_types and _select_chart_type heuristics."""
 
-    def test_suggested_chart_type_honored(self) -> None:
+    async def test_suggested_chart_type_honored(self) -> None:
         engine = _make_engine()
         ds = DataSet(
             name="test",
@@ -246,70 +246,70 @@ class TestChartTypeSelection:
             series=[DataSeries(name="S1", values=[1, 2, 3])],
             suggested_chart_type="doughnut",
         )
-        charts = engine._resolve_chart_types([ds], _make_profile())
+        charts = await engine._resolve_chart_types([ds], _make_profile())
         assert charts["test"].chart_type == "doughnut"
 
-    def test_temporal_categories_produce_line(self) -> None:
+    async def test_temporal_categories_produce_line(self) -> None:
         engine = _make_engine()
         ds = DataSet(
             name="trend",
             categories=["Jan 2024", "Feb 2024", "Mar 2024"],
             series=[DataSeries(name="Sales", values=[100, 120, 140])],
         )
-        charts = engine._resolve_chart_types([ds], _make_profile())
+        charts = await engine._resolve_chart_types([ds], _make_profile())
         assert charts["trend"].chart_type == "line"
 
-    def test_quarter_categories_produce_line(self) -> None:
+    async def test_quarter_categories_produce_line(self) -> None:
         engine = _make_engine()
         ds = DataSet(
             name="quarterly",
             categories=["Q1 2024", "Q2 2024", "Q3 2024", "Q4 2024"],
             series=[DataSeries(name="Revenue", values=[100, 120, 130, 150])],
         )
-        charts = engine._resolve_chart_types([ds], _make_profile())
+        charts = await engine._resolve_chart_types([ds], _make_profile())
         assert charts["quarterly"].chart_type == "line"
 
-    def test_year_categories_produce_line(self) -> None:
+    async def test_year_categories_produce_line(self) -> None:
         engine = _make_engine()
         ds = DataSet(
             name="yearly",
             categories=["2020", "2021", "2022", "2023"],
             series=[DataSeries(name="Growth", values=[5, 7, 6, 8])],
         )
-        charts = engine._resolve_chart_types([ds], _make_profile())
+        charts = await engine._resolve_chart_types([ds], _make_profile())
         assert charts["yearly"].chart_type == "line"
 
-    def test_single_series_few_categories_produce_pie(self) -> None:
+    async def test_single_series_few_categories_produce_pie(self) -> None:
         engine = _make_engine()
         ds = DataSet(
             name="share",
             categories=["Product A", "Product B", "Product C"],
             series=[DataSeries(name="Share", values=[40, 35, 25])],
         )
-        charts = engine._resolve_chart_types([ds], _make_profile())
+        charts = await engine._resolve_chart_types([ds], _make_profile())
         assert charts["share"].chart_type == "pie"
 
-    def test_single_series_six_categories_produce_pie(self) -> None:
+    async def test_single_series_six_categories_produce_pie(self) -> None:
         engine = _make_engine()
         ds = DataSet(
             name="share",
             categories=["A", "B", "C", "D", "E", "F"],
             series=[DataSeries(name="Share", values=[20, 15, 15, 20, 15, 15])],
         )
-        charts = engine._resolve_chart_types([ds], _make_profile())
+        charts = await engine._resolve_chart_types([ds], _make_profile())
         assert charts["share"].chart_type == "pie"
 
-    def test_single_series_seven_categories_produce_bar(self) -> None:
+    async def test_single_series_seven_categories_produce_bar(self) -> None:
         engine = _make_engine()
         ds = DataSet(
             name="many",
             categories=["A", "B", "C", "D", "E", "F", "G"],
             series=[DataSeries(name="Count", values=[1, 2, 3, 4, 5, 6, 7])],
         )
-        charts = engine._resolve_chart_types([ds], _make_profile())
+        charts = await engine._resolve_chart_types([ds], _make_profile())
         assert charts["many"].chart_type == "bar"
 
-    def test_two_numeric_series_no_categories_produce_scatter(self) -> None:
+    async def test_two_numeric_series_no_categories_produce_scatter(self) -> None:
         engine = _make_engine()
         ds = DataSet(
             name="correlation",
@@ -319,10 +319,10 @@ class TestChartTypeSelection:
                 DataSeries(name="Y", values=[2, 4, 5, 8]),
             ],
         )
-        charts = engine._resolve_chart_types([ds], _make_profile())
+        charts = await engine._resolve_chart_types([ds], _make_profile())
         assert charts["correlation"].chart_type == "scatter"
 
-    def test_multiple_series_produce_bar(self) -> None:
+    async def test_multiple_series_produce_bar(self) -> None:
         engine = _make_engine()
         ds = DataSet(
             name="comparison",
@@ -332,25 +332,25 @@ class TestChartTypeSelection:
                 DataSeries(name="2025", values=[120, 220, 170]),
             ],
         )
-        charts = engine._resolve_chart_types([ds], _make_profile())
+        charts = await engine._resolve_chart_types([ds], _make_profile())
         assert charts["comparison"].chart_type == "bar"
 
-    def test_default_produces_bar(self) -> None:
+    async def test_default_produces_bar(self) -> None:
         engine = _make_engine()
         ds = DataSet(
             name="default",
             categories=["A", "B", "C", "D", "E", "F", "G", "H"],
             series=[DataSeries(name="Counts", values=[1, 2, 3, 4, 5, 6, 7, 8])],
         )
-        charts = engine._resolve_chart_types([ds], _make_profile())
+        charts = await engine._resolve_chart_types([ds], _make_profile())
         assert charts["default"].chart_type == "bar"
 
-    def test_empty_datasets_returns_empty_dict(self) -> None:
+    async def test_empty_datasets_returns_empty_dict(self) -> None:
         engine = _make_engine()
-        charts = engine._resolve_chart_types([], _make_profile())
+        charts = await engine._resolve_chart_types([], _make_profile())
         assert charts == {}
 
-    def test_multiple_datasets_all_resolved(self) -> None:
+    async def test_multiple_datasets_all_resolved(self) -> None:
         engine = _make_engine()
         datasets = [
             DataSet(
@@ -364,11 +364,11 @@ class TestChartTypeSelection:
                 series=[DataSeries(name="S2", values=[1, 2, 3])],
             ),
         ]
-        charts = engine._resolve_chart_types(datasets, _make_profile())
+        charts = await engine._resolve_chart_types(datasets, _make_profile())
         assert "ds1" in charts
         assert "ds2" in charts
 
-    def test_chart_carries_dataset_metadata(self) -> None:
+    async def test_chart_carries_dataset_metadata(self) -> None:
         engine = _make_engine()
         ds = DataSet(
             name="revenue",
@@ -377,14 +377,14 @@ class TestChartTypeSelection:
             series=[DataSeries(name="2025", values=[100, 200])],
             suggested_chart_type="bar",
         )
-        charts = engine._resolve_chart_types([ds], _make_profile())
+        charts = await engine._resolve_chart_types([ds], _make_profile())
         chart = charts["revenue"]
         assert chart.title == "Quarterly Revenue"
         assert chart.categories == ["Q1", "Q2"]
         assert len(chart.series) == 1
         assert chart.series[0].name == "2025"
 
-    def test_chart_uses_profile_colors(self) -> None:
+    async def test_chart_uses_profile_colors(self) -> None:
         engine = _make_engine()
         profile = _make_profile(color_palette=["#111111", "#222222"])
         ds = DataSet(
@@ -393,10 +393,10 @@ class TestChartTypeSelection:
             series=[DataSeries(name="S", values=[1])],
             suggested_chart_type="bar",
         )
-        charts = engine._resolve_chart_types([ds], profile)
+        charts = await engine._resolve_chart_types([ds], profile)
         assert charts["test"].colors == ["#111111", "#222222"]
 
-    def test_chart_description_fallback_to_name(self) -> None:
+    async def test_chart_description_fallback_to_name(self) -> None:
         engine = _make_engine()
         ds = DataSet(
             name="my_data",
@@ -405,7 +405,7 @@ class TestChartTypeSelection:
             series=[DataSeries(name="S", values=[1])],
             suggested_chart_type="bar",
         )
-        charts = engine._resolve_chart_types([ds], _make_profile())
+        charts = await engine._resolve_chart_types([ds], _make_profile())
         assert charts["my_data"].title == "my_data"
 
 
@@ -564,3 +564,66 @@ class TestDesignEngineInit:
     def test_constructor_with_string_model(self) -> None:
         engine = DesignEngine(model="openai:gpt-4o")
         assert engine._model == "openai:gpt-4o"
+
+
+# ── LLM-enhanced chart selection ──────────────────────────────────────
+
+
+class TestLLMChartSelection:
+    """Tests for LLM-enhanced chart type selection."""
+
+    async def test_llm_chart_selection_called_for_default_bar(self) -> None:
+        """When heuristic returns bar and LLM is enabled, LLM should be invoked."""
+        engine = DesignEngine(model=TestModel(), use_llm_chart_selection=True)
+        ds = DataSet(
+            name="ambiguous",
+            categories=["A", "B", "C", "D", "E", "F", "G", "H"],
+            series=[DataSeries(name="Counts", values=[1, 2, 3, 4, 5, 6, 7, 8])],
+        )
+        # TestModel returns a string - LLM path is exercised
+        charts = await engine._resolve_chart_types([ds], _make_profile())
+        assert "ambiguous" in charts
+        # TestModel returns a generic string, which won't be in valid set, so falls back to "bar"
+        assert charts["ambiguous"].chart_type == "bar"
+
+    async def test_llm_not_called_when_disabled(self) -> None:
+        """When use_llm_chart_selection=False, only heuristic is used."""
+        engine = DesignEngine(model=TestModel(), use_llm_chart_selection=False)
+        ds = DataSet(
+            name="test",
+            categories=["A", "B", "C", "D", "E", "F", "G", "H"],
+            series=[DataSeries(name="Counts", values=[1, 2, 3, 4, 5, 6, 7, 8])],
+        )
+        charts = await engine._resolve_chart_types([ds], _make_profile())
+        assert charts["test"].chart_type == "bar"
+
+    async def test_llm_not_called_when_suggested_type(self) -> None:
+        """When suggested_chart_type is set, LLM should NOT be invoked."""
+        engine = DesignEngine(model=TestModel(), use_llm_chart_selection=True)
+        ds = DataSet(
+            name="explicit",
+            categories=["A", "B"],
+            series=[DataSeries(name="S", values=[1, 2])],
+            suggested_chart_type="doughnut",
+        )
+        charts = await engine._resolve_chart_types([ds], _make_profile())
+        assert charts["explicit"].chart_type == "doughnut"
+
+    async def test_llm_fallback_on_error(self) -> None:
+        """When LLM call fails, heuristic result should stand."""
+        engine = DesignEngine(model="invalid-model-that-fails", use_llm_chart_selection=True)
+        ds = DataSet(
+            name="fallback",
+            categories=["A", "B", "C", "D", "E", "F", "G", "H"],
+            series=[DataSeries(name="Counts", values=[1, 2, 3, 4, 5, 6, 7, 8])],
+        )
+        charts = await engine._resolve_chart_types([ds], _make_profile())
+        assert charts["fallback"].chart_type == "bar"
+
+    async def test_constructor_flag_default_false(self) -> None:
+        engine = DesignEngine(model=TestModel())
+        assert engine._use_llm_chart_selection is False
+
+    async def test_constructor_flag_set_true(self) -> None:
+        engine = DesignEngine(model=TestModel(), use_llm_chart_selection=True)
+        assert engine._use_llm_chart_selection is True

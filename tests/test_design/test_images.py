@@ -202,7 +202,7 @@ class TestImageResolverUrl:
 
 
 class TestImageResolverAi:
-    """Tests for AI image generation placeholder."""
+    """Tests for AI image generation."""
 
     async def test_no_api_key_raises(self) -> None:
         """Missing ai_api_key should raise ValueError."""
@@ -212,12 +212,47 @@ class TestImageResolverAi:
                 ImageRequest(name="test", source_type="ai_generate", prompt="a cat sitting on a desk")
             )
 
-    async def test_with_api_key_raises_not_implemented(self) -> None:
-        """Even with an API key, the placeholder raises NotImplementedError."""
-        resolver = ImageResolver(ai_provider="openai", ai_api_key="sk-test-key")
-        with pytest.raises(NotImplementedError, match="openai"):
+    async def test_ai_generate_openai(self) -> None:
+        """Mock OpenAI DALL-E 3 POST response and verify PNG bytes."""
+        import base64
+
+        fake_png = b"\x89PNG\r\nfake-generated-image"
+        b64_data = base64.b64encode(fake_png).decode()
+
+        # Mock the POST to OpenAI
+        mock_post_response = MagicMock()
+        mock_post_response.json.return_value = {"data": [{"b64_json": b64_data}]}
+        mock_post_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_post_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("firefly_dworkers.design.images.httpx.AsyncClient", return_value=mock_client):
+            resolver = ImageResolver(ai_provider="openai", ai_api_key="sk-test-key")
+            result = await resolver.resolve(
+                ImageRequest(name="test", source_type="ai_generate", prompt="a cat")
+            )
+
+        assert isinstance(result, ResolvedImage)
+        assert result.data == fake_png
+        assert result.mime_type == "image/png"
+
+    async def test_ai_missing_api_key(self) -> None:
+        """Missing ai_api_key should raise ValueError."""
+        resolver = ImageResolver(ai_provider="openai")
+        with pytest.raises(ValueError, match="ai_api_key"):
             await resolver.resolve(
-                ImageRequest(name="test", source_type="ai_generate", prompt="a cat sitting on a desk")
+                ImageRequest(name="test", source_type="ai_generate", prompt="test")
+            )
+
+    async def test_unsupported_ai_provider(self) -> None:
+        """Unsupported AI provider should raise ValueError."""
+        resolver = ImageResolver(ai_provider="midjourney", ai_api_key="key-123")
+        with pytest.raises(ValueError, match="Unsupported AI provider"):
+            await resolver.resolve(
+                ImageRequest(name="test", source_type="ai_generate", prompt="test")
             )
 
 
@@ -225,7 +260,7 @@ class TestImageResolverAi:
 
 
 class TestImageResolverStock:
-    """Tests for stock photo API placeholder."""
+    """Tests for stock photo API."""
 
     async def test_no_api_key_raises(self) -> None:
         """Missing stock_api_key should raise ValueError."""
@@ -233,11 +268,50 @@ class TestImageResolverStock:
         with pytest.raises(ValueError, match="stock_api_key"):
             await resolver.resolve(ImageRequest(name="test", source_type="stock", prompt="office workspace"))
 
-    async def test_with_api_key_raises_not_implemented(self) -> None:
-        """Even with an API key, the placeholder raises NotImplementedError."""
-        resolver = ImageResolver(stock_provider="unsplash", stock_api_key="key-123")
-        with pytest.raises(NotImplementedError, match="unsplash"):
-            await resolver.resolve(ImageRequest(name="test", source_type="stock", prompt="office workspace"))
+    async def test_stock_search_unsplash(self) -> None:
+        """Mock Unsplash search + download and verify JPEG bytes."""
+        fake_jpeg = b"\xff\xd8\xff\xe0fake-stock-image"
+
+        # Mock search response
+        mock_search_response = MagicMock()
+        mock_search_response.json.return_value = {
+            "results": [
+                {
+                    "urls": {"regular": "https://images.unsplash.com/photo-123"},
+                    "alt_description": "office workspace",
+                }
+            ]
+        }
+        mock_search_response.raise_for_status = MagicMock()
+
+        # Mock image download response
+        mock_img_response = MagicMock()
+        mock_img_response.content = fake_jpeg
+        mock_img_response.headers = {"content-type": "image/jpeg"}
+        mock_img_response.raise_for_status = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=[mock_search_response, mock_img_response])
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("firefly_dworkers.design.images.httpx.AsyncClient", return_value=mock_client):
+            resolver = ImageResolver(stock_provider="unsplash", stock_api_key="key-123")
+            result = await resolver.resolve(
+                ImageRequest(name="test", source_type="stock", prompt="office workspace")
+            )
+
+        assert isinstance(result, ResolvedImage)
+        assert result.data == fake_jpeg
+        assert result.mime_type == "image/jpeg"
+
+    async def test_unsupported_stock_provider(self) -> None:
+        """Unsupported stock provider should raise ValueError."""
+        resolver = ImageResolver(stock_provider="shutterstock", stock_api_key="key-123")
+        with pytest.raises(ValueError, match="Unsupported stock provider"):
+            await resolver.resolve(
+                ImageRequest(name="test", source_type="stock", prompt="test")
+            )
 
 
 # ── resolve_all (parallel resolution) ──────────────────────────────────────

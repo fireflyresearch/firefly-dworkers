@@ -51,6 +51,9 @@ _SUPPORTED_FORMATS: dict[str, str] = {
 class TemplateAnalyzer:
     """Analyzes existing documents to extract their design language (colors, fonts, layouts)."""
 
+    def __init__(self, *, vlm_model: str = "") -> None:
+        self._vlm_model = vlm_model
+
     # ── Public API ──────────────────────────────────────────────────────────
 
     def _detect_format(self, source: str) -> str:
@@ -76,7 +79,15 @@ class TemplateAnalyzer:
             "docx": self._analyze_docx,
             "xlsx": self._analyze_xlsx,
         }
-        return await dispatch[fmt](source)
+        profile = await dispatch[fmt](source)
+
+        if self._vlm_model and self._is_profile_empty(profile) and fmt == "pptx":
+            try:
+                profile = await self._vlm_analyze(source, profile)
+            except Exception:
+                pass  # XML result stands
+
+        return profile
 
     # ── PPTX analysis ──────────────────────────────────────────────────────
 
@@ -217,6 +228,60 @@ class TemplateAnalyzer:
             body_font=body_font,
             font_sizes=font_sizes,
             available_layouts=available_layouts,
+        )
+
+    # ── VLM fallback ─────────────────────────────────────────────────────
+
+    @staticmethod
+    def _is_profile_empty(profile: DesignProfile) -> bool:
+        """Check if the XML-extracted profile has no meaningful design data."""
+        return not profile.primary_color and not profile.heading_font and not profile.color_palette
+
+    async def _vlm_analyze(self, source: str, xml_profile: DesignProfile) -> DesignProfile:
+        """Render first slide -> VLM -> DesignProfile. Merge with XML results."""
+        from firefly_dworkers.design.preview import SlidePreviewRenderer
+        from fireflyframework_genai.agents.base import FireflyAgent
+        from fireflyframework_genai.types import BinaryContent
+
+        renderer = SlidePreviewRenderer(dpi=150)
+        png_list = await renderer.render_presentation(source)
+        if not png_list:
+            return xml_profile
+
+        agent = FireflyAgent(
+            "template-analyzer",
+            model=self._vlm_model,
+            instructions=(
+                "Analyze this slide template. Extract: primary/secondary/accent "
+                "colors (hex), heading font, body font, color palette. "
+                "Return a DesignProfile."
+            ),
+            output_type=DesignProfile,
+            auto_register=False,
+        )
+        result = await agent.run([
+            "Analyze this template slide and extract the design language.",
+            BinaryContent(data=png_list[0], media_type="image/png"),
+        ])
+        vlm_profile: DesignProfile = result.output
+
+        # Merge: XML non-empty fields take priority
+        return DesignProfile(
+            primary_color=xml_profile.primary_color or vlm_profile.primary_color,
+            secondary_color=xml_profile.secondary_color or vlm_profile.secondary_color,
+            accent_color=xml_profile.accent_color or vlm_profile.accent_color,
+            background_color=xml_profile.background_color if xml_profile.background_color != "#ffffff" else vlm_profile.background_color,
+            text_color=xml_profile.text_color if xml_profile.text_color != "#333333" else vlm_profile.text_color,
+            color_palette=xml_profile.color_palette or vlm_profile.color_palette,
+            heading_font=xml_profile.heading_font or vlm_profile.heading_font,
+            body_font=xml_profile.body_font or vlm_profile.body_font,
+            font_sizes=xml_profile.font_sizes or vlm_profile.font_sizes,
+            available_layouts=xml_profile.available_layouts or vlm_profile.available_layouts,
+            preferred_layouts=xml_profile.preferred_layouts or vlm_profile.preferred_layouts,
+            margins=xml_profile.margins or vlm_profile.margins,
+            line_spacing=xml_profile.line_spacing if xml_profile.line_spacing != 1.15 else vlm_profile.line_spacing,
+            styles=xml_profile.styles or vlm_profile.styles,
+            master_slide_names=xml_profile.master_slide_names or vlm_profile.master_slide_names,
         )
 
     # ── Private helpers ─────────────────────────────────────────────────────

@@ -59,3 +59,22 @@ class TestReviewers:
         result = await reviewer.on_checkpoint("analyst", "phase_1", {"report": "..."})
         assert result is False
         assert len(store.list_pending()) == 1
+
+
+class TestNewCheckpointTypes:
+    def test_semi_supervised_design_spec_approval(self):
+        assert should_checkpoint(AutonomyLevel.SEMI_SUPERVISED, "design_spec_approval") is True
+
+    def test_semi_supervised_pre_render(self):
+        assert should_checkpoint(AutonomyLevel.SEMI_SUPERVISED, "pre_render") is True
+
+    def test_semi_supervised_intermediate_step_still_false(self):
+        assert should_checkpoint(AutonomyLevel.SEMI_SUPERVISED, "intermediate_step") is False
+
+    def test_manual_new_types(self):
+        assert should_checkpoint(AutonomyLevel.MANUAL, "design_spec_approval") is True
+        assert should_checkpoint(AutonomyLevel.MANUAL, "pre_render") is True
+
+    def test_autonomous_new_types(self):
+        assert should_checkpoint(AutonomyLevel.AUTONOMOUS, "design_spec_approval") is False
+        assert should_checkpoint(AutonomyLevel.AUTONOMOUS, "pre_render") is False

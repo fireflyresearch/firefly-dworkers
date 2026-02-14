@@ -10,6 +10,7 @@ Supports four source types:
 from __future__ import annotations
 
 import asyncio
+import base64
 from typing import TYPE_CHECKING
 
 import httpx
@@ -83,17 +84,71 @@ class ImageResolver:
             return ResolvedImage(data=resp.content, mime_type=mime, alt_text=request.alt_text)
 
     async def _resolve_ai(self, request: ImageRequest) -> ResolvedImage:
-        """Generate image using AI provider (placeholder -- raises if no API key)."""
+        """Generate image using AI provider."""
         if not self._ai_api_key:
             raise ValueError("AI image generation requires ai_api_key")
-        # Placeholder: In production, call OpenAI DALL-E API or similar
-        raise NotImplementedError(f"AI image generation via {self._ai_provider} not yet implemented")
+        if self._ai_provider == "openai":
+            return await self._resolve_ai_openai(request)
+        raise ValueError(f"Unsupported AI provider: {self._ai_provider}")
+
+    async def _resolve_ai_openai(self, request: ImageRequest) -> ResolvedImage:
+        """Call OpenAI DALL-E 3 API to generate an image."""
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(
+                "https://api.openai.com/v1/images/generations",
+                headers={
+                    "Authorization": f"Bearer {self._ai_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "dall-e-3",
+                    "prompt": request.prompt or request.name,
+                    "n": 1,
+                    "size": "1024x1024",
+                    "response_format": "b64_json",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            b64_str = data["data"][0]["b64_json"]
+            img_bytes = base64.b64decode(b64_str)
+            return ResolvedImage(
+                data=img_bytes,
+                mime_type="image/png",
+                alt_text=request.alt_text or request.prompt,
+                width=1024.0,
+                height=1024.0,
+            )
 
     async def _resolve_stock(self, request: ImageRequest) -> ResolvedImage:
-        """Fetch from stock photo API (placeholder -- raises if no API key)."""
+        """Fetch from stock photo API."""
         if not self._stock_api_key:
             raise ValueError("Stock image search requires stock_api_key")
-        raise NotImplementedError(f"Stock image search via {self._stock_provider} not yet implemented")
+        if self._stock_provider == "unsplash":
+            return await self._resolve_stock_unsplash(request)
+        raise ValueError(f"Unsupported stock provider: {self._stock_provider}")
+
+    async def _resolve_stock_unsplash(self, request: ImageRequest) -> ResolvedImage:
+        """Search Unsplash and download the first result."""
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            search_resp = await client.get(
+                "https://api.unsplash.com/search/photos",
+                params={"query": request.prompt or request.name, "per_page": 1},
+                headers={"Authorization": f"Client-ID {self._stock_api_key}"},
+            )
+            search_resp.raise_for_status()
+            results = search_resp.json().get("results", [])
+            if not results:
+                raise ValueError(f"No Unsplash results for: {request.prompt or request.name}")
+            image_url = results[0]["urls"]["regular"]
+            img_resp = await client.get(image_url)
+            img_resp.raise_for_status()
+            mime = img_resp.headers.get("content-type", "image/jpeg").split(";")[0]
+            return ResolvedImage(
+                data=img_resp.content,
+                mime_type=mime,
+                alt_text=request.alt_text or results[0].get("alt_description", ""),
+            )
 
     # ── Private helpers ─────────────────────────────────────────────────────
 

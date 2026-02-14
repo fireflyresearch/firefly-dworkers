@@ -27,6 +27,7 @@ import firefly_dworkers.tools.document.google_docs  # noqa: F401
 import firefly_dworkers.tools.document.pdf  # noqa: F401
 import firefly_dworkers.tools.document.word  # noqa: F401
 import firefly_dworkers.tools.presentation.google_slides  # noqa: F401
+import firefly_dworkers.tools.presentation.pipeline  # noqa: F401
 import firefly_dworkers.tools.presentation.powerpoint  # noqa: F401
 import firefly_dworkers.tools.project.asana  # noqa: F401
 import firefly_dworkers.tools.project.jira  # noqa: F401

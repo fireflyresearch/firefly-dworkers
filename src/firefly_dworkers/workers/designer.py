@@ -29,9 +29,17 @@ class DocumentDesignerWorker(BaseWorker):
         *,
         name: str = "",
         autonomy_level: AutonomyLevel | None = None,
+        checkpoint_handler: Any = None,
         **kwargs: Any,
     ) -> None:
-        toolkit = designer_toolkit(tenant_config)
+        worker_settings = tenant_config.workers.settings_for("designer")
+        resolved_autonomy = autonomy_level or AutonomyLevel(worker_settings.autonomy)
+
+        toolkit = designer_toolkit(
+            tenant_config,
+            autonomy_level=resolved_autonomy,
+            checkpoint_handler=checkpoint_handler,
+        )
         worker_name = name or f"designer-{tenant_config.id}"
         instructions = self._build_instructions(tenant_config)
 
@@ -46,6 +54,9 @@ class DocumentDesignerWorker(BaseWorker):
             tags=["designer", "consulting"],
             **kwargs,
         )
+
+        if checkpoint_handler is not None:
+            self.checkpoint_handler = checkpoint_handler
 
     @staticmethod
     def _build_instructions(config: TenantConfig) -> str:
