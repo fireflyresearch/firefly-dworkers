@@ -84,8 +84,11 @@ class DworkersApp(App):
 
         # Input area
         with Vertical(id="input-area"):
-            yield TextArea(id="prompt-input")
-            yield Static("Enter to send | Escape to cancel | /help for commands", classes="input-hint")
+            with Horizontal(id="input-row"):
+                yield Static("> ", classes="prompt-prefix", id="prompt-prefix")
+                yield TextArea(id="prompt-input")
+            yield Static("@analyst | Enter to send | Escape to cancel | /help",
+                         classes="input-hint", id="input-hint")
 
         # Status bar
         with Horizontal(id="status-bar"):
@@ -174,6 +177,11 @@ class DworkersApp(App):
         # Focus the input
         self.query_one("#prompt-input", TextArea).focus()
         self._update_status_bar()
+
+    def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        """Update the input hint as the user types."""
+        if event.text_area.id == "prompt-input":
+            self._update_input_hint(event.text_area.text)
 
     async def on_key(self, event) -> None:
         """Handle Enter to submit and Escape to cancel streaming."""
@@ -306,6 +314,7 @@ class DworkersApp(App):
         )
 
         message_list.scroll_end(animate=False)
+        self._update_input_hint()
 
     def _add_user_message(self, container: VerticalScroll, text: str) -> None:
         """Mount a user message into the message list."""
@@ -339,6 +348,16 @@ class DworkersApp(App):
         if welcome.display:
             welcome.display = False
             self.query_one("#message-list", VerticalScroll).display = True
+
+    def _update_input_hint(self, text: str = "") -> None:
+        """Update the input hint to reflect the detected @role target."""
+        import contextlib
+
+        role = self._extract_role(text) if text else None
+        target = role or "analyst"
+        hint = f"@{target} | Enter to send | Escape to cancel | /help"
+        with contextlib.suppress(Exception):
+            self.query_one("#input-hint", Static).update(hint)
 
     # ── Slash commands ───────────────────────────────────────
 

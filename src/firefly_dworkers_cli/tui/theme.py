@@ -167,6 +167,18 @@ Screen {
     border: none;
 }
 
+.prompt-prefix {
+    color: #6366f1;
+    width: 2;
+    padding: 0;
+    text-style: bold;
+}
+
+#input-row {
+    height: auto;
+    width: 1fr;
+}
+
 #input-area .input-hint {
     color: #475569;
     height: 1;
