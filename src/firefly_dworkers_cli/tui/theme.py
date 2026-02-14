@@ -212,6 +212,20 @@ Screen {
     color: #ef4444;
 }
 
+#status-bar .status-mode {
+    color: #10b981;
+}
+
+#status-bar .status-autonomy {
+    color: #f59e0b;
+}
+
+#status-bar .status-sep {
+    color: #475569;
+    width: auto;
+    padding: 0 0;
+}
+
 /* ── Header ──────────────────────────────────── */
 
 #header-bar {

@@ -89,7 +89,11 @@ class DworkersApp(App):
         # Status bar
         with Horizontal(id="status-bar"):
             yield Static("local", classes="status-item status-model")
-            yield Static("\u2502", classes="status-item")
+            yield Static("\u2502", classes="status-sep")
+            yield Static("local", classes="status-item status-mode", id="status-mode")
+            yield Static("\u2502", classes="status-sep")
+            yield Static("semi-supervised", classes="status-item status-autonomy", id="status-autonomy")
+            yield Static("\u2502", classes="status-sep")
             yield Static("0 tokens", classes="status-item status-tokens", id="token-count")
             yield Static("\u25cf connected", classes="status-connection status-connected", id="conn-status")
 
@@ -116,6 +120,7 @@ class DworkersApp(App):
         """Callback when setup wizard finishes."""
         if result is not None and hasattr(result, "models"):
             self._update_model_label(result.models.default)
+        self._update_status_bar()
         self.call_after_refresh(self._connect_and_focus)
 
     def _update_model_label(self, model_string: str) -> None:
@@ -127,6 +132,27 @@ class DworkersApp(App):
             else:
                 label = model_string
             self.query_one(".status-model", Static).update(label)
+        except Exception:
+            pass
+
+    def _update_status_bar(self) -> None:
+        """Refresh all status bar items after state changes."""
+        # Mode
+        mode_label = self._mode
+        if self._client and type(self._client).__name__ == "RemoteClient":
+            mode_label = "remote"
+        elif self._mode == "auto":
+            mode_label = "local"  # auto resolved to local
+        try:
+            self.query_one("#status-mode", Static).update(mode_label)
+        except Exception:
+            pass
+
+        # Autonomy
+        autonomy = self._router.autonomy_level
+        display = autonomy.replace("_", "-")
+        try:
+            self.query_one("#status-autonomy", Static).update(display)
         except Exception:
             pass
 
@@ -152,6 +178,7 @@ class DworkersApp(App):
 
         # Focus the input
         self.query_one("#prompt-input", TextArea).focus()
+        self._update_status_bar()
 
     async def on_key(self, event) -> None:
         """Handle Enter to submit (without shift)."""
@@ -387,6 +414,7 @@ class DworkersApp(App):
                     message_list,
                     self._router.autonomy_text(new_level=arg or None),
                 )
+                self._update_status_bar()
 
             case "/checkpoints":
                 self._add_system_message(
