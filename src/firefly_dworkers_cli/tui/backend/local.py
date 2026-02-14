@@ -118,9 +118,15 @@ class LocalClient:
             )
             if self._checkpoint_handler is not None and hasattr(worker, "checkpoint_handler"):
                 worker.checkpoint_handler = self._checkpoint_handler
-            result = await worker.run(prompt)
-            output = str(result.output) if hasattr(result, "output") else str(result)
-            yield StreamEvent(type="complete", content=output)
+
+            # Prefer streaming when available
+            if hasattr(worker, "run_stream") and callable(worker.run_stream):
+                async for event in worker.run_stream(prompt):
+                    yield event
+            else:
+                result = await worker.run(prompt)
+                output = str(result.output) if hasattr(result, "output") else str(result)
+                yield StreamEvent(type="complete", content=output)
         except Exception as exc:
             logger.warning("run_worker failed: %s", exc, exc_info=True)
             yield StreamEvent(type="error", content=str(exc))
