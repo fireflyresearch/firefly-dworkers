@@ -23,59 +23,12 @@ from firefly_dworkers_cli.config import ConfigManager
 from firefly_dworkers_cli.tui.backend.client import DworkersClient, create_client
 from firefly_dworkers_cli.tui.backend.models import ChatMessage, Conversation
 from firefly_dworkers_cli.tui.backend.store import ConversationStore
+from firefly_dworkers_cli.tui.commands import CommandRouter
 from firefly_dworkers_cli.tui.theme import APP_CSS
 
 # Known worker roles for @mention detection.
 _KNOWN_ROLES = {"analyst", "researcher", "data_analyst", "manager", "designer"}
 _MENTION_RE = re.compile(r"@(\w+)")
-
-_WELCOME_TEXT = """\
-  dworkers — Digital Workers as a Service
-
-  Type a message to start chatting with your AI workers.
-  Use @analyst, @researcher, @designer to target a specific worker.
-
-  Commands:
-    /help          Show all commands
-    /team          List available workers
-    /plan          List workflow plans
-    /conversations List saved conversations
-    /load <id>     Load a saved conversation
-    /config        Current configuration
-    /connectors    Connector statuses
-    /status        Current session info
-    /export        Export conversation
-    /new           Start a new conversation
-    /quit          Exit
-"""
-
-_HELP_TEXT = """\
-Available commands:
-  /help              Show this help message
-  /team              List available AI workers and their status
-  /plan              List available workflow plans
-  /plan <name>       Execute a named plan
-  /project <brief>   Run a multi-worker project
-  /conversations     List all saved conversations
-  /load <id>         Load a saved conversation
-  /new               Start a fresh conversation
-  /status            Show current session status
-  /config            Show current configuration
-  /connectors        List all connector statuses
-  /send <tool> <ch>  Send a message via Slack/Teams/email
-  /channels <tool>   List channels for a messaging tool
-  /export            Export current conversation as markdown
-  /setup             Re-run the setup wizard
-  /quit              Exit dworkers
-
-Tips:
-  - Use @analyst, @researcher, @data_analyst, @manager, @designer
-    to route your message to a specific worker role
-  - Default worker is @analyst if no role is specified
-  - Messages support markdown formatting
-  - Use /send slack #general <message> to send via Slack
-  - Use /channels slack to list Slack channels
-"""
 
 
 class DworkersApp(App):
@@ -99,6 +52,9 @@ class DworkersApp(App):
         self._conversation: Conversation | None = None
         self._total_tokens = 0
         self._is_streaming = False
+        self._router = CommandRouter(
+            client=None, store=self._store, config_mgr=self._config_mgr,
+        )
 
     def compose(self) -> ComposeResult:
         # Header bar
@@ -108,7 +64,7 @@ class DworkersApp(App):
 
         # Welcome banner (shown initially, hidden once chat starts)
         with Vertical(id="welcome"):
-            yield Static(_WELCOME_TEXT, classes="welcome-hint")
+            yield Static(CommandRouter.WELCOME_TEXT, classes="welcome-hint")
 
         # Message list (hidden initially, shown once chat starts)
         yield VerticalScroll(id="message-list")
@@ -165,6 +121,7 @@ class DworkersApp(App):
     async def _connect_and_focus(self) -> None:
         """Connect to backend client and focus the input."""
         self._client = await create_client()
+        self._router.client = self._client
 
         # Update connection status
         conn = self.query_one("#conn-status", Static)
@@ -339,13 +296,11 @@ class DworkersApp(App):
         """Handle slash commands."""
         self._hide_welcome()
         message_list = self.query_one("#message-list", VerticalScroll)
-        parts = text.split(maxsplit=1)
-        command = parts[0].lower()
-        arg = parts[1] if len(parts) > 1 else ""
+        command, arg = self._router.parse(text)
 
         match command:
             case "/help":
-                self._add_system_message(message_list, _HELP_TEXT)
+                self._add_system_message(message_list, self._router.help_text)
 
             case "/team":
                 await self._cmd_team(message_list)
@@ -367,7 +322,9 @@ class DworkersApp(App):
                     )
 
             case "/conversations":
-                self._cmd_conversations(message_list)
+                self._add_system_message(
+                    message_list, self._router.conversations_text(),
+                )
 
             case "/load":
                 self._cmd_load(message_list, arg)
@@ -382,10 +339,15 @@ class DworkersApp(App):
                 )
 
             case "/status":
-                self._cmd_status(message_list)
+                self._add_system_message(
+                    message_list,
+                    self._router.status_text(self._conversation, self._total_tokens),
+                )
 
             case "/config":
-                self._cmd_config(message_list)
+                self._add_system_message(
+                    message_list, self._router.config_text(),
+                )
 
             case "/connectors":
                 await self._cmd_connectors(message_list)
@@ -397,7 +359,10 @@ class DworkersApp(App):
                 await self._cmd_channels(message_list, arg)
 
             case "/export":
-                self._cmd_export(message_list)
+                self._add_system_message(
+                    message_list,
+                    self._router.export_text(self._conversation),
+                )
 
             case "/setup":
                 await self._cmd_setup()
@@ -469,18 +434,6 @@ class DworkersApp(App):
             await content.update("".join(tokens))
         self._is_streaming = False
 
-    def _cmd_conversations(self, container: VerticalScroll) -> None:
-        """List saved conversations."""
-        convos = self._store.list_conversations()
-        if convos:
-            lines = ["**Saved Conversations:**\n"]
-            for c in convos:
-                updated = c.updated_at.strftime("%b %d, %H:%M")
-                lines.append(f"- **{c.title}** ({c.message_count} msgs, {updated})")
-            self._add_system_message(container, "\n".join(lines))
-        else:
-            self._add_system_message(container, "No saved conversations.")
-
     def _cmd_load(self, container: VerticalScroll, conv_id: str) -> None:
         """Load a saved conversation by ID."""
         conv_id = conv_id.strip()
@@ -521,61 +474,6 @@ class DworkersApp(App):
             container,
             f"Loaded conversation: **{conv.title}** ({len(conv.messages)} messages)",
         )
-
-    def _cmd_status(self, container: VerticalScroll) -> None:
-        """Show current session status."""
-        if self._conversation:
-            lines = [
-                "**Session Status:**\n",
-                f"- **Conversation:** {self._conversation.title}",
-                f"- **Status:** {self._conversation.status}",
-                f"- **Messages:** {len(self._conversation.messages)}",
-                f"- **Tokens:** {self._total_tokens:,}",
-            ]
-            if self._conversation.participants:
-                lines.append(f"- **Participants:** {', '.join(self._conversation.participants)}")
-        else:
-            lines = [
-                "**Session Status:**\n",
-                "- No active conversation",
-                f"- **Tokens:** {self._total_tokens:,}",
-                "- Type a message to start",
-            ]
-        self._add_system_message(container, "\n".join(lines))
-
-    def _cmd_export(self, container: VerticalScroll) -> None:
-        """Export current conversation as markdown."""
-        if not self._conversation or not self._conversation.messages:
-            self._add_system_message(container, "Nothing to export.")
-            return
-        lines = [f"# {self._conversation.title}\n"]
-        for msg in self._conversation.messages:
-            ts = msg.timestamp.strftime("%Y-%m-%d %H:%M")
-            lines.append(f"**{msg.sender}** ({ts}):\n\n{msg.content}\n\n---\n")
-        self._add_system_message(container, "\n".join(lines))
-
-    def _cmd_config(self, container: VerticalScroll) -> None:
-        """Show current configuration."""
-        config = self._config_mgr.config
-        if config is None:
-            self._add_system_message(container, "No configuration loaded.")
-            return
-        enabled_connectors = config.connectors.enabled_connectors()
-        connector_names = ", ".join(sorted(enabled_connectors.keys())) or "none"
-        api_keys = self._config_mgr.detect_api_keys()
-        providers = ", ".join(p.title() for p in sorted(api_keys)) or "none"
-        lines = [
-            "**Current Configuration:**\n",
-            f"- **Tenant:** {config.name} (`{config.id}`)",
-            f"- **Default Model:** `{config.models.default}`",
-            f"- **Research Model:** `{config.models.research or 'same as default'}`",
-            f"- **Analysis Model:** `{config.models.analysis or 'same as default'}`",
-            f"- **Available Providers:** {providers}",
-            f"- **Enabled Connectors:** {connector_names}",
-            f"- **Global Config:** `{self._config_mgr.global_config_path}`",
-            f"- **Project Config:** `{self._config_mgr.project_config_path}`",
-        ]
-        self._add_system_message(container, "\n".join(lines))
 
     async def _cmd_connectors(self, container: VerticalScroll) -> None:
         """List all connector statuses."""
