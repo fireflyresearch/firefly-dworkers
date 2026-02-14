@@ -16,30 +16,10 @@ if TYPE_CHECKING:
     from firefly_dworkers_cli.tui.backend.store import ConversationStore
 
 WELCOME_TEXT = """\
-  dworkers — Digital Workers as a Service
+  dworkers v0.1.0
 
-  Type a message to start chatting with your AI workers.
-  Use @analyst, @researcher, @designer to target a specific worker.
-  Press Escape to cancel streaming. Ctrl+N for new chat. Ctrl+Q to quit.
-
-  Commands:
-    /help          Show all commands
-    /team          List available workers
-    /plan          List workflow plans
-    /conversations List saved conversations
-    /load <id>     Load a saved conversation
-    /config        Current configuration
-    /status        Current session info
-    /models        Show available models
-    /model <name>  Switch the default model
-    /usage         Show usage statistics
-    /clear         Clear the chat display
-    /retry         Retry the last message
-    /delete <id>   Delete a conversation
-    /autonomy      Show or set autonomy level
-    /checkpoints   List pending checkpoints
-    /setup         Re-run setup wizard
-    /quit          Exit
+  /help for commands · /team to list workers
+  Type a message to start.\
 """
 
 _HELP_TEXT = """\
