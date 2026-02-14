@@ -91,3 +91,12 @@ class TestStreamingCancellation:
     def test_cancel_streaming_starts_unset(self):
         app = DworkersApp()
         assert not app._cancel_streaming.is_set()
+
+
+class TestStatusBarSeparator:
+    def test_no_pipe_separator_in_compose(self):
+        """Status bar should use · not │ as separator."""
+        import inspect
+        source = inspect.getsource(DworkersApp.compose)
+        assert "\u2502" not in source
+        assert "·" in source

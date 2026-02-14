@@ -103,11 +103,11 @@ class DworkersApp(App):
         # Status bar
         with Horizontal(id="status-bar"):
             yield Static("local", classes="status-item status-model")
-            yield Static("\u2502", classes="status-sep")
+            yield Static(" · ", classes="status-sep")
             yield Static("local", classes="status-item status-mode", id="status-mode")
-            yield Static("\u2502", classes="status-sep")
+            yield Static(" · ", classes="status-sep")
             yield Static("semi-supervised", classes="status-item status-autonomy", id="status-autonomy")
-            yield Static("\u2502", classes="status-sep")
+            yield Static(" · ", classes="status-sep")
             yield Static("~0 tokens", classes="status-item status-tokens", id="token-count")
             yield Static("\u25cf connected", classes="status-connection status-connected", id="conn-status")
 
@@ -115,10 +115,10 @@ class DworkersApp(App):
         """Load config, optionally run setup wizard, then connect to backend."""
         # Check if setup is needed
         if self._config_mgr.needs_setup():
-            from firefly_dworkers_cli.tui.screens.setup import SetupScreen
+            from firefly_dworkers_cli.tui.screens.setup import SetupWizard
 
             await self.push_screen(
-                SetupScreen(self._config_mgr),
+                SetupWizard(self._config_mgr),
                 callback=self._on_setup_complete,
             )
         else:
@@ -249,10 +249,10 @@ class DworkersApp(App):
 
         # Add AI response header
         ai_header = Static(
-            f"\u2726 {sender_name}",
+            f"{sender_name}",
             classes="msg-sender msg-sender-ai",
         )
-        msg_box = Vertical(classes="msg-box")
+        msg_box = Vertical(classes="msg-box-ai")
         await message_list.mount(msg_box)
         await msg_box.mount(ai_header)
 
@@ -347,8 +347,8 @@ class DworkersApp(App):
     async def _add_user_message(self, container: VerticalScroll, text: str) -> None:
         """Mount a user message into the message list."""
         msg_box = Vertical(classes="msg-box")
-        header = Static("\u25cf You", classes="msg-sender msg-sender-human")
-        content = Markdown(text, classes="msg-content")
+        header = Static("> You", classes="msg-sender msg-sender-human")
+        content = Markdown(text, classes="msg-content msg-content-user")
         await container.mount(msg_box)
         await msg_box.mount(header)
         await msg_box.mount(content)
@@ -595,8 +595,8 @@ class DworkersApp(App):
         await self._add_system_message(container, f"Executing plan: **{plan_name}**...")
 
         content = Markdown("", classes="msg-content")
-        box = Vertical(classes="msg-box")
-        header = Static("\u2726 Planner", classes="msg-sender msg-sender-ai")
+        box = Vertical(classes="msg-box-ai")
+        header = Static("Planner", classes="msg-sender msg-sender-ai")
         await container.mount(box)
         await box.mount(header)
         await box.mount(content)
@@ -676,9 +676,9 @@ class DworkersApp(App):
         # Replay messages into the UI
         for msg in conv.messages:
             if msg.is_ai:
-                msg_box = Vertical(classes="msg-box")
+                msg_box = Vertical(classes="msg-box-ai")
                 header = Static(
-                    f"\u2726 {msg.sender}",
+                    f"{msg.sender}",
                     classes="msg-sender msg-sender-ai",
                 )
                 content = Markdown(msg.content, classes="msg-content")
@@ -723,10 +723,10 @@ class DworkersApp(App):
 
     async def _cmd_setup(self) -> None:
         """Re-run the setup wizard."""
-        from firefly_dworkers_cli.tui.screens.setup import SetupScreen
+        from firefly_dworkers_cli.tui.screens.setup import SetupWizard
 
         await self.push_screen(
-            SetupScreen(self._config_mgr),
+            SetupWizard(self._config_mgr),
             callback=self._on_setup_complete,
         )
 
@@ -744,9 +744,9 @@ class DworkersApp(App):
         )
 
         content_widget = Markdown("", classes="msg-content")
-        msg_box = Vertical(classes="msg-box")
+        msg_box = Vertical(classes="msg-box-ai")
         header = Static(
-            "\u2726 Project Orchestrator",
+            "Project Orchestrator",
             classes="msg-sender msg-sender-ai",
         )
         await container.mount(msg_box)
