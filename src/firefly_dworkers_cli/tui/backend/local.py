@@ -118,9 +118,15 @@ class LocalClient:
             )
             if self._checkpoint_handler is not None and hasattr(worker, "checkpoint_handler"):
                 worker.checkpoint_handler = self._checkpoint_handler
-            result = await worker.run(prompt)
-            output = str(result.output) if hasattr(result, "output") else str(result)
-            yield StreamEvent(type="complete", content=output)
+
+            # Prefer streaming when available
+            if hasattr(worker, "run_stream") and callable(worker.run_stream):
+                async for event in worker.run_stream(prompt):
+                    yield event
+            else:
+                result = await worker.run(prompt)
+                output = str(result.output) if hasattr(result, "output") else str(result)
+                yield StreamEvent(type="complete", content=output)
         except Exception as exc:
             logger.warning("run_worker failed: %s", exc, exc_info=True)
             yield StreamEvent(type="error", content=str(exc))
@@ -276,12 +282,27 @@ class LocalClient:
     # -- Usage ----------------------------------------------------------------
 
     async def get_usage_stats(self, tenant_id: str = "default") -> UsageStats:
-        """Return usage statistics.
+        """Return usage statistics from the framework's default tracker."""
+        try:
+            from fireflyframework_genai.observability.usage import default_usage_tracker
 
-        Token tracking is done client-side in app.py via word-count
-        heuristic. Core-level usage tracking is planned for a future release.
-        """
-        return UsageStats()
+            summary = default_usage_tracker.get_summary()
+            avg_ms = (
+                summary.total_latency_ms / summary.total_requests
+                if summary.total_requests
+                else 0.0
+            )
+            return UsageStats(
+                total_tokens=summary.total_tokens,
+                total_cost_usd=summary.total_cost_usd,
+                tasks_completed=summary.total_requests,
+                avg_response_ms=avg_ms,
+                by_model=summary.by_model,
+                by_worker=summary.by_agent,
+            )
+        except ImportError:
+            logger.debug("Framework usage tracker not available")
+            return UsageStats()
 
     # -- Conversations --------------------------------------------------------
 

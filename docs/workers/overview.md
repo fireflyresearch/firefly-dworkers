@@ -69,11 +69,16 @@ classDiagram
         +_build_instructions()
     }
 
+    class DocumentDesignerWorker {
+        +_build_instructions()
+    }
+
     FireflyAgent <|-- BaseWorker
     BaseWorker <|-- AnalystWorker
     BaseWorker <|-- ResearcherWorker
     BaseWorker <|-- DataAnalystWorker
     BaseWorker <|-- ManagerWorker
+    BaseWorker <|-- DocumentDesignerWorker
 ```
 
 ---
@@ -231,6 +236,7 @@ Each worker receives a `ToolKit` assembled by functions in `firefly_dworkers.too
 | Researcher | `researcher_toolkit()` | Web search/browsing (with FallbackComposer), storage connectors, report generation, RSS feeds, research chain (SequentialComposer) |
 | Data Analyst | `data_analyst_toolkit()` | Storage connectors, spreadsheet tools, data tools (SQL), vision analysis, spreadsheet parsing, API client, report generation |
 | Manager | `manager_toolkit()` | Project management tools (Jira, Asana), communication connectors, presentation tools, document tools, spreadsheet tools, vision analysis, report generation, documentation |
+| Designer | `designer_toolkit()` | Presentation tools, document tools, spreadsheet tools, vision analysis, storage connectors |
 
 The toolkits are assembled dynamically based on the tenant's enabled connectors. If SharePoint is disabled in the tenant config, no SharePoint tool is included in the toolkit.
 

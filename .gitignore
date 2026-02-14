@@ -61,6 +61,3 @@ Thumbs.db
 
 # Worktrees
 .worktrees/
-
-# Plans (local-only, never push)
-docs/plans/

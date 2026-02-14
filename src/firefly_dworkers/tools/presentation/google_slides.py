@@ -321,9 +321,11 @@ class GoogleSlidesTool(PresentationTool):
                 requests.append(img_req)
 
             # --- Charts ---
-            # TODO: Chart embedding in Google Slides requires rendering the chart to PNG
-            # and uploading to Google Drive first to get a URL, then using createImage.
-            # This is complex and deferred for now.
+            # Limitation: Chart embedding in Google Slides requires rendering to
+            # PNG, uploading to Google Drive, and using createImage with the
+            # Drive URL.  This cross-service dependency (Slides → Drive) is not
+            # supported by this adapter.  Use PowerPointTool for native chart
+            # embedding, or pre-render charts and add them as images.
 
         return requests
 
@@ -331,11 +333,18 @@ class GoogleSlidesTool(PresentationTool):
         """Modify a Google Slides presentation by ID."""
         svc = self._get_service()
 
+        # Read current presentation state for update_content operations
+        has_update = any(op.operation == "update_content" for op in operations)
+        pres: dict[str, Any] = {}
+        if has_update:
+            pres = await asyncio.to_thread(
+                lambda: svc.presentations().get(presentationId=source).execute()
+            )
+
         requests: list[dict[str, Any]] = []
         for op in operations:
-            if op.operation == "update_content" and "title" in op.data:
-                # Would need slide object IDs; simplified version
-                pass
+            if op.operation == "update_content":
+                requests.extend(self._build_update_content_requests(pres, op))
             elif op.operation == "add_slide":
                 requests.append(
                     {
@@ -360,3 +369,65 @@ class GoogleSlidesTool(PresentationTool):
             )
 
         return source.encode("utf-8")
+
+    @staticmethod
+    def _build_update_content_requests(
+        pres: dict[str, Any],
+        op: SlideOperation,
+    ) -> list[dict[str, Any]]:
+        """Build replaceAllText requests for an update_content operation.
+
+        Supported ``op.data`` keys:
+
+        * ``title`` — new text for the title placeholder
+        * ``body`` — new text for the body/subtitle placeholder
+
+        The method reads the presentation to find existing placeholder text on
+        the target slide and builds ``replaceAllText`` requests that swap the
+        old text for the new text.
+        """
+        slide_index = op.slide_index
+        slides = pres.get("slides", [])
+        if slide_index >= len(slides):
+            return []
+
+        slide = slides[slide_index]
+        requests: list[dict[str, Any]] = []
+
+        title_types = {"TITLE", "CENTERED_TITLE"}
+        body_types = {"BODY", "SUBTITLE"}
+
+        for element in slide.get("pageElements", []):
+            shape = element.get("shape", {})
+            ph = shape.get("placeholder", {})
+            ph_type = ph.get("type", "")
+            text_elements = shape.get("text", {}).get("textElements", [])
+            old_text = "".join(
+                te.get("textRun", {}).get("content", "") for te in text_elements
+            ).strip()
+
+            if not old_text:
+                continue
+
+            if ph_type in title_types and "title" in op.data:
+                requests.append(
+                    {
+                        "replaceAllText": {
+                            "containsText": {"text": old_text, "matchCase": True},
+                            "replaceText": op.data["title"],
+                            "pageObjectIds": [slide.get("objectId", "")],
+                        }
+                    }
+                )
+            elif ph_type in body_types and "body" in op.data:
+                requests.append(
+                    {
+                        "replaceAllText": {
+                            "containsText": {"text": old_text, "matchCase": True},
+                            "replaceText": op.data["body"],
+                            "pageObjectIds": [slide.get("objectId", "")],
+                        }
+                    }
+                )
+
+        return requests

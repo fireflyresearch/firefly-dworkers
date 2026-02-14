@@ -80,6 +80,16 @@ class TestBackendModels:
         assert u.by_model == {}
 
 
+class TestConversationParticipants:
+    def test_conversation_has_participants_field(self):
+        c = Conversation(
+            id="c1", title="Test",
+            created_at=datetime.now(UTC), updated_at=datetime.now(UTC),
+        )
+        assert hasattr(c, "participants")
+        assert c.participants == []
+
+
 # ---------------------------------------------------------------------------
 # ConversationStore tests
 # ---------------------------------------------------------------------------

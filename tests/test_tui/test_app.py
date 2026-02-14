@@ -1,6 +1,9 @@
 """Test DworkersApp chat-first shell."""
 
+import asyncio
+
 from firefly_dworkers_cli.tui.app import DworkersApp, _KNOWN_ROLES
+from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
 
 
 class TestDworkersApp:
@@ -61,3 +64,30 @@ class TestDworkersApp:
     def test_autonomy_override_none_keeps_default(self):
         app = DworkersApp()
         assert app._router.autonomy_level == "semi_supervised"
+
+
+class TestAsyncMessageMethods:
+    def test_add_user_message_is_async(self):
+        app = DworkersApp()
+        assert asyncio.iscoroutinefunction(app._add_user_message)
+
+    def test_add_system_message_is_async(self):
+        app = DworkersApp()
+        assert asyncio.iscoroutinefunction(app._add_system_message)
+
+
+class TestCheckpointHandlerInit:
+    def test_checkpoint_handler_exists_at_init(self):
+        app = DworkersApp()
+        assert app._checkpoint_handler is not None
+        assert isinstance(app._checkpoint_handler, TUICheckpointHandler)
+
+
+class TestStreamingCancellation:
+    def test_cancel_streaming_is_asyncio_event(self):
+        app = DworkersApp()
+        assert isinstance(app._cancel_streaming, asyncio.Event)
+
+    def test_cancel_streaming_starts_unset(self):
+        app = DworkersApp()
+        assert not app._cancel_streaming.is_set()

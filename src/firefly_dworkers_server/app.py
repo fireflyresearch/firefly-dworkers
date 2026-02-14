@@ -50,6 +50,10 @@ def create_dworkers_app(
     _configure_observability(app)
 
     # Include dworkers-specific routers
+    from firefly_dworkers_server.api.connectors import router as connectors_router
+    from firefly_dworkers_server.api.conversations import (
+        router as conversations_router,
+    )
     from firefly_dworkers_server.api.knowledge import router as knowledge_router
     from firefly_dworkers_server.api.observability import (
         router as observability_router,
@@ -68,6 +72,16 @@ def create_dworkers_app(
         observability_router,
         prefix="/api/observability",
         tags=["observability"],
+    )
+    app.include_router(
+        connectors_router,
+        prefix="/api/connectors",
+        tags=["connectors"],
+    )
+    app.include_router(
+        conversations_router,
+        prefix="/api/conversations",
+        tags=["conversations"],
     )
 
     return app

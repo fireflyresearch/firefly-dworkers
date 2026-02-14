@@ -480,4 +480,5 @@ All registries (`ToolRegistry`, `WorkerFactory`, `WorkerRegistry`, `PlanRegistry
 - [Custom Workers](workers/custom-workers.md) -- creating workers with WorkerFactory
 - [Knowledge Layer](knowledge/overview.md) -- KnowledgeBackend protocol
 - [Plans Overview](plans/overview.md) -- DAG-based plan execution
+- [Orchestration Overview](orchestration/overview.md) -- ProjectOrchestrator multi-agent collaboration
 - [Tenants Overview](tenants/overview.md) -- multi-tenancy architecture

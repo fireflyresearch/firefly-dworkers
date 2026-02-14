@@ -9,9 +9,11 @@ from firefly_dworkers.sdk.models import (
     IndexResponse,
     KnowledgeChunkResponse,
     PlanResponse,
+    ProjectEvent,
     RunWorkerRequest,
     SearchKnowledgeRequest,
     SearchResponse,
+    StreamEvent,
     WorkerResponse,
 )
 
@@ -195,3 +197,35 @@ class TestResponseModels:
         resp = HealthResponse()
         assert resp.status == "ok"
         assert resp.version == ""
+
+
+# ---------------------------------------------------------------------------
+# Streaming event models
+# ---------------------------------------------------------------------------
+
+
+class TestStreamingEventModels:
+    def test_stream_event_token(self):
+        e = StreamEvent(type="token", content="Hello")
+        assert e.type == "token"
+        assert e.content == "Hello"
+
+    def test_stream_event_complete(self):
+        e = StreamEvent(type="complete", content="Full output")
+        assert e.type == "complete"
+
+    def test_stream_event_error(self):
+        e = StreamEvent(type="error", content="Something failed")
+        assert e.type == "error"
+
+    def test_stream_event_tool_call(self):
+        e = StreamEvent(type="tool_call", content="web_search('query')")
+        assert e.type == "tool_call"
+
+    def test_stream_event_metadata(self):
+        e = StreamEvent(type="token", content="x", metadata={"key": "val"})
+        assert e.metadata == {"key": "val"}
+
+    def test_project_event_worker_output(self):
+        e = ProjectEvent(type="worker_output", content="partial result")
+        assert e.type == "worker_output"

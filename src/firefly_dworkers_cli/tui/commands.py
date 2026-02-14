@@ -30,6 +30,12 @@ WELCOME_TEXT = """\
     /load <id>     Load a saved conversation
     /config        Current configuration
     /status        Current session info
+    /models        Show available models
+    /model <name>  Switch the default model
+    /usage         Show usage statistics
+    /clear         Clear the chat display
+    /retry         Retry the last message
+    /delete <id>   Delete a conversation
     /autonomy      Show or set autonomy level
     /checkpoints   List pending checkpoints
     /setup         Re-run setup wizard
@@ -46,9 +52,15 @@ Available commands:
   /conversations     List all saved conversations
   /load <id>         Load a saved conversation
   /new               Start a fresh conversation
+  /delete <id>       Delete a saved conversation
+  /clear             Clear the chat display
+  /retry             Retry the last user message
   /status            Show current session status
   /config            Show current configuration
   /connectors        List all connector statuses
+  /models            Show available models and providers
+  /model <name>      Switch the default model
+  /usage             Show usage statistics
   /send <tool> <ch>  Send a message via Slack/Teams/email
   /channels <tool>   List channels for a messaging tool
   /export            Export current conversation as markdown
@@ -91,6 +103,12 @@ _COMMANDS: set[str] = {
     "/reject",
     "/setup",
     "/quit",
+    "/usage",
+    "/delete",
+    "/clear",
+    "/retry",
+    "/models",
+    "/model",
 }
 
 
@@ -205,6 +223,52 @@ class CommandRouter:
             f"- **Project Config:** `{self._config_mgr.project_config_path}`",
         ]
         return "\n".join(lines)
+
+    # -- new commands ----------------------------------------------------------
+
+    def usage_text(self) -> str:
+        """Return usage statistics text."""
+        if self.client is None:
+            return "**Error:** Not connected to a backend."
+        return (
+            "Usage statistics are available after running workers.\n\n"
+            "Use `/status` to see current session stats."
+        )
+
+    def delete_text(self, conv_id: str) -> str:
+        """Delete a conversation by ID."""
+        conv_id = conv_id.strip()
+        if not conv_id:
+            return "Usage: `/delete <conversation-id>`\n\nUse `/conversations` to see IDs."
+        deleted = self._store.delete_conversation(conv_id)
+        if deleted:
+            return f"Deleted conversation `{conv_id}`."
+        return f"**Error:** Conversation `{conv_id}` not found."
+
+    def models_text(self) -> str:
+        """Return available models for the current provider."""
+        config = self._config_mgr.config
+        if config is None:
+            return "**Error:** No configuration loaded. Run `/setup`."
+        current = config.models.default
+        provider = self._config_mgr.model_provider(current)
+        lines = [f"**Current model:** `{current}`\n", f"**Provider:** {provider}\n"]
+        detected_keys = self._config_mgr.detect_api_keys()
+        if detected_keys:
+            lines.append("**Available providers:** " + ", ".join(sorted(detected_keys.keys())))
+        return "\n".join(lines)
+
+    def model_text(self, model_name: str) -> str:
+        """Switch the default model."""
+        model_name = model_name.strip()
+        if not model_name:
+            return "Usage: `/model <provider:model-name>`\n\nExample: `/model openai:gpt-5.2`"
+        config = self._config_mgr.config
+        if config is None:
+            return "**Error:** No configuration loaded. Run `/setup`."
+        old_model = config.models.default
+        config.models.default = model_name
+        return f"Switched model: `{old_model}` \u2192 `{model_name}`"
 
     # -- autonomy / checkpoints ------------------------------------------------
 

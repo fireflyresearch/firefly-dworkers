@@ -10,6 +10,8 @@ wizard to configure the LLM provider and API keys.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import re
 import uuid
 from datetime import UTC, datetime
@@ -17,6 +19,7 @@ from datetime import UTC, datetime
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.css.query import NoMatches
 from textual.widgets import Markdown, Static, TextArea
 
 from firefly_dworkers_cli.config import ConfigManager
@@ -32,6 +35,9 @@ from firefly_dworkers_cli.tui.widgets.thinking_indicator import ThinkingIndicato
 # Known worker roles for @mention detection.
 _KNOWN_ROLES = {"analyst", "researcher", "data_analyst", "manager", "designer"}
 _MENTION_RE = re.compile(r"@(\w+)")
+
+# Streaming timeout in seconds (5 minutes).
+_STREAMING_TIMEOUT = 300
 
 
 class DworkersApp(App):
@@ -64,10 +70,12 @@ class DworkersApp(App):
         self._conversation: Conversation | None = None
         self._total_tokens = 0
         self._is_streaming = False
-        self._cancel_streaming = False
+        self._cancel_streaming = asyncio.Event()
         self._router = CommandRouter(
             client=None, store=self._store, config_mgr=self._config_mgr,
         )
+        self._checkpoint_handler = TUICheckpointHandler()
+        self._router.checkpoint_handler = self._checkpoint_handler
         if self._autonomy_override:
             self._router.autonomy_level = self._autonomy_override
 
@@ -100,7 +108,7 @@ class DworkersApp(App):
             yield Static("\u2502", classes="status-sep")
             yield Static("semi-supervised", classes="status-item status-autonomy", id="status-autonomy")
             yield Static("\u2502", classes="status-sep")
-            yield Static("0 tokens", classes="status-item status-tokens", id="token-count")
+            yield Static("~0 tokens", classes="status-item status-tokens", id="token-count")
             yield Static("\u25cf connected", classes="status-connection status-connected", id="conn-status")
 
     async def on_mount(self) -> None:
@@ -131,35 +139,30 @@ class DworkersApp(App):
 
     def _update_model_label(self, model_string: str) -> None:
         """Update the status bar model label."""
-        import contextlib
-
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(NoMatches):
             label = model_string.split(":", 1)[1] if ":" in model_string else model_string
             self.query_one(".status-model", Static).update(label)
 
     def _update_status_bar(self) -> None:
         """Refresh all status bar items after state changes."""
-        import contextlib
-
         # Mode
         mode_label = self._mode
-        if self._client and type(self._client).__name__ == "RemoteClient":
+        from firefly_dworkers_cli.tui.backend.remote import RemoteClient
+        if self._client and isinstance(self._client, RemoteClient):
             mode_label = "remote"
         elif self._mode == "auto":
             mode_label = "local"  # auto resolved to local
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(NoMatches):
             self.query_one("#status-mode", Static).update(mode_label)
 
         # Autonomy
         autonomy = self._router.autonomy_level
         display = autonomy.replace("_", "-")
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(NoMatches):
             self.query_one("#status-autonomy", Static).update(display)
 
     async def _connect_and_focus(self) -> None:
         """Connect to backend client and focus the input."""
-        self._checkpoint_handler = TUICheckpointHandler()
-        self._router.checkpoint_handler = self._checkpoint_handler
         self._client = await create_client(
             mode=self._mode,
             server_url=self._server_url,
@@ -189,7 +192,7 @@ class DworkersApp(App):
         """Handle Enter to submit and Escape to cancel streaming."""
         # Escape cancels streaming
         if event.key == "escape" and self._is_streaming:
-            self._cancel_streaming = True
+            self._cancel_streaming.set()
             event.prevent_default()
             event.stop()
             return
@@ -235,7 +238,10 @@ class DworkersApp(App):
             is_ai=False,
         )
         self._store.add_message(self._conversation.id, user_msg)
-        self._add_user_message(message_list, text)
+        # Track participants
+        if "user" not in self._conversation.participants:
+            self._conversation.participants.append("user")
+        await self._add_user_message(message_list, text)
 
         # Determine target worker role
         role = self._extract_role(text) or "analyst"
@@ -268,40 +274,44 @@ class DworkersApp(App):
         try:
             if self._client is not None:
                 try:
-                    async for event in self._client.run_worker(
-                        role,
-                        text,
-                        conversation_id=self._conversation.id,
-                    ):
-                        if self._cancel_streaming:
-                            tokens.append("\n\n_[Cancelled by user]_")
-                            await content_widget.update("".join(tokens))
-                            break
-                        if event.type in ("token", "complete"):
-                            if not first_token_marked:
-                                first_token_marked = True
-                                timer.mark_first_token()
-                                indicator.set_streaming_mode(timer)
-                            tokens.append(event.content)
-                            await content_widget.update("".join(tokens))
-                            message_list.scroll_end(animate=False)
-                        elif event.type == "tool_call":
-                            tool_box = Vertical(classes="tool-call")
-                            await message_list.mount(tool_box)
-                            await tool_box.mount(
-                                Static(f"\u2699 {event.content}", classes="tool-call-header")
-                            )
-                            message_list.scroll_end(animate=False)
-                        elif event.type == "error":
-                            tokens.append(f"\n\n**Error:** {event.content}")
-                            await content_widget.update("".join(tokens))
+                    async with asyncio.timeout(_STREAMING_TIMEOUT):
+                        async for event in self._client.run_worker(
+                            role,
+                            text,
+                            conversation_id=self._conversation.id,
+                        ):
+                            if self._cancel_streaming.is_set():
+                                tokens.append("\n\n_[Cancelled by user]_")
+                                await content_widget.update("".join(tokens))
+                                break
+                            if event.type in ("token", "complete"):
+                                if not first_token_marked:
+                                    first_token_marked = True
+                                    timer.mark_first_token()
+                                    indicator.set_streaming_mode(timer)
+                                tokens.append(event.content)
+                                await content_widget.update("".join(tokens))
+                                message_list.scroll_end(animate=False)
+                            elif event.type == "tool_call":
+                                tool_box = Vertical(classes="tool-call")
+                                await message_list.mount(tool_box)
+                                await tool_box.mount(
+                                    Static(f"\u2699 {event.content}", classes="tool-call-header")
+                                )
+                                message_list.scroll_end(animate=False)
+                            elif event.type == "error":
+                                tokens.append(f"\n\n**Error:** {event.content}")
+                                await content_widget.update("".join(tokens))
+                except TimeoutError:
+                    tokens.append("\n\n**Error:** Response timed out after 5 minutes.")
+                    await content_widget.update("".join(tokens))
                 except Exception as e:
-                    tokens.append(f"\n\n**Connection error:** {e}")
+                    tokens.append(f"\n\n**Error:** {e}")
                     await content_widget.update("".join(tokens))
         finally:
             timer.stop()
             self._is_streaming = False
-            self._cancel_streaming = False
+            self._cancel_streaming.clear()
             indicator.stop()
             indicator.remove()
 
@@ -317,12 +327,14 @@ class DworkersApp(App):
             is_ai=True,
         )
         self._store.add_message(self._conversation.id, agent_msg)
+        if role not in self._conversation.participants:
+            self._conversation.participants.append(role)
 
         # Update token count (rough estimate)
         token_estimate = self._estimate_tokens(final_content)
         self._total_tokens += token_estimate
         self.query_one("#token-count", Static).update(
-            f"{self._total_tokens:,} tokens"
+            f"~{self._total_tokens:,} tokens"
         )
 
         # Response summary footer
@@ -332,22 +344,22 @@ class DworkersApp(App):
         message_list.scroll_end(animate=False)
         self._update_input_hint()
 
-    def _add_user_message(self, container: VerticalScroll, text: str) -> None:
+    async def _add_user_message(self, container: VerticalScroll, text: str) -> None:
         """Mount a user message into the message list."""
         msg_box = Vertical(classes="msg-box")
         header = Static("\u25cf You", classes="msg-sender msg-sender-human")
         content = Markdown(text, classes="msg-content")
-        container.mount(msg_box)
-        msg_box.mount(header)
-        msg_box.mount(content)
+        await container.mount(msg_box)
+        await msg_box.mount(header)
+        await msg_box.mount(content)
         container.scroll_end(animate=False)
 
-    def _add_system_message(self, container: VerticalScroll, text: str) -> None:
+    async def _add_system_message(self, container: VerticalScroll, text: str) -> None:
         """Mount a system message into the message list."""
         msg_box = Vertical(classes="cmd-output")
         content = Markdown(text, classes="cmd-output-content")
-        container.mount(msg_box)
-        msg_box.mount(content)
+        await container.mount(msg_box)
+        await msg_box.mount(content)
         container.scroll_end(animate=False)
 
     @staticmethod
@@ -372,12 +384,10 @@ class DworkersApp(App):
 
     def _update_input_hint(self, text: str = "") -> None:
         """Update the input hint to reflect the detected @role target."""
-        import contextlib
-
         role = self._extract_role(text) if text else None
         target = role or "analyst"
         hint = f"@{target} | Enter to send | Escape to cancel | /help"
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(NoMatches):
             self.query_one("#input-hint", Static).update(hint)
 
     # ── Slash commands ───────────────────────────────────────
@@ -390,7 +400,7 @@ class DworkersApp(App):
 
         match command:
             case "/help":
-                self._add_system_message(message_list, self._router.help_text)
+                await self._add_system_message(message_list, self._router.help_text)
 
             case "/team":
                 await self._cmd_team(message_list)
@@ -405,37 +415,37 @@ class DworkersApp(App):
                 if arg:
                     await self._cmd_project(message_list, arg)
                 else:
-                    self._add_system_message(
+                    await self._add_system_message(
                         message_list,
                         "Usage: `/project <brief>`\n\n"
                         "Example: `/project Analyze Q4 sales data and create a report`",
                     )
 
             case "/conversations":
-                self._add_system_message(
+                await self._add_system_message(
                     message_list, self._router.conversations_text(),
                 )
 
             case "/load":
-                self._cmd_load(message_list, arg)
+                await self._cmd_load(message_list, arg)
 
             case "/new":
                 self._conversation = None
                 # Clear message list
                 message_list.remove_children()
-                self._add_system_message(
+                await self._add_system_message(
                     message_list,
                     "Started a new conversation. Type a message to begin.",
                 )
 
             case "/status":
-                self._add_system_message(
+                await self._add_system_message(
                     message_list,
                     self._router.status_text(self._conversation, self._total_tokens),
                 )
 
             case "/config":
-                self._add_system_message(
+                await self._add_system_message(
                     message_list, self._router.config_text(),
                 )
 
@@ -449,32 +459,32 @@ class DworkersApp(App):
                 await self._cmd_channels(message_list, arg)
 
             case "/export":
-                self._add_system_message(
+                await self._add_system_message(
                     message_list,
                     self._router.export_text(self._conversation),
                 )
 
             case "/autonomy":
-                self._add_system_message(
+                await self._add_system_message(
                     message_list,
                     self._router.autonomy_text(new_level=arg or None),
                 )
                 self._update_status_bar()
 
             case "/checkpoints":
-                self._add_system_message(
+                await self._add_system_message(
                     message_list,
                     self._router.checkpoints_text(),
                 )
 
             case "/approve":
-                self._add_system_message(
+                await self._add_system_message(
                     message_list,
                     self._router.approve_text(arg),
                 )
 
             case "/reject":
-                self._cmd_reject(message_list, arg)
+                await self._cmd_reject(message_list, arg)
 
             case "/setup":
                 await self._cmd_setup()
@@ -482,8 +492,69 @@ class DworkersApp(App):
             case "/quit":
                 self.exit()
 
+            case "/usage":
+                if self._client is not None:
+                    stats = await self._client.get_usage_stats()
+                    lines = [
+                        "**Usage Statistics:**\n",
+                        f"- **Tokens:** {stats.total_tokens:,}",
+                        f"- **Cost:** ${stats.total_cost_usd:.4f}",
+                        f"- **Tasks completed:** {stats.tasks_completed}",
+                        f"- **Avg response:** {stats.avg_response_ms:.0f}ms",
+                    ]
+                    if stats.by_model:
+                        lines.append("\n**By model:**")
+                        for model, count in stats.by_model.items():
+                            lines.append(f"- `{model}`: {count}")
+                    await self._add_system_message(message_list, "\n".join(lines))
+                else:
+                    await self._add_system_message(
+                        message_list, self._router.usage_text()
+                    )
+
+            case "/delete":
+                await self._add_system_message(
+                    message_list, self._router.delete_text(arg)
+                )
+
+            case "/clear":
+                message_list.remove_children()
+                await self._add_system_message(
+                    message_list,
+                    "Chat cleared. Conversation history preserved — use `/delete` to remove.",
+                )
+
+            case "/retry":
+                if self._conversation and self._conversation.messages:
+                    last_user = None
+                    for msg in reversed(self._conversation.messages):
+                        if not msg.is_ai:
+                            last_user = msg.content
+                            break
+                    if last_user:
+                        await self._send_message(last_user)
+                    else:
+                        await self._add_system_message(
+                            message_list, "**Error:** No previous user message to retry."
+                        )
+                else:
+                    await self._add_system_message(
+                        message_list, "**Error:** No conversation to retry."
+                    )
+
+            case "/models":
+                await self._add_system_message(
+                    message_list, self._router.models_text()
+                )
+
+            case "/model":
+                text = self._router.model_text(arg)
+                await self._add_system_message(message_list, text)
+                if arg.strip():
+                    self._update_model_label(arg.strip())
+
             case _:
-                self._add_system_message(
+                await self._add_system_message(
                     message_list,
                     f"Unknown command: `{command}`\n\nType `/help` for available commands.",
                 )
@@ -491,19 +562,19 @@ class DworkersApp(App):
     async def _cmd_team(self, container: VerticalScroll) -> None:
         """List available workers."""
         if self._client is None:
-            self._add_system_message(container, "Client not connected.")
+            await self._add_system_message(container, "Client not connected.")
             return
         workers = await self._client.list_workers()
         lines = ["**Team Members:**\n"]
         for w in workers:
             status = "\u2713" if w.enabled else "\u2717"
             lines.append(f"- {status} **{w.name}** (`@{w.role}`) — {w.autonomy}")
-        self._add_system_message(container, "\n".join(lines))
+        await self._add_system_message(container, "\n".join(lines))
 
     async def _cmd_list_plans(self, container: VerticalScroll) -> None:
         """List available plans."""
         if self._client is None:
-            self._add_system_message(container, "Client not connected.")
+            await self._add_system_message(container, "Client not connected.")
             return
         plans = await self._client.list_plans()
         if plans:
@@ -511,17 +582,17 @@ class DworkersApp(App):
             for p in plans:
                 roles = ", ".join(p.worker_roles) if p.worker_roles else "none"
                 lines.append(f"- **{p.name}** ({p.steps} steps) — workers: {roles}")
-            self._add_system_message(container, "\n".join(lines))
+            await self._add_system_message(container, "\n".join(lines))
         else:
-            self._add_system_message(container, "No plans available.")
+            await self._add_system_message(container, "No plans available.")
 
     async def _cmd_execute_plan(self, container: VerticalScroll, plan_name: str) -> None:
         """Execute a named plan with streaming output."""
         if self._client is None:
-            self._add_system_message(container, "Client not connected.")
+            await self._add_system_message(container, "Client not connected.")
             return
 
-        self._add_system_message(container, f"Executing plan: **{plan_name}**...")
+        await self._add_system_message(container, f"Executing plan: **{plan_name}**...")
 
         content = Markdown("", classes="msg-content")
         box = Vertical(classes="msg-box")
@@ -540,29 +611,34 @@ class DworkersApp(App):
         first_token_marked = False
         self._is_streaming = True
         try:
-            async for event in self._client.execute_plan(plan_name):
-                if self._cancel_streaming:
-                    tokens.append("\n\n_[Cancelled by user]_")
-                    await content.update("".join(tokens))
-                    break
-                if event.type in ("token", "complete"):
-                    if not first_token_marked:
-                        first_token_marked = True
-                        timer.mark_first_token()
-                        indicator.set_streaming_mode(timer)
-                    tokens.append(event.content)
-                    await content.update("".join(tokens))
-                    container.scroll_end(animate=False)
-                elif event.type == "error":
-                    tokens.append(f"\n\n**Error:** {event.content}")
-                    await content.update("".join(tokens))
-        except Exception as e:
-            tokens.append(f"\n\n**Error:** {e}")
-            await content.update("".join(tokens))
+            try:
+                async with asyncio.timeout(_STREAMING_TIMEOUT):
+                    async for event in self._client.execute_plan(plan_name):
+                        if self._cancel_streaming.is_set():
+                            tokens.append("\n\n_[Cancelled by user]_")
+                            await content.update("".join(tokens))
+                            break
+                        if event.type in ("token", "complete"):
+                            if not first_token_marked:
+                                first_token_marked = True
+                                timer.mark_first_token()
+                                indicator.set_streaming_mode(timer)
+                            tokens.append(event.content)
+                            await content.update("".join(tokens))
+                            container.scroll_end(animate=False)
+                        elif event.type == "error":
+                            tokens.append(f"\n\n**Error:** {event.content}")
+                            await content.update("".join(tokens))
+            except TimeoutError:
+                tokens.append("\n\n**Error:** Response timed out after 5 minutes.")
+                await content.update("".join(tokens))
+            except Exception as e:
+                tokens.append(f"\n\n**Error:** {e}")
+                await content.update("".join(tokens))
         finally:
             timer.stop()
             self._is_streaming = False
-            self._cancel_streaming = False
+            self._cancel_streaming.clear()
             indicator.stop()
             indicator.remove()
 
@@ -571,16 +647,16 @@ class DworkersApp(App):
         token_estimate = self._estimate_tokens(final_content)
         self._total_tokens += token_estimate
         self.query_one("#token-count", Static).update(
-            f"{self._total_tokens:,} tokens"
+            f"~{self._total_tokens:,} tokens"
         )
         summary = Static(timer.format_summary(token_estimate), classes="response-summary")
         await box.mount(summary)
 
-    def _cmd_load(self, container: VerticalScroll, conv_id: str) -> None:
+    async def _cmd_load(self, container: VerticalScroll, conv_id: str) -> None:
         """Load a saved conversation by ID."""
         conv_id = conv_id.strip()
         if not conv_id:
-            self._add_system_message(
+            await self._add_system_message(
                 container,
                 "Usage: `/load <conversation-id>`\n\n"
                 "Use `/conversations` to see available IDs.",
@@ -589,7 +665,7 @@ class DworkersApp(App):
 
         conv = self._store.get_conversation(conv_id)
         if conv is None:
-            self._add_system_message(
+            await self._add_system_message(
                 container, f"Conversation `{conv_id}` not found."
             )
             return
@@ -606,23 +682,23 @@ class DworkersApp(App):
                     classes="msg-sender msg-sender-ai",
                 )
                 content = Markdown(msg.content, classes="msg-content")
-                container.mount(msg_box)
-                msg_box.mount(header)
-                msg_box.mount(content)
+                await container.mount(msg_box)
+                await msg_box.mount(header)
+                await msg_box.mount(content)
             else:
-                self._add_user_message(container, msg.content)
+                await self._add_user_message(container, msg.content)
 
-        self._add_system_message(
+        await self._add_system_message(
             container,
             f"Loaded conversation: **{conv.title}** ({len(conv.messages)} messages)",
         )
 
-    def _cmd_reject(self, container: VerticalScroll, arg: str) -> None:
+    async def _cmd_reject(self, container: VerticalScroll, arg: str) -> None:
         """Reject a checkpoint, with optional reason after the ID."""
         parts = arg.split(maxsplit=1)
         checkpoint_id = parts[0] if parts else ""
         reason = parts[1] if len(parts) > 1 else ""
-        self._add_system_message(
+        await self._add_system_message(
             container,
             self._router.reject_text(checkpoint_id, reason=reason),
         )
@@ -630,7 +706,7 @@ class DworkersApp(App):
     async def _cmd_connectors(self, container: VerticalScroll) -> None:
         """List all connector statuses."""
         if self._client is None:
-            self._add_system_message(container, "Client not connected.")
+            await self._add_system_message(container, "Client not connected.")
             return
         connectors = await self._client.list_connectors()
         if connectors:
@@ -641,9 +717,9 @@ class DworkersApp(App):
                 lines.append(
                     f"- {status} **{c.name}**{provider} — {c.category}"
                 )
-            self._add_system_message(container, "\n".join(lines))
+            await self._add_system_message(container, "\n".join(lines))
         else:
-            self._add_system_message(container, "No connectors available.")
+            await self._add_system_message(container, "No connectors available.")
 
     async def _cmd_setup(self) -> None:
         """Re-run the setup wizard."""
@@ -659,10 +735,10 @@ class DworkersApp(App):
     async def _cmd_project(self, container: VerticalScroll, brief: str) -> None:
         """Run a multi-worker project from a brief."""
         if self._client is None:
-            self._add_system_message(container, "Client not connected.")
+            await self._add_system_message(container, "Client not connected.")
             return
 
-        self._add_system_message(
+        await self._add_system_message(
             container,
             f"Starting project: **{brief[:60]}{'...' if len(brief) > 60 else ''}**",
         )
@@ -687,40 +763,45 @@ class DworkersApp(App):
         first_token_marked = False
         self._is_streaming = True
         try:
-            async for event in self._client.run_project(brief):
-                if self._cancel_streaming:
-                    tokens.append("\n\n_[Cancelled by user]_")
-                    await content_widget.update("".join(tokens))
-                    break
-                if event.type in ("project_start", "project_complete"):
-                    if not first_token_marked:
-                        first_token_marked = True
-                        timer.mark_first_token()
-                        indicator.set_streaming_mode(timer)
-                    tokens.append(f"\n**{event.type}:** {event.content}\n")
-                elif event.type == "task_assigned":
-                    tokens.append(f"\n> Task assigned: {event.content}\n")
-                elif event.type == "task_complete":
-                    tokens.append(f"\n> Task complete: {event.content}\n")
-                elif event.type in ("token", "complete"):
-                    if not first_token_marked:
-                        first_token_marked = True
-                        timer.mark_first_token()
-                        indicator.set_streaming_mode(timer)
-                    tokens.append(event.content)
-                elif event.type == "error":
-                    tokens.append(f"\n\n**Error:** {event.content}")
-                else:
-                    tokens.append(f"\n{event.content}")
+            try:
+                async with asyncio.timeout(_STREAMING_TIMEOUT):
+                    async for event in self._client.run_project(brief):
+                        if self._cancel_streaming.is_set():
+                            tokens.append("\n\n_[Cancelled by user]_")
+                            await content_widget.update("".join(tokens))
+                            break
+                        if event.type in ("project_start", "project_complete"):
+                            if not first_token_marked:
+                                first_token_marked = True
+                                timer.mark_first_token()
+                                indicator.set_streaming_mode(timer)
+                            tokens.append(f"\n**{event.type}:** {event.content}\n")
+                        elif event.type == "task_assigned":
+                            tokens.append(f"\n> Task assigned: {event.content}\n")
+                        elif event.type == "task_complete":
+                            tokens.append(f"\n> Task complete: {event.content}\n")
+                        elif event.type in ("token", "complete"):
+                            if not first_token_marked:
+                                first_token_marked = True
+                                timer.mark_first_token()
+                                indicator.set_streaming_mode(timer)
+                            tokens.append(event.content)
+                        elif event.type == "error":
+                            tokens.append(f"\n\n**Error:** {event.content}")
+                        else:
+                            tokens.append(f"\n{event.content}")
+                        await content_widget.update("".join(tokens))
+                        container.scroll_end(animate=False)
+            except TimeoutError:
+                tokens.append("\n\n**Error:** Response timed out after 5 minutes.")
                 await content_widget.update("".join(tokens))
-                container.scroll_end(animate=False)
-        except Exception as e:
-            tokens.append(f"\n\n**Error:** {e}")
-            await content_widget.update("".join(tokens))
+            except Exception as e:
+                tokens.append(f"\n\n**Error:** {e}")
+                await content_widget.update("".join(tokens))
         finally:
             timer.stop()
             self._is_streaming = False
-            self._cancel_streaming = False
+            self._cancel_streaming.clear()
             indicator.stop()
             indicator.remove()
 
@@ -729,7 +810,7 @@ class DworkersApp(App):
         token_estimate = self._estimate_tokens(final_content)
         self._total_tokens += token_estimate
         self.query_one("#token-count", Static).update(
-            f"{self._total_tokens:,} tokens"
+            f"~{self._total_tokens:,} tokens"
         )
         summary = Static(timer.format_summary(token_estimate), classes="response-summary")
         await msg_box.mount(summary)
@@ -768,7 +849,7 @@ class DworkersApp(App):
         """
         parts = arg.split(maxsplit=2)
         if len(parts) < 3:
-            self._add_system_message(
+            await self._add_system_message(
                 container,
                 "Usage: `/send <tool> <channel> <message>`\n\n"
                 "Examples:\n"
@@ -781,7 +862,7 @@ class DworkersApp(App):
         tool_name, channel, message = parts
         tool = self._get_messaging_tool(tool_name)
         if tool is None:
-            self._add_system_message(
+            await self._add_system_message(
                 container,
                 f"Messaging tool `{tool_name}` is not configured.\n\n"
                 "Available: slack, teams, email.\n"
@@ -789,7 +870,7 @@ class DworkersApp(App):
             )
             return
 
-        self._add_system_message(
+        await self._add_system_message(
             container, f"Sending via **{tool_name}** to `{channel}`..."
         )
         try:
@@ -797,12 +878,12 @@ class DworkersApp(App):
                 action="send", channel=channel, content=message
             )
             msg_id = result.get("id", "unknown")
-            self._add_system_message(
+            await self._add_system_message(
                 container,
                 f"Message sent successfully (id: `{msg_id}`)",
             )
         except Exception as e:
-            self._add_system_message(
+            await self._add_system_message(
                 container, f"**Error sending message:** {e}"
             )
 
@@ -814,7 +895,7 @@ class DworkersApp(App):
         """
         tool_name = arg.strip()
         if not tool_name:
-            self._add_system_message(
+            await self._add_system_message(
                 container,
                 "Usage: `/channels <tool>`\n\n"
                 "Examples:\n"
@@ -826,7 +907,7 @@ class DworkersApp(App):
 
         tool = self._get_messaging_tool(tool_name)
         if tool is None:
-            self._add_system_message(
+            await self._add_system_message(
                 container,
                 f"Messaging tool `{tool_name}` is not configured.\n\n"
                 "Configure via `~/.dworkers/config.yaml` or run `/setup`.",
@@ -840,24 +921,24 @@ class DworkersApp(App):
                 lines = [f"**{tool_name.title()} Channels:**\n"]
                 for ch in channels:
                     lines.append(f"- `{ch}`")
-                self._add_system_message(container, "\n".join(lines))
+                await self._add_system_message(container, "\n".join(lines))
             else:
-                self._add_system_message(
+                await self._add_system_message(
                     container, f"No channels found for {tool_name}."
                 )
         except Exception as e:
-            self._add_system_message(
+            await self._add_system_message(
                 container, f"**Error listing channels:** {e}"
             )
 
     # ── Actions ──────────────────────────────────────────────
 
-    def action_new_conversation(self) -> None:
+    async def action_new_conversation(self) -> None:
         """Start a new conversation."""
         self._conversation = None
         message_list = self.query_one("#message-list", VerticalScroll)
         message_list.remove_children()
-        self._add_system_message(
+        await self._add_system_message(
             message_list,
             "Started a new conversation. Type a message to begin.",
         )
