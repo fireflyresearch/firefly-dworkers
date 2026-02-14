@@ -23,14 +23,15 @@ getting started to extending the platform with custom workers and tools.
 
 ### Core Concepts
 - [Architecture](architecture.md) — Hexagonal architecture, layers, and key patterns
-- [Workers](workers/overview.md) — Analyst, Researcher, DataAnalyst, Manager roles
-- [Tools](tools/overview.md) — 30+ pluggable connectors with port/adapter pattern
+- [Workers](workers/overview.md) — Analyst, Researcher, DataAnalyst, Manager, Designer roles
+- [Tools](tools/overview.md) — 33 pluggable connectors across 11 categories with port/adapter pattern
 - [Design Pipeline](design-pipeline.md) — LLM-powered design intelligence for PPTX, DOCX, XLSX, and PDF
 - [Plans](plans/overview.md) — DAG-based multi-worker workflow templates
 - [Knowledge](knowledge/overview.md) — Document indexing and semantic retrieval
 - [Tenants](tenants/overview.md) — Multi-tenant configuration and isolation
 - [Verticals](verticals/overview.md) — Industry-specific prompt tuning
 - [Autonomy](autonomy/overview.md) — Manual, semi-supervised, and autonomous modes
+- [Orchestration](orchestration/overview.md) — ProjectOrchestrator multi-agent collaboration
 
 ### Reference
 - [Configuration](configuration.md) — Complete tenant YAML schema

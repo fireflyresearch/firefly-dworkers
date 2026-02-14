@@ -43,25 +43,8 @@ async def _stream_project_events(request: ProjectRequest) -> AsyncIterator[str]:
 
         orchestrator = ProjectOrchestrator(config, project_id=project_id)
 
-        # Stream events from orchestrator
         async for event in orchestrator.run_stream(request.brief):
             yield f"data: {event.model_dump_json()}\n\n"
-
-    except ImportError:
-        # ProjectOrchestrator not yet implemented (Task 14) -- emit placeholder events
-        start_event = ProjectEvent(
-            type="project_start",
-            content=project_id,
-            metadata={"brief": request.brief[:200]},
-        )
-        yield f"data: {start_event.model_dump_json()}\n\n"
-
-        complete_event = ProjectEvent(
-            type="project_complete",
-            content=project_id,
-            metadata={"success": True, "note": "Orchestrator not yet implemented"},
-        )
-        yield f"data: {complete_event.model_dump_json()}\n\n"
 
     except Exception as exc:
         logger.exception("Project orchestration error for project '%s'", project_id)
@@ -101,13 +84,6 @@ async def run_project_sync(request: ProjectRequest) -> ProjectResponse:
             success=result.get("success", True),
             deliverables=result.get("deliverables", {}),
             duration_ms=result.get("duration_ms", 0.0),
-        )
-    except ImportError:
-        # Placeholder until Task 14 implements ProjectOrchestrator
-        return ProjectResponse(
-            project_id=project_id,
-            success=True,
-            deliverables={"note": "Orchestrator not yet implemented"},
         )
     except Exception as exc:
         logger.exception("Project orchestration error for '%s'", project_id)

@@ -276,12 +276,27 @@ class LocalClient:
     # -- Usage ----------------------------------------------------------------
 
     async def get_usage_stats(self, tenant_id: str = "default") -> UsageStats:
-        """Return usage statistics.
+        """Return usage statistics from the framework's default tracker."""
+        try:
+            from fireflyframework_genai.observability.usage import default_usage_tracker
 
-        Token tracking is done client-side in app.py via word-count
-        heuristic. Core-level usage tracking is planned for a future release.
-        """
-        return UsageStats()
+            summary = default_usage_tracker.get_summary()
+            avg_ms = (
+                summary.total_latency_ms / summary.total_requests
+                if summary.total_requests
+                else 0.0
+            )
+            return UsageStats(
+                total_tokens=summary.total_tokens,
+                total_cost_usd=summary.total_cost_usd,
+                tasks_completed=summary.total_requests,
+                avg_response_ms=avg_ms,
+                by_model=summary.by_model,
+                by_worker=summary.by_agent,
+            )
+        except ImportError:
+            logger.debug("Framework usage tracker not available")
+            return UsageStats()
 
     # -- Conversations --------------------------------------------------------
 
