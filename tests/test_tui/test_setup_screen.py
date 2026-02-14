@@ -25,7 +25,7 @@ class TestSetupScreen:
         assert screen._config_mgr is mgr
 
     def test_detect_provider_from_key_openai(self):
-        assert SetupScreen._detect_provider_from_key("sk-abc123") == "openai"
+        assert SetupScreen._detect_provider_from_key("sk-abc123def456") == "openai"
 
     def test_detect_provider_from_key_anthropic(self):
         assert SetupScreen._detect_provider_from_key("ant-abc123") == "anthropic"
@@ -35,7 +35,7 @@ class TestSetupScreen:
         assert SetupScreen._detect_provider_from_key("gsk_abc123") == "groq"
 
     def test_detect_provider_from_key_unknown(self):
-        assert SetupScreen._detect_provider_from_key("unknown-key") is None
+        assert SetupScreen._detect_provider_from_key("unknown-key") == "unknown"
 
 
 class TestProviderModels:
@@ -70,6 +70,21 @@ class TestAutonomyOptions:
         assert "manual" in labels
         assert "semi_supervised" in labels
         assert "autonomous" in labels
+
+
+class TestProviderDetectionExtended:
+    def test_detect_google_key(self):
+        assert SetupScreen._detect_provider_from_key("AIzaSyAbc123def456") == "google"
+
+    def test_detect_mistral_key(self):
+        assert SetupScreen._detect_provider_from_key("mistral-abc123def456") == "mistral"
+
+    def test_unknown_key_accepted(self):
+        result = SetupScreen._detect_provider_from_key("some-random-key-format-12345")
+        assert result == "unknown"
+
+    def test_short_key_rejected(self):
+        assert SetupScreen._detect_provider_from_key("short") is None
 
 
 class TestBuildDefaultConfigModeAutonomy:

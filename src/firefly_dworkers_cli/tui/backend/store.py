@@ -62,11 +62,15 @@ class ConversationStore:
         self._save_conversation(conv)
         self._update_index(conv)
 
-    def delete_conversation(self, conv_id: str) -> None:
+    def delete_conversation(self, conv_id: str) -> bool:
+        """Delete a conversation by ID. Returns True if found and deleted."""
         path = self._base / f"{conv_id}.json"
-        path.unlink(missing_ok=True)
-        summaries = [s for s in self.list_conversations() if s.id != conv_id]
-        self._write_index(summaries)
+        if path.exists():
+            path.unlink()
+            summaries = [s for s in self.list_conversations() if s.id != conv_id]
+            self._write_index(summaries)
+            return True
+        return False
 
     def _save_conversation(self, conv: Conversation) -> None:
         path = self._base / f"{conv.id}.json"

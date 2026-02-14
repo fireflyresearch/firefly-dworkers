@@ -65,7 +65,7 @@ class RemoteClient:
         try:
             async with httpx.AsyncClient() as http:
                 resp = await http.get(
-                    self._url("/workers"),
+                    self._url("/api/workers"),
                     params={"tenant_id": tenant_id},
                     timeout=_DEFAULT_TIMEOUT,
                 )
@@ -94,7 +94,7 @@ class RemoteClient:
         try:
             async with httpx.AsyncClient() as http, http.stream(
                 "POST",
-                self._url("/workers/run/stream"),
+                self._url("/api/workers/run"),
                 json=body,
                 timeout=_STREAM_TIMEOUT,
             ) as resp:
@@ -117,7 +117,7 @@ class RemoteClient:
         try:
             async with httpx.AsyncClient() as http, http.stream(
                 "POST",
-                self._url("/projects/run/stream"),
+                self._url("/api/projects/run"),
                 json=body,
                 timeout=_STREAM_TIMEOUT,
             ) as resp:
@@ -134,7 +134,7 @@ class RemoteClient:
         try:
             async with httpx.AsyncClient() as http:
                 resp = await http.get(
-                    self._url("/plans"),
+                    self._url("/api/plans"),
                     timeout=_DEFAULT_TIMEOUT,
                 )
                 resp.raise_for_status()
@@ -158,7 +158,7 @@ class RemoteClient:
         try:
             async with httpx.AsyncClient() as http, http.stream(
                 "POST",
-                self._url("/plans/execute/stream"),
+                self._url("/api/plans/execute"),
                 json=body,
                 timeout=_STREAM_TIMEOUT,
             ) as resp:
@@ -177,7 +177,7 @@ class RemoteClient:
         try:
             async with httpx.AsyncClient() as http:
                 resp = await http.get(
-                    self._url("/tenants"),
+                    self._url("/api/tenants"),
                     timeout=_DEFAULT_TIMEOUT,
                 )
                 resp.raise_for_status()
@@ -194,7 +194,7 @@ class RemoteClient:
         try:
             async with httpx.AsyncClient() as http:
                 resp = await http.get(
-                    self._url("/connectors"),
+                    self._url("/api/connectors"),
                     params={"tenant_id": tenant_id},
                     timeout=_DEFAULT_TIMEOUT,
                 )
@@ -210,7 +210,7 @@ class RemoteClient:
         try:
             async with httpx.AsyncClient() as http:
                 resp = await http.get(
-                    self._url("/usage"),
+                    self._url("/api/observability/usage"),
                     params={"tenant_id": tenant_id},
                     timeout=_DEFAULT_TIMEOUT,
                 )
@@ -228,7 +228,7 @@ class RemoteClient:
         try:
             async with httpx.AsyncClient() as http:
                 resp = await http.get(
-                    self._url("/conversations"),
+                    self._url("/api/conversations"),
                     params={"tenant_id": tenant_id},
                     timeout=_DEFAULT_TIMEOUT,
                 )

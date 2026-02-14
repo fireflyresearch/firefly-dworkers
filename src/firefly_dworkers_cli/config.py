@@ -231,6 +231,10 @@ class ConfigManager:
         # Load global config
         if self.global_config_path.exists():
             global_data = self._read_yaml(self.global_config_path)
+            if global_data is None:
+                raise ValueError(
+                    f"Failed to parse config file: {self.global_config_path}"
+                )
             if global_data:
                 # Unwrap "tenant:" wrapper if present
                 if "tenant" in global_data and isinstance(global_data["tenant"], dict):
@@ -240,6 +244,10 @@ class ConfigManager:
         # Load and merge project config
         if self.project_config_path.exists():
             project_data = self._read_yaml(self.project_config_path)
+            if project_data is None:
+                raise ValueError(
+                    f"Failed to parse config file: {self.project_config_path}"
+                )
             if project_data:
                 if "tenant" in project_data and isinstance(project_data["tenant"], dict):
                     project_data = project_data["tenant"]
@@ -252,7 +260,15 @@ class ConfigManager:
         # Apply environment variable overrides for connectors
         self._apply_env_vars(merged)
 
-        return TenantConfig.model_validate(merged)
+        try:
+            return TenantConfig.model_validate(merged)
+        except Exception as e:
+            raise ValueError(
+                f"Invalid configuration: {e}\n\n"
+                f"Check your config files:\n"
+                f"  Global: {self.global_config_path}\n"
+                f"  Project: {self.project_config_path}"
+            ) from e
 
     def _apply_env_vars(self, config_data: dict[str, Any]) -> None:
         """Inject environment variable values into config dict."""

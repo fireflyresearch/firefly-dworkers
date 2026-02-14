@@ -3,8 +3,8 @@
 Supports four source types:
 - **file**: reads bytes from a local file path
 - **url**: fetches bytes over HTTP using ``httpx``
-- **ai_generate**: placeholder for AI image generation (e.g. DALL-E)
-- **stock**: placeholder for stock photo API search
+- **ai_generate**: generates images via OpenAI DALL-E 3 API
+- **stock**: searches and downloads images via Unsplash API
 """
 
 from __future__ import annotations

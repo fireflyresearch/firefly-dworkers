@@ -350,12 +350,6 @@ class SetupScreen(Screen):
         if self._manual_api_key:
             provider = self._detect_provider_from_key(self._manual_api_key)
             if provider is None:
-                self._show_error(
-                    "Unrecognized API key format. "
-                    "Expected prefixes: sk- (OpenAI), sk-ant-/ant- (Anthropic), gsk_ (Groq)."
-                )
-                return
-            if len(self._manual_api_key.strip()) < 10:
                 self._show_error("API key seems too short. Please check and try again.")
                 return
         elif not self._detected_providers:
@@ -370,12 +364,11 @@ class SetupScreen(Screen):
         # If manual API key was entered, detect provider and set env var
         if self._manual_api_key:
             provider = self._detect_provider_from_key(self._manual_api_key)
-            if provider:
+            if provider and provider != "unknown":
                 env_key = _PROVIDER_ENV_KEYS.get(provider, "")
                 if env_key:
                     os.environ[env_key] = self._manual_api_key
                     self._detected_providers[provider] = self._manual_api_key
-                # Select first model from that provider if none selected
                 if not self._selected_model:
                     provider_models = _PROVIDER_MODELS.get(provider, [])
                     if provider_models:
@@ -420,8 +413,14 @@ class SetupScreen(Screen):
 
     @staticmethod
     def _detect_provider_from_key(key: str) -> str | None:
-        """Guess the provider from the API key prefix."""
+        """Guess the provider from the API key prefix.
+
+        Returns a provider name or "unknown" for unrecognized formats.
+        Keys shorter than 10 characters are rejected (returns None).
+        """
         key = key.strip()
+        if len(key) < 10:
+            return None
         # Anthropic check before OpenAI since sk-ant- starts with sk-
         if key.startswith("sk-ant-") or key.startswith("ant-"):
             return "anthropic"
@@ -429,4 +428,9 @@ class SetupScreen(Screen):
             return "openai"
         if key.startswith("gsk_"):
             return "groq"
-        return None
+        if key.startswith("AIza"):
+            return "google"
+        if key.startswith("mistral-"):
+            return "mistral"
+        # Accept unknown key formats gracefully
+        return "unknown"

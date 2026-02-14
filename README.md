@@ -39,7 +39,7 @@
 Consulting firms face a persistent challenge: scaling expertise without linearly scaling headcount. firefly-dworkers addresses this by providing **Digital Workers as a Service (DWaaS)** -- AI agents purpose-built for consulting workflows.
 
 - **36% productivity optimization** -- Turn 1 FTE into 1.26 FTE effective capacity through intelligent task execution.
-- **Four specialized worker roles** -- Analyst, Researcher, Data Analyst, and Manager, each with domain-tuned instructions and toolkits.
+- **Five specialized worker roles** -- Analyst, Researcher, Data Analyst, Manager, and Designer, each with domain-tuned instructions and toolkits.
 - **Industry verticals** -- Pre-configured knowledge for banking, healthcare, technology, gaming, legal, and consumer sectors.
 - **DAG-based plan templates** -- Reusable multi-step workflows for common engagements (market analysis, customer segmentation, process improvement, technology assessment).
 - **Multi-tenant by design** -- Onboard new clients with a YAML file. No code changes required.
@@ -120,6 +120,7 @@ graph TB
         Researcher["ResearcherWorker"]
         DataAnalyst["DataAnalystWorker"]
         Manager["ManagerWorker"]
+        Designer["DocumentDesignerWorker"]
     end
 
     subgraph "Tool Layer (Ports)"
@@ -164,8 +165,8 @@ graph TB
     SDK --> API
     Plans --> PB
     PB --> WF
-    WF --> Analyst & Researcher & DataAnalyst & Manager
-    Analyst & Researcher & DataAnalyst & Manager --> WST & WBT & DST & MT & PMT & CT
+    WF --> Analyst & Researcher & DataAnalyst & Manager & Designer
+    Analyst & Researcher & DataAnalyst & Manager & Designer --> WST & WBT & DST & MT & PMT & CT
     WST --> Tavily & SerpAPI
     WBT --> WB & FB
     DST --> SP & GD & Conf & S3A
@@ -192,8 +193,8 @@ See [docs/architecture.md](docs/architecture.md) for a deep dive.
 
 ## Features
 
-- **Workers** -- Four specialized AI agents (Analyst, Researcher, Data Analyst, Manager) with vertical-aware instruction building
-- **Tools** -- 20+ pluggable connectors across web search, storage, communication, project management, and consulting domains
+- **Workers** -- Five specialized AI agents (Analyst, Researcher, Data Analyst, Manager, Designer) with vertical-aware instruction building
+- **Tools** -- 33 pluggable connectors across 11 categories: web search, web browsing, storage, communication, project management, consulting, data, document, presentation, spreadsheet, and vision
 - **Plans** -- DAG-based workflow templates with dependency resolution, retry policies, and timeout support
 - **Knowledge** -- Document indexing and retrieval with pluggable `KnowledgeBackend` protocol
 - **Tenants** -- Multi-tenant configuration via YAML/JSON with per-tenant models, connectors, and worker settings
@@ -557,6 +558,7 @@ firefly-dworkers/
 |   |       |-- researcher.py
 |   |       |-- data_analyst.py
 |   |       |-- manager.py
+|   |       |-- designer.py
 |   |-- firefly_dworkers_server/
 |   |   |-- __init__.py
 |   |   |-- __main__.py

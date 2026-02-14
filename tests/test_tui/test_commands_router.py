@@ -319,3 +319,90 @@ class TestRejectText:
         text = router.reject_text("cp_nnn")
         assert "Rejected" in text or "rejected" in text
         assert "cp_nnn" in text
+
+
+class TestNewCommands:
+    def test_usage_in_commands(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        assert "/usage" in router.commands
+
+    def test_delete_in_commands(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        assert "/delete" in router.commands
+
+    def test_clear_in_commands(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        assert "/clear" in router.commands
+
+    def test_retry_in_commands(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        assert "/retry" in router.commands
+
+    def test_models_in_commands(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        assert "/models" in router.commands
+
+    def test_model_in_commands(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        assert "/model" in router.commands
+
+
+class TestUsageText:
+    def test_usage_text_no_client(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        text = router.usage_text()
+        assert "Not connected" in text
+
+
+class TestDeleteText:
+    def test_delete_no_id(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        text = router.delete_text("")
+        assert "Usage" in text
+
+    def test_delete_not_found(self):
+        store = _make_store()
+        store.delete_conversation.return_value = False
+        router = CommandRouter(client=None, store=store, config_mgr=_make_config_mgr())
+        text = router.delete_text("nonexistent")
+        assert "not found" in text.lower()
+
+    def test_delete_success(self):
+        store = _make_store()
+        store.delete_conversation.return_value = True
+        router = CommandRouter(client=None, store=store, config_mgr=_make_config_mgr())
+        text = router.delete_text("conv_123")
+        assert "Deleted" in text
+
+
+class TestModelsText:
+    def test_models_text_no_config(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr(config=None))
+        text = router.models_text()
+        assert "No configuration" in text
+
+    def test_models_text_with_config(self):
+        config = MagicMock()
+        config.models.default = "openai:gpt-5.2"
+        mgr = _make_config_mgr(config=config)
+        mgr.model_provider.return_value = "openai"
+        mgr.detect_api_keys.return_value = {"openai": "sk-xxx"}
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=mgr)
+        text = router.models_text()
+        assert "gpt-5.2" in text
+        assert "openai" in text
+
+
+class TestModelText:
+    def test_model_text_no_arg(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        text = router.model_text("")
+        assert "Usage" in text
+
+    def test_model_text_switch(self):
+        config = MagicMock()
+        config.models.default = "openai:gpt-5.2"
+        mgr = _make_config_mgr(config=config)
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=mgr)
+        text = router.model_text("anthropic:claude-sonnet-4-5-20250929")
+        assert "Switched" in text
