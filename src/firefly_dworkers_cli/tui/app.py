@@ -480,6 +480,67 @@ class DworkersApp(App):
             case "/quit":
                 self.exit()
 
+            case "/usage":
+                if self._client is not None:
+                    stats = await self._client.get_usage_stats()
+                    lines = [
+                        "**Usage Statistics:**\n",
+                        f"- **Tokens:** {stats.total_tokens:,}",
+                        f"- **Cost:** ${stats.total_cost_usd:.4f}",
+                        f"- **Tasks completed:** {stats.tasks_completed}",
+                        f"- **Avg response:** {stats.avg_response_ms:.0f}ms",
+                    ]
+                    if stats.by_model:
+                        lines.append("\n**By model:**")
+                        for model, count in stats.by_model.items():
+                            lines.append(f"- `{model}`: {count}")
+                    await self._add_system_message(message_list, "\n".join(lines))
+                else:
+                    await self._add_system_message(
+                        message_list, self._router.usage_text()
+                    )
+
+            case "/delete":
+                await self._add_system_message(
+                    message_list, self._router.delete_text(arg)
+                )
+
+            case "/clear":
+                message_list.remove_children()
+                await self._add_system_message(
+                    message_list,
+                    "Chat cleared. Conversation history preserved — use `/delete` to remove.",
+                )
+
+            case "/retry":
+                if self._conversation and self._conversation.messages:
+                    last_user = None
+                    for msg in reversed(self._conversation.messages):
+                        if not msg.is_ai:
+                            last_user = msg.content
+                            break
+                    if last_user:
+                        await self._send_message(last_user)
+                    else:
+                        await self._add_system_message(
+                            message_list, "**Error:** No previous user message to retry."
+                        )
+                else:
+                    await self._add_system_message(
+                        message_list, "**Error:** No conversation to retry."
+                    )
+
+            case "/models":
+                await self._add_system_message(
+                    message_list, self._router.models_text()
+                )
+
+            case "/model":
+                text = self._router.model_text(arg)
+                await self._add_system_message(message_list, text)
+                if arg.strip():
+                    self._update_model_label(arg.strip())
+
             case _:
                 await self._add_system_message(
                     message_list,
