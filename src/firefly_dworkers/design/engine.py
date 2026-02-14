@@ -277,7 +277,10 @@ class DesignEngine:
         agent: Agent[None, DesignSpec] = Agent(
             self._model or "test",
             output_type=DesignSpec,
-            system_prompt=self._build_layout_system_prompt(brief.output_type),
+            system_prompt=self._build_layout_system_prompt(
+                brief.output_type,
+                available_layouts=profile.available_layouts or None,
+            ),
         )
 
         prompt = self._build_layout_prompt(brief, profile)
@@ -285,20 +288,37 @@ class DesignEngine:
         return result.output
 
     @staticmethod
-    def _build_layout_system_prompt(output_type: OutputType) -> str:
+    def _build_layout_system_prompt(
+        output_type: OutputType,
+        available_layouts: list[str] | None = None,
+    ) -> str:
         """Build the system prompt for layout design based on output type."""
         base = (
             "You are a professional document layout designer. "
             "Create a complete DesignSpec for the given content brief.\n\n"
         )
 
+        if available_layouts:
+            layout_list = ", ".join(f"'{l}'" for l in available_layouts)
+            layout_instruction = (
+                f"IMPORTANT: The template provides these specific layouts: "
+                f"{layout_list}. You MUST use ONLY these exact layout names "
+                f"in the 'layout' field of each SlideDesign. Do not invent "
+                f"layout names — pick the closest match from this list."
+            )
+        else:
+            layout_instruction = (
+                "Choose appropriate layouts like 'Title Slide', "
+                "'Title and Content', 'Two Content', 'Section Header', etc."
+            )
+
         type_instructions = {
             OutputType.PRESENTATION: (
                 "This is a PRESENTATION. Populate the 'slides' field with "
                 "SlideDesign objects. Create a title slide first, then one "
-                "slide per content section. Choose appropriate layouts like "
-                "'Title Slide', 'Title and Content', 'Two Content', "
-                "'Section Header', etc. Distribute content blocks, charts, "
+                "slide per content section. "
+                f"{layout_instruction} "
+                "Distribute content blocks, charts, "
                 "and images across slides logically."
             ),
             OutputType.DOCUMENT: (
@@ -363,5 +383,8 @@ class DesignEngine:
             parts.append(f"\nDesign profile heading font: {profile.heading_font}")
         if profile.primary_color:
             parts.append(f"Primary color: {profile.primary_color}")
+
+        if profile.available_layouts:
+            parts.append(f"\nAvailable layouts: {', '.join(profile.available_layouts)}")
 
         return "\n".join(parts)

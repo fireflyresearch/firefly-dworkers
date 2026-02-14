@@ -100,8 +100,14 @@ class TemplateAnalyzer:
     def _analyze_pptx_sync(self, path: str) -> DesignProfile:
         prs = pptx.Presentation(path)
 
-        # Layouts
-        available_layouts: list[str] = [layout.name for layout in prs.slide_layouts]
+        # Layouts — collect from ALL slide masters, not just the first
+        seen: set[str] = set()
+        available_layouts: list[str] = []
+        for master in prs.slide_masters:
+            for layout in master.slide_layouts:
+                if layout.name not in seen:
+                    seen.add(layout.name)
+                    available_layouts.append(layout.name)
 
         # Theme colors from XML
         color_palette: list[str] = []

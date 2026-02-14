@@ -169,6 +169,11 @@ class PowerPointTool(PresentationTool):
     def _create_sync(self, template: str, slides: list[SlideSpec]) -> bytes:
         prs = pptx.Presentation(template) if template else pptx.Presentation()
 
+        # Remove all existing slides from the template so we start fresh
+        # while preserving masters, layouts, and theme assets.
+        if template:
+            self._remove_existing_slides(prs)
+
         for spec in slides:
             layout = self._find_layout(prs, spec.layout)
             slide = prs.slides.add_slide(layout)
@@ -239,16 +244,111 @@ class PowerPointTool(PresentationTool):
     # -- Helpers --
 
     @staticmethod
-    def _find_layout(prs: Any, name: str) -> Any:
-        for layout in prs.slide_layouts:
+    def _remove_existing_slides(prs: Any) -> None:
+        """Remove all existing slides from a presentation, keeping masters/layouts."""
+        sldIdLst = prs._element.sldIdLst
+        if sldIdLst is None:
+            return
+        slide_ids = list(sldIdLst)
+        for sldId in slide_ids:
+            rId = sldId.get(
+                "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+            )
+            sldIdLst.remove(sldId)
+            if rId:
+                try:
+                    prs.part.rels.pop(rId)
+                except KeyError:
+                    pass
+
+    @staticmethod
+    def _all_layouts(prs: Any) -> list[Any]:
+        """Collect layouts from ALL slide masters (not just the first)."""
+        layouts: list[Any] = []
+        seen: set[str] = set()
+        for master in prs.slide_masters:
+            for layout in master.slide_layouts:
+                if layout.name not in seen:
+                    seen.add(layout.name)
+                    layouts.append(layout)
+        return layouts
+
+    @classmethod
+    def _find_layout(cls, prs: Any, name: str) -> Any:
+        """Find a layout by name with fuzzy/semantic matching.
+
+        Searches ALL slide masters. Tries exact match first, then
+        case-insensitive, then keyword-based mapping for common
+        English / Spanish layout names.
+        """
+        all_layouts = cls._all_layouts(prs)
+
+        # Exact match
+        for layout in all_layouts:
             if layout.name == name:
                 return layout
+
+        # Case-insensitive match
+        name_lower = name.lower()
+        for layout in all_layouts:
+            if layout.name.lower() == name_lower:
+                return layout
+
+        # Semantic keyword mapping: English concept → keywords to match
+        _CONCEPT_KEYWORDS: dict[str, list[str]] = {
+            "title slide": ["portada", "cover"],
+            "title and content": ["título de 2", "título de 1"],
+            "two content": ["dos", "two content", "2 columnas"],
+            "section header": ["fondo", "sección", "section", "divider"],
+            "blank": ["blanco", "blank"],
+            "back cover": ["contraportada", "back"],
+        }
+
+        # Find the concept for the requested name
+        for concept, keywords in _CONCEPT_KEYWORDS.items():
+            if concept in name_lower or name_lower in concept:
+                for layout in all_layouts:
+                    layout_lower = layout.name.lower()
+                    for kw in keywords:
+                        if kw in layout_lower:
+                            return layout
+                break
+
+        # Reverse: if the requested name itself contains keywords
+        for layout in all_layouts:
+            layout_lower = layout.name.lower()
+            for word in name_lower.split():
+                if len(word) > 3 and word in layout_lower:
+                    return layout
+
+        # Best-effort: pick a content layout (with ph[0] title + ph[13] body)
+        for layout in all_layouts:
+            ph_indices = {ph.placeholder_format.idx for ph in layout.placeholders}
+            if 0 in ph_indices and 13 in ph_indices:
+                return layout
+
+        # Fallback: any layout with a title placeholder
+        for layout in all_layouts:
+            for ph in layout.placeholders:
+                if ph.placeholder_format.idx == 0:
+                    return layout
+
         return prs.slide_layouts[0]
 
     @staticmethod
     def _find_body_placeholder(slide: Any) -> Any:
+        """Find the body/content placeholder in a slide.
+
+        Tries standard idx 1 first, then idx 13 (common in custom templates),
+        then any non-title text placeholder.
+        """
+        for target_idx in (1, 13, 14):
+            for shape in slide.placeholders:
+                if shape.placeholder_format.idx == target_idx:
+                    return shape
+        # Fallback: any non-title placeholder with a text frame
         for shape in slide.placeholders:
-            if shape.placeholder_format.idx == 1:
+            if shape.placeholder_format.idx != 0 and shape.has_text_frame:
                 return shape
         return None
 
