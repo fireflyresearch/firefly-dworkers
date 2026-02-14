@@ -1,31 +1,31 @@
 """Theme constants and Textual CSS for the dworkers TUI.
 
-Designed to match Claude Code's terminal aesthetic: dark background,
-minimal chrome, bordered message boxes, and a persistent status bar.
+Designed to match Claude Code's terminal aesthetic: true black background,
+monochrome text, minimal color — only green for success and red for errors.
 """
 
-# Color tokens — terminal-native dark palette
-BG = "#1a1a2e"
-BG_HEADER = "#16213e"
-BG_INPUT = "#0f0f23"
-BG_MESSAGE = "#1a1a2e"
-BORDER = "#2a2a4a"
-BORDER_USER = "#6366f1"
-BORDER_AI = "#10b981"
-BORDER_SYSTEM = "#64748b"
-BORDER_TOOL = "#f59e0b"
-TEXT = "#e2e8f0"
-TEXT_DIM = "#64748b"
-TEXT_MUTED = "#475569"
-ACCENT = "#6366f1"
+# Color tokens — Claude Code monochrome palette
+BG = "#000000"
+BG_HEADER = "#000000"
+BG_INPUT = "#000000"
+BG_MESSAGE = "#000000"
+BORDER = "#333333"
+BORDER_USER = "#333333"
+BORDER_AI = "#333333"
+BORDER_SYSTEM = "#333333"
+BORDER_TOOL = "#333333"
+TEXT = "#d4d4d4"
+TEXT_DIM = "#666666"
+TEXT_MUTED = "#555555"
+ACCENT = "#d4d4d4"
 SUCCESS = "#10b981"
 WARNING = "#f59e0b"
 ERROR = "#ef4444"
 
 APP_CSS = """
 Screen {
-    background: #1a1a2e;
-    color: #e2e8f0;
+    background: #000000;
+    color: #d4d4d4;
 }
 
 /* ── Welcome banner ──────────────────────────── */
@@ -35,19 +35,19 @@ Screen {
     height: auto;
     content-align: center middle;
     padding: 4 8;
-    color: #64748b;
+    color: #666666;
 }
 
 #welcome .welcome-title {
     text-style: bold;
-    color: #e2e8f0;
+    color: #d4d4d4;
     text-align: center;
     width: 1fr;
     padding: 1 0;
 }
 
 #welcome .welcome-hint {
-    color: #475569;
+    color: #666666;
     text-align: center;
     width: 1fr;
 }
@@ -60,11 +60,19 @@ Screen {
     scrollbar-size: 1 1;
 }
 
-/* ── Message bubbles ─────────────────────────── */
+/* ── Message boxes ───────────────────────────── */
 
 .msg-box {
     margin: 0 0 1 0;
     padding: 0 1;
+    width: 1fr;
+    height: auto;
+}
+
+.msg-box-ai {
+    border-left: tall #333333;
+    padding: 0 0 0 1;
+    margin: 0 0 1 0;
     width: 1fr;
     height: auto;
 }
@@ -77,25 +85,25 @@ Screen {
 
 .msg-sender {
     width: auto;
-    text-style: bold;
     padding: 0 1 0 0;
 }
 
 .msg-sender-human {
-    color: #6366f1;
+    color: #666666;
 }
 
 .msg-sender-ai {
-    color: #10b981;
+    color: #666666;
 }
 
 .msg-sender-system {
-    color: #64748b;
+    color: #666666;
+    text-style: italic;
 }
 
 .msg-timestamp {
     width: auto;
-    color: #475569;
+    color: #555555;
     dock: right;
 }
 
@@ -105,9 +113,16 @@ Screen {
     height: auto;
 }
 
+.msg-content-user {
+    padding: 0;
+    width: 1fr;
+    height: auto;
+    color: #e5e5e5;
+}
+
 .msg-divider {
     height: 1;
-    color: #2a2a4a;
+    color: #333333;
     width: 1fr;
     text-align: center;
     margin: 1 0;
@@ -116,20 +131,19 @@ Screen {
 /* ── Tool call boxes ─────────────────────────── */
 
 .tool-call {
-    border: round #f59e0b;
+    border-left: tall #333333;
     margin: 0 2 1 2;
     padding: 0 1;
     height: auto;
 }
 
 .tool-call-header {
-    color: #f59e0b;
-    text-style: bold;
+    color: #666666;
     height: 1;
 }
 
 .tool-call-content {
-    color: #94a3b8;
+    color: #d4d4d4;
     height: auto;
     max-height: 8;
 }
@@ -137,15 +151,15 @@ Screen {
 /* ── Streaming indicator ─────────────────────── */
 
 .streaming-indicator {
-    color: #10b981;
+    color: #666666;
     text-style: italic;
-    padding: 0 0 0 2;
+    padding: 0 0 0 1;
 }
 
 .response-summary {
-    color: #475569;
+    color: #555555;
     text-style: italic;
-    padding: 0 0 0 2;
+    padding: 0 0 0 1;
     height: 1;
 }
 
@@ -156,8 +170,8 @@ Screen {
     height: auto;
     max-height: 10;
     min-height: 3;
-    background: #0f0f23;
-    border-top: solid #2a2a4a;
+    background: #000000;
+    border-top: solid #333333;
     padding: 0 1;
 }
 
@@ -165,9 +179,9 @@ Screen {
     width: 1fr;
     min-height: 1;
     max-height: 8;
-    background: #0f0f23;
+    background: #000000;
     border: none;
-    color: #e2e8f0;
+    color: #d4d4d4;
 }
 
 #input-area #prompt-input:focus {
@@ -175,10 +189,9 @@ Screen {
 }
 
 .prompt-prefix {
-    color: #6366f1;
+    color: #666666;
     width: 2;
     padding: 0;
-    text-style: bold;
 }
 
 #input-row {
@@ -187,7 +200,7 @@ Screen {
 }
 
 #input-area .input-hint {
-    color: #475569;
+    color: #555555;
     height: 1;
     padding: 0 1;
     text-align: right;
@@ -198,29 +211,28 @@ Screen {
 #status-bar {
     dock: bottom;
     height: 1;
-    background: #16213e;
-    color: #64748b;
+    background: #000000;
+    color: #666666;
     padding: 0 2;
 }
 
 #status-bar .status-item {
     width: auto;
-    padding: 0 1;
+    padding: 0 0;
 }
 
 #status-bar .status-model {
-    color: #6366f1;
-    text-style: bold;
+    color: #d4d4d4;
 }
 
 #status-bar .status-tokens {
-    color: #64748b;
+    color: #666666;
 }
 
 #status-bar .status-connection {
     dock: right;
     width: auto;
-    padding: 0 1;
+    padding: 0 0;
 }
 
 #status-bar .status-connected {
@@ -232,15 +244,15 @@ Screen {
 }
 
 #status-bar .status-mode {
-    color: #10b981;
+    color: #666666;
 }
 
 #status-bar .status-autonomy {
-    color: #f59e0b;
+    color: #666666;
 }
 
 #status-bar .status-sep {
-    color: #475569;
+    color: #555555;
     width: auto;
     padding: 0 0;
 }
@@ -250,33 +262,32 @@ Screen {
 #header-bar {
     dock: top;
     height: 1;
-    background: #16213e;
+    background: #000000;
     padding: 0 2;
 }
 
 #header-bar .header-title {
-    text-style: bold;
+    color: #d4d4d4;
     width: 1fr;
 }
 
 #header-bar .header-hint {
     dock: right;
     width: auto;
-    color: #475569;
+    color: #555555;
 }
 
 /* ── Slash command output ────────────────────── */
 
 .cmd-output {
-    border: round #64748b;
+    border-left: tall #333333;
     margin: 0 2 1 2;
     padding: 0 1;
     height: auto;
 }
 
 .cmd-output-header {
-    color: #64748b;
-    text-style: bold;
+    color: #666666;
     height: 1;
 }
 
