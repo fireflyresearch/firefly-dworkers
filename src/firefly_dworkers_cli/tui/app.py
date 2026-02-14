@@ -23,6 +23,7 @@ from firefly_dworkers_cli.config import ConfigManager
 from firefly_dworkers_cli.tui.backend.client import DworkersClient, create_client
 from firefly_dworkers_cli.tui.backend.models import ChatMessage, Conversation
 from firefly_dworkers_cli.tui.backend.store import ConversationStore
+from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
 from firefly_dworkers_cli.tui.commands import CommandRouter
 from firefly_dworkers_cli.tui.theme import APP_CSS
 
@@ -131,7 +132,13 @@ class DworkersApp(App):
 
     async def _connect_and_focus(self) -> None:
         """Connect to backend client and focus the input."""
-        self._client = await create_client(mode=self._mode, server_url=self._server_url)
+        self._checkpoint_handler = TUICheckpointHandler()
+        self._router.checkpoint_handler = self._checkpoint_handler
+        self._client = await create_client(
+            mode=self._mode,
+            server_url=self._server_url,
+            checkpoint_handler=self._checkpoint_handler,
+        )
         self._router.client = self._client
 
         # Update connection status
@@ -375,6 +382,27 @@ class DworkersApp(App):
                     self._router.export_text(self._conversation),
                 )
 
+            case "/autonomy":
+                self._add_system_message(
+                    message_list,
+                    self._router.autonomy_text(new_level=arg or None),
+                )
+
+            case "/checkpoints":
+                self._add_system_message(
+                    message_list,
+                    self._router.checkpoints_text(),
+                )
+
+            case "/approve":
+                self._add_system_message(
+                    message_list,
+                    self._router.approve_text(arg),
+                )
+
+            case "/reject":
+                self._cmd_reject(message_list, arg)
+
             case "/setup":
                 await self._cmd_setup()
 
@@ -484,6 +512,16 @@ class DworkersApp(App):
         self._add_system_message(
             container,
             f"Loaded conversation: **{conv.title}** ({len(conv.messages)} messages)",
+        )
+
+    def _cmd_reject(self, container: VerticalScroll, arg: str) -> None:
+        """Reject a checkpoint, with optional reason after the ID."""
+        parts = arg.split(maxsplit=1)
+        checkpoint_id = parts[0] if parts else ""
+        reason = parts[1] if len(parts) > 1 else ""
+        self._add_system_message(
+            container,
+            self._router.reject_text(checkpoint_id, reason=reason),
         )
 
     async def _cmd_connectors(self, container: VerticalScroll) -> None:

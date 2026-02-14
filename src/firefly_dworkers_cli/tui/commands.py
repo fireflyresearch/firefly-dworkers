@@ -106,7 +106,7 @@ class CommandRouter:
         self._store = store
         self._config_mgr = config_mgr
         self.autonomy_level: str = "semi_supervised"
-        self.checkpoint_handler = None  # Will be set later for Task 7
+        self.checkpoint_handler = None  # Set by app after TUICheckpointHandler is created
 
     # -- metadata -------------------------------------------------------------
 
@@ -202,7 +202,7 @@ class CommandRouter:
         ]
         return "\n".join(lines)
 
-    # -- autonomy / checkpoints (placeholders for Task 7) ---------------------
+    # -- autonomy / checkpoints ------------------------------------------------
 
     _VALID_AUTONOMY_LEVELS = {"manual", "semi_supervised", "autonomous"}
 
@@ -225,8 +225,41 @@ class CommandRouter:
         )
 
     def checkpoints_text(self) -> str:
-        """List pending checkpoints (placeholder for Task 7)."""
+        """List pending checkpoints."""
         if self.checkpoint_handler is None:
             return "No checkpoint handler configured."
-        # Will be implemented in Task 7
-        return "No pending checkpoints."
+        pending = self.checkpoint_handler.list_pending()
+        if not pending:
+            return "No pending checkpoints."
+        lines = ["**Pending Checkpoints:**\n"]
+        for cp in pending:
+            lines.append(f"- `{cp.id}` -- **{cp.worker_name}** at _{cp.phase}_")
+        lines.append("\nUse `/approve <id>` or `/reject <id> [reason]` to resolve.")
+        return "\n".join(lines)
+
+    def approve_text(self, checkpoint_id: str) -> str:
+        """Approve a pending checkpoint and return status text."""
+        if self.checkpoint_handler is None:
+            return "No checkpoint handler configured."
+        checkpoint_id = checkpoint_id.strip()
+        if not checkpoint_id:
+            return "Usage: `/approve <checkpoint-id>`"
+        cp = self.checkpoint_handler.get(checkpoint_id)
+        if cp is None:
+            return f"Checkpoint `{checkpoint_id}` not found."
+        self.checkpoint_handler.approve(checkpoint_id)
+        return f"Approved checkpoint `{checkpoint_id}` (**{cp.worker_name}** at _{cp.phase}_)."
+
+    def reject_text(self, checkpoint_id: str, *, reason: str = "") -> str:
+        """Reject a pending checkpoint and return status text."""
+        if self.checkpoint_handler is None:
+            return "No checkpoint handler configured."
+        checkpoint_id = checkpoint_id.strip()
+        if not checkpoint_id:
+            return "Usage: `/reject <checkpoint-id> [reason]`"
+        cp = self.checkpoint_handler.get(checkpoint_id)
+        if cp is None:
+            return f"Checkpoint `{checkpoint_id}` not found."
+        self.checkpoint_handler.reject(checkpoint_id, reason=reason)
+        reason_suffix = f" Reason: {reason}" if reason else ""
+        return f"Rejected checkpoint `{checkpoint_id}` (**{cp.worker_name}** at _{cp.phase}_).{reason_suffix}"

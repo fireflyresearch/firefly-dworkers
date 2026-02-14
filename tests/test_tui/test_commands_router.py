@@ -193,3 +193,129 @@ class TestCheckpointsText:
         router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
         text = router.checkpoints_text()
         assert "No checkpoint handler" in text or "no pending" in text.lower()
+
+    def test_checkpoints_text_no_pending(self):
+        from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
+
+        handler = TUICheckpointHandler()
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        router.checkpoint_handler = handler
+        text = router.checkpoints_text()
+        assert "No pending checkpoints" in text
+
+    def test_checkpoints_text_with_pending(self):
+        from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
+
+        handler = TUICheckpointHandler()
+        # Manually submit a checkpoint to the internal store
+        handler._store.submit("cp_001", {"draft": "hello"}, worker_name="Analyst", phase="review")
+        handler._store.submit("cp_002", {"data": [1, 2]}, worker_name="Researcher", phase="analysis")
+
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        router.checkpoint_handler = handler
+        text = router.checkpoints_text()
+        assert "Pending Checkpoints" in text
+        assert "cp_001" in text
+        assert "Analyst" in text
+        assert "review" in text
+        assert "cp_002" in text
+        assert "Researcher" in text
+        assert "analysis" in text
+        assert "/approve" in text
+        assert "/reject" in text
+
+
+class TestApproveText:
+    def test_approve_no_handler(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        text = router.approve_text("cp_001")
+        assert "No checkpoint handler" in text
+
+    def test_approve_no_id(self):
+        from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
+
+        handler = TUICheckpointHandler()
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        router.checkpoint_handler = handler
+        text = router.approve_text("")
+        assert "Usage" in text
+
+    def test_approve_not_found(self):
+        from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
+
+        handler = TUICheckpointHandler()
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        router.checkpoint_handler = handler
+        text = router.approve_text("nonexistent")
+        assert "not found" in text.lower()
+
+    def test_approve_success(self):
+        from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
+
+        handler = TUICheckpointHandler()
+        handler._store.submit("cp_abc", {"draft": "hi"}, worker_name="Analyst", phase="review")
+        # Also register the asyncio event so approve() can call .set()
+        import asyncio
+        handler._events["cp_abc"] = asyncio.Event()
+        handler._results["cp_abc"] = False
+
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        router.checkpoint_handler = handler
+        text = router.approve_text("cp_abc")
+        assert "Approved" in text or "approved" in text
+        assert "cp_abc" in text
+
+
+class TestRejectText:
+    def test_reject_no_handler(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        text = router.reject_text("cp_001")
+        assert "No checkpoint handler" in text
+
+    def test_reject_no_id(self):
+        from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
+
+        handler = TUICheckpointHandler()
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        router.checkpoint_handler = handler
+        text = router.reject_text("")
+        assert "Usage" in text
+
+    def test_reject_not_found(self):
+        from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
+
+        handler = TUICheckpointHandler()
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        router.checkpoint_handler = handler
+        text = router.reject_text("nonexistent")
+        assert "not found" in text.lower()
+
+    def test_reject_success(self):
+        from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
+
+        handler = TUICheckpointHandler()
+        handler._store.submit("cp_xyz", {"data": [1]}, worker_name="Researcher", phase="analysis")
+        import asyncio
+        handler._events["cp_xyz"] = asyncio.Event()
+        handler._results["cp_xyz"] = False
+
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        router.checkpoint_handler = handler
+        text = router.reject_text("cp_xyz", reason="needs revision")
+        assert "Rejected" in text or "rejected" in text
+        assert "cp_xyz" in text
+
+    def test_reject_success_no_reason(self):
+        from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
+
+        handler = TUICheckpointHandler()
+        handler._store.submit("cp_nnn", {"data": []}, worker_name="Designer", phase="draft")
+        import asyncio
+        handler._events["cp_nnn"] = asyncio.Event()
+        handler._results["cp_nnn"] = False
+
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        router.checkpoint_handler = handler
+        text = router.reject_text("cp_nnn")
+        assert "Rejected" in text or "rejected" in text
+        assert "cp_nnn" in text

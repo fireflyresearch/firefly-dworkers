@@ -51,6 +51,9 @@ class LocalClient:
 
     _workers_imported: bool = False
 
+    def __init__(self, *, checkpoint_handler: Any | None = None) -> None:
+        self._checkpoint_handler = checkpoint_handler
+
     @classmethod
     def _ensure_workers_registered(cls) -> None:
         """Import the workers package once to trigger self-registration."""
@@ -113,6 +116,8 @@ class LocalClient:
             worker = worker_factory.create(
                 worker_role, config, name=f"{role}-tui"
             )
+            if self._checkpoint_handler is not None and hasattr(worker, "checkpoint_handler"):
+                worker.checkpoint_handler = self._checkpoint_handler
             result = await worker.run(prompt)
             output = str(result.output) if hasattr(result, "output") else str(result)
             yield StreamEvent(type="complete", content=output)

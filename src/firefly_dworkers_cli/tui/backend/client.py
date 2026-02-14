@@ -73,6 +73,7 @@ async def create_client(
     *,
     mode: str = "auto",
     server_url: str | None = None,
+    checkpoint_handler: Any | None = None,
 ) -> DworkersClient:
     """Create a backend client.
 
@@ -87,11 +88,14 @@ async def create_client(
     server_url:
         Override for the ``DWORKERS_SERVER_URL`` environment variable.  When
         *None* the env-var is read (default ``http://localhost:8000``).
+    checkpoint_handler:
+        Optional :class:`TUICheckpointHandler` passed through to
+        :class:`LocalClient` so workers can raise checkpoints.
     """
     if mode == "local":
         from firefly_dworkers_cli.tui.backend.local import LocalClient
 
-        return LocalClient()
+        return LocalClient(checkpoint_handler=checkpoint_handler)
 
     resolved_url = server_url or os.environ.get(
         "DWORKERS_SERVER_URL", "http://localhost:8000"
@@ -121,4 +125,4 @@ async def create_client(
     # mode == "auto" -- fall back to local
     from firefly_dworkers_cli.tui.backend.local import LocalClient
 
-    return LocalClient()
+    return LocalClient(checkpoint_handler=checkpoint_handler)
