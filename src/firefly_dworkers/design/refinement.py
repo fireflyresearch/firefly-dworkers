@@ -6,6 +6,7 @@ applies rule-based fixes to shape positions, and iterates until acceptable.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import logging
 from typing import Any
@@ -159,10 +160,8 @@ class VisualRefiner:
         try:
             return await renderer.render_presentation(tmp_path)
         finally:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(tmp_path)
-            except OSError:
-                pass
 
     async def _evaluate_slide(
         self,

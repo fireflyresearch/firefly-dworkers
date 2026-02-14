@@ -15,6 +15,7 @@ Orchestrates:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import tempfile
@@ -367,7 +368,5 @@ class DesignPipelineTool(BaseTool):
             validator = SlideValidator(model=self._vlm_model)
             return await validator.validate(tmp_path)
         finally:
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(tmp_path)
-            except OSError:
-                pass

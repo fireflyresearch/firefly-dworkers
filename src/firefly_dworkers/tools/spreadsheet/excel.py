@@ -13,7 +13,6 @@ from fireflyframework_genai.tools.base import GuardProtocol
 from firefly_dworkers.tools.registry import tool_registry
 from firefly_dworkers.tools.spreadsheet.base import SpreadsheetPort
 from firefly_dworkers.tools.spreadsheet.models import (
-    CellSpec,
     SheetData,
     SheetSpec,
     SpreadsheetOperation,

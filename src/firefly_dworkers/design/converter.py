@@ -14,7 +14,6 @@ import tempfile
 from typing import Any
 
 from firefly_dworkers.design.models import (
-    ContentBlock,
     DesignProfile,
     DesignSpec,
     ImagePlacement,
@@ -45,7 +44,7 @@ def _build_content_zone(layout_zone: LayoutZone) -> ContentZone:
     """
     # Map of ph_type values that should appear in the placeholder_map.
     # "date_time" is normalized to "date" for consumers.
-    _TYPE_TO_KEY = {"date_time": "date"}
+    _TYPE_TO_KEY = {"date_time": "date"}  # noqa: N806
 
     ph_map: dict[str, int] = {}
     for ph in layout_zone.placeholders:

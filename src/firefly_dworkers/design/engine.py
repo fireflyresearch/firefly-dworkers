@@ -16,6 +16,7 @@ Three main responsibilities:
 
 from __future__ import annotations
 
+import contextlib
 import re
 from typing import Any
 
@@ -31,7 +32,6 @@ from firefly_dworkers.design.models import (
     OutputType,
     ResolvedChart,
 )
-
 
 # ── Date/time pattern for heuristic chart-type selection ─────────────────
 
@@ -81,7 +81,7 @@ class DesignEngine:
     """LLM-powered creative reasoning engine for document design.
 
     Parameters:
-        model: A model string (e.g. ``"openai:gpt-4o"``) or a pydantic-ai
+        model: A model string (e.g. ``"openai:gpt-5.2"``) or a pydantic-ai
             :class:`Model` instance (including :class:`TestModel`).  When
             an empty string is passed, the Agent will use its default model.
         tenant_config: Optional tenant configuration for context.
@@ -203,10 +203,8 @@ class DesignEngine:
                 and self._use_llm_chart_selection
                 and not ds.suggested_chart_type
             ):
-                try:
+                with contextlib.suppress(Exception):
                     chart_type = await self._llm_select_chart_type(ds)
-                except Exception:
-                    pass  # Heuristic result stands
 
             colors = list(profile.color_palette) if profile.color_palette else []
 
@@ -302,7 +300,7 @@ class DesignEngine:
         )
 
         if available_layouts:
-            layout_list = ", ".join(f"'{l}'" for l in available_layouts)
+            layout_list = ", ".join(f"'{lay}'" for lay in available_layouts)
             layout_instruction = (
                 f"IMPORTANT: The template provides these specific layouts: "
                 f"{layout_list}. You MUST use ONLY these exact layout names "

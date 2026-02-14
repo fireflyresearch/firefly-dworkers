@@ -7,6 +7,7 @@ capturing colors, fonts, layouts, and other design attributes.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 from typing import Any
 from xml.etree.ElementTree import Element
@@ -83,10 +84,8 @@ class TemplateAnalyzer:
         profile = await dispatch[fmt](source)
 
         if self._vlm_model and self._is_profile_empty(profile) and fmt == "pptx":
-            try:
+            with contextlib.suppress(Exception):
                 profile = await self._vlm_analyze(source, profile)
-            except Exception:
-                pass  # XML result stands
 
         return profile
 
@@ -100,12 +99,10 @@ class TemplateAnalyzer:
 
         # LLM-based classification for custom placeholders
         if self._vlm_model and profile.layout_zones:
-            try:
+            with contextlib.suppress(Exception):
                 profile.layout_zones = await self._classify_zones_with_llm(
                     profile.layout_zones
                 )
-            except Exception:
-                pass  # Spec-based classification stands
 
         return profile
 
@@ -178,19 +175,15 @@ class TemplateAnalyzer:
 
         # Style names
         styles: list[str] = []
-        try:
+        with contextlib.suppress(Exception):
             styles = [s.name for s in doc.styles if s.type is not None]
-        except Exception:
-            pass
 
         # Extract fonts from key styles
         heading_font = ""
         body_font = ""
         font_sizes: dict[str, float] = {}
-        try:
+        with contextlib.suppress(Exception):
             heading_font, body_font, font_sizes = self._extract_docx_fonts(doc)
-        except Exception:
-            pass
 
         # Margins from first section
         margins: dict[str, float] = {}
@@ -239,10 +232,8 @@ class TemplateAnalyzer:
 
         # Sheet names as layout info
         available_layouts: list[str] = []
-        try:
+        with contextlib.suppress(Exception):
             available_layouts = wb.sheetnames
-        except Exception:
-            pass
 
         wb.close()
 
@@ -261,9 +252,10 @@ class TemplateAnalyzer:
 
     async def _vlm_analyze(self, source: str, xml_profile: DesignProfile) -> DesignProfile:
         """Render first slide -> VLM -> DesignProfile. Merge with XML results."""
-        from firefly_dworkers.design.preview import SlidePreviewRenderer
         from fireflyframework_genai.agents.base import FireflyAgent
         from fireflyframework_genai.types import BinaryContent
+
+        from firefly_dworkers.design.preview import SlidePreviewRenderer
 
         renderer = SlidePreviewRenderer(dpi=150)
         png_list = await renderer.render_presentation(source)
@@ -447,7 +439,7 @@ class TemplateAnalyzer:
         Non-standard indices are left as ``"custom"`` for LLM classification.
         """
         # OOXML spec-defined placeholder indices — language-independent
-        _STANDARD: dict[int, str] = {
+        _STANDARD: dict[int, str] = {  # noqa: N806
             0: "title",
             1: "body",
             10: "date_time",

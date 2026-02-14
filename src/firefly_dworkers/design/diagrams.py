@@ -38,7 +38,7 @@ class DiagramRenderer:
         except ImportError:
             raise ImportError(
                 "graphviz required for diagram rendering. Install with: pip install graphviz"
-            )
+            ) from None
 
         src = graphviz.Source(dot_source)
         return src.pipe(format="png")
@@ -56,7 +56,7 @@ class DiagramRenderer:
             matplotlib.use("Agg")
             import matplotlib.pyplot as plt
         except ImportError:
-            raise ImportError("matplotlib required for diagram fallback rendering")
+            raise ImportError("matplotlib required for diagram fallback rendering") from None
 
         fig, ax = plt.subplots(figsize=(8, 4))
         ax.text(

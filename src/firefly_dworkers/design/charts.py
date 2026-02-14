@@ -26,7 +26,7 @@ except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
 try:
-    import pptx
+    import pptx  # noqa: F401
     from pptx.chart.data import CategoryChartData, XyChartData
     from pptx.dml.color import RGBColor
     from pptx.enum.chart import XL_CHART_TYPE

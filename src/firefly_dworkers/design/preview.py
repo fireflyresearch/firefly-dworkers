@@ -37,7 +37,6 @@ class SlidePreviewRenderer:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
-        import matplotlib.patches as patches
 
         w_in = _emu_to_inches(slide_width)
         h_in = _emu_to_inches(slide_height)
@@ -76,7 +75,6 @@ class SlidePreviewRenderer:
 
     def _draw_shape(self, ax: Any, shape: Any, slide_w: float, slide_h: float) -> None:
         """Dispatch shape drawing based on type."""
-        import matplotlib.patches as patches
 
         try:
             x = _emu_to_inches(shape.left) if shape.left else 0
@@ -160,7 +158,7 @@ class SlidePreviewRenderer:
         cell_w = w / n_cols
         cell_h = h / n_rows
 
-        for r_idx, row in enumerate(table.rows):
+        for r_idx, _row in enumerate(table.rows):
             for c_idx in range(n_cols):
                 cx = x + c_idx * cell_w
                 cy = y + r_idx * cell_h

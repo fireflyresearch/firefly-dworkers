@@ -109,8 +109,9 @@ class SlideValidator:
         Renders previews via :class:`SlidePreviewRenderer`, then sends each
         to the VLM for quality evaluation. Returns an aggregated result.
         """
-        from firefly_dworkers.design.preview import SlidePreviewRenderer
         from fireflyframework_genai.types import BinaryContent
+
+        from firefly_dworkers.design.preview import SlidePreviewRenderer
 
         renderer = SlidePreviewRenderer(dpi=150)
         png_list = await renderer.render_presentation(pptx_path)

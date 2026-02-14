@@ -11,14 +11,10 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from typing import TYPE_CHECKING
 
 import httpx
 
 from firefly_dworkers.design.models import ImageRequest, ResolvedImage
-
-if TYPE_CHECKING:
-    pass
 
 
 class ImageResolver:
@@ -59,7 +55,7 @@ class ImageResolver:
             return_exceptions=True,
         )
         resolved: dict[str, ResolvedImage] = {}
-        for req, result in zip(requests, results):
+        for req, result in zip(requests, results, strict=False):
             if isinstance(result, ResolvedImage):
                 resolved[req.name] = result
             else:

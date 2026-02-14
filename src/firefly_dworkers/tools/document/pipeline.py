@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import os
-import tempfile
 from collections.abc import Sequence
 from typing import Any
 

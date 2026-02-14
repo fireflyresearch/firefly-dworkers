@@ -23,8 +23,6 @@ from typing import Any
 import yaml
 
 from firefly_dworkers.tenants.config import (
-    ConnectorsConfig,
-    ModelsConfig,
     TenantConfig,
 )
 
@@ -183,7 +181,7 @@ class ConfigManager:
         return sorted(self.detect_api_keys().keys())
 
     def model_provider(self, model_string: str) -> str:
-        """Extract the provider from a model string like 'openai:gpt-4o'."""
+        """Extract the provider from a model string like 'openai:gpt-5.2'."""
         if ":" in model_string:
             return model_string.split(":", 1)[0]
         return "openai"  # default provider
@@ -191,7 +189,7 @@ class ConfigManager:
     def build_default_config(
         self,
         *,
-        model: str = "openai:gpt-4o",
+        model: str = "openai:gpt-5.2",
         tenant_id: str = "default",
         tenant_name: str = "Default",
         mode: str = "auto",

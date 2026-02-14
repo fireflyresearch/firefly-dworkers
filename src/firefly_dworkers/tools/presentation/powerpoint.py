@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import io
 from collections.abc import Sequence
 from typing import Any
@@ -266,20 +267,18 @@ class PowerPointTool(PresentationTool):
     @staticmethod
     def _remove_existing_slides(prs: Any) -> None:
         """Remove all existing slides from a presentation, keeping masters/layouts."""
-        sldIdLst = prs._element.sldIdLst
+        sldIdLst = prs._element.sldIdLst  # noqa: N806
         if sldIdLst is None:
             return
         slide_ids = list(sldIdLst)
-        for sldId in slide_ids:
-            rId = sldId.get(
+        for sldId in slide_ids:  # noqa: N806
+            rId = sldId.get(  # noqa: N806
                 "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
             )
             sldIdLst.remove(sldId)
             if rId:
-                try:
+                with contextlib.suppress(KeyError):
                     prs.part.rels.pop(rId)
-                except KeyError:
-                    pass
 
     @staticmethod
     def _all_layouts(prs: Any) -> list[Any]:
@@ -315,7 +314,7 @@ class PowerPointTool(PresentationTool):
                 return layout
 
         # Semantic keyword mapping: English concept → keywords to match
-        _CONCEPT_KEYWORDS: dict[str, list[str]] = {
+        _CONCEPT_KEYWORDS: dict[str, list[str]] = {  # noqa: N806
             "title slide": ["portada", "cover"],
             "title and content": ["título de 2", "título de 1"],
             "two content": ["dos", "two content", "2 columnas"],
