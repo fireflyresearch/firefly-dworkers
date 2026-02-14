@@ -22,7 +22,7 @@ Workers are the central abstraction in firefly-dworkers. Each worker is an AI ag
 
 ## Worker Roles
 
-firefly-dworkers provides four built-in worker roles, defined in `firefly_dworkers.types.WorkerRole` (a `StrEnum`):
+firefly-dworkers provides five built-in worker roles, defined in `firefly_dworkers.types.WorkerRole` (a `StrEnum`):
 
 | Enum Member | String Value | Class | Module | Description |
 |-------------|-------------|-------|--------|-------------|
@@ -30,6 +30,7 @@ firefly-dworkers provides four built-in worker roles, defined in `firefly_dworke
 | `WorkerRole.ANALYST` | `"analyst"` | `AnalystWorker` | `firefly_dworkers.workers.analyst` | Business process analysis, requirement gathering, gap analysis, recommendations |
 | `WorkerRole.DATA_ANALYST` | `"data_analyst"` | `DataAnalystWorker` | `firefly_dworkers.workers.data_analyst` | Spreadsheet processing, database queries, API data retrieval, statistical analysis |
 | `WorkerRole.MANAGER` | `"manager"` | `ManagerWorker` | `firefly_dworkers.workers.manager` | Task coordination, timeline management, deliverable tracking, stakeholder communication |
+| `WorkerRole.DESIGNER` | `"designer"` | `DocumentDesignerWorker` | `firefly_dworkers.workers.designer` | Presentation creation, document formatting, spreadsheet styling, visual deliverables |
 
 ---
 

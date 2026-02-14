@@ -70,8 +70,8 @@ name: Acme Corporation
 
 models:
   # Default model used by all workers unless overridden.
-  # Format: "provider:model_name" (e.g., "openai:gpt-4o", "anthropic:claude-sonnet-4-20250514")
-  default: openai:gpt-4o
+  # Format: "provider:model_name" (e.g., "openai:gpt-5.2", "anthropic:claude-sonnet-4-5-20250929")
+  default: openai:gpt-5.2
 
   # Optional. Model specifically for research tasks.
   # Falls back to 'default' if empty.
@@ -132,6 +132,12 @@ workers:
   manager:
     enabled: true
     autonomy: manual
+    custom_instructions: ""
+    max_concurrent_tasks: 10
+
+  designer:
+    enabled: true
+    autonomy: semi_supervised
     custom_instructions: ""
     max_concurrent_tasks: 10
 
@@ -455,7 +461,7 @@ connectors:
     # Option B: AI-driven browser -- uncomment and set credentials
     # provider: "flybrowser"
     # llm_provider: "openai"
-    # llm_model: "gpt-4o"
+    # llm_model: "gpt-5.2"
     # llm_api_key: "${OPENAI_API_KEY}"
     # headless: true
     # speed_preset: "balanced"      # "fast", "balanced", "thorough"

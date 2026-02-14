@@ -403,7 +403,7 @@ Get tenant configuration by ID.
   "id": "acme-corp",
   "name": "Acme Corporation",
   "models": {
-    "default": "openai:gpt-4o",
+    "default": "openai:gpt-5.2",
     "research": "",
     "analysis": ""
   },
@@ -550,7 +550,7 @@ Get global usage metrics (tokens, cost, requests).
   "total_requests": 12,
   "total_latency_ms": 8500.0,
   "by_agent": {"analyst-worker": {}},
-  "by_model": {"openai:gpt-4o": {}}
+  "by_model": {"openai:gpt-5.2": {}}
 }
 ```
 

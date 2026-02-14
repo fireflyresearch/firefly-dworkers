@@ -489,7 +489,7 @@ The design pipeline uses `pydantic_ai` agents for structured LLM output:
 - **Layout design** -- `Agent[None, DesignSpec]` creates the full layout structure
 - **Chart type selection** -- optional `Agent[None, str]` for ambiguous chart cases (heuristics handle most)
 
-The model can be any `pydantic_ai`-compatible model string (e.g., `"anthropic:claude-sonnet-4-5-20250929"`, `"openai:gpt-4o"`).
+The model can be any `pydantic_ai`-compatible model string (e.g., `"anthropic:claude-sonnet-4-5-20250929"`, `"openai:gpt-5.2"`).
 
 ---
 

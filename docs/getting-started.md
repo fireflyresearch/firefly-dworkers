@@ -88,7 +88,7 @@ id: default
 name: My Organization
 
 models:
-  default: openai:gpt-4o
+  default: openai:gpt-5.2
 
 verticals:
   - technology

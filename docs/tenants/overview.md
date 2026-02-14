@@ -332,7 +332,7 @@ connectors:
     enabled: true
     provider: "flybrowser"
     llm_provider: "openai"
-    llm_model: "gpt-4o"
+    llm_model: "gpt-5.2"
     headless: true
     speed_preset: "fast"
 ```
