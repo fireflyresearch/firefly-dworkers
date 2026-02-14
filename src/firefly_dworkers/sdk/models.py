@@ -100,11 +100,12 @@ class StreamEvent(BaseModel):
 
     Event types:
     - ``"token"``: An incremental text token from the worker.
+    - ``"tool_call"``: A tool invocation by the worker (content is the tool description).
     - ``"complete"``: The full output after all tokens have been streamed.
     - ``"error"``: An error that occurred during worker execution.
     """
 
-    type: str  # "token", "complete", "error"
+    type: str  # "token", "tool_call", "complete", "error"
     content: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
 
