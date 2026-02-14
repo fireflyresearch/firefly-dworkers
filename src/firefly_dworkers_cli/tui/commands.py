@@ -20,6 +20,7 @@ WELCOME_TEXT = """\
 
   Type a message to start chatting with your AI workers.
   Use @analyst, @researcher, @designer to target a specific worker.
+  Press Escape to cancel streaming. Ctrl+N for new chat. Ctrl+Q to quit.
 
   Commands:
     /help          Show all commands
@@ -28,11 +29,10 @@ WELCOME_TEXT = """\
     /conversations List saved conversations
     /load <id>     Load a saved conversation
     /config        Current configuration
-    /connectors    Connector statuses
     /status        Current session info
-    /export        Export conversation
-    /new           Start a new conversation
     /autonomy      Show or set autonomy level
+    /checkpoints   List pending checkpoints
+    /setup         Re-run setup wizard
     /quit          Exit
 """
 
@@ -54,6 +54,8 @@ Available commands:
   /export            Export current conversation as markdown
   /autonomy [level]  Show or change autonomy level
   /checkpoints       List pending checkpoints
+  /approve <id>      Approve a pending checkpoint
+  /reject <id>       Reject a pending checkpoint (with optional reason)
   /setup             Re-run the setup wizard
   /quit              Exit dworkers
 
@@ -64,6 +66,8 @@ Tips:
   - Messages support markdown formatting
   - Use /send slack #general <message> to send via Slack
   - Use /channels slack to list Slack channels
+  - Press Escape during streaming to cancel
+  - Use /autonomy to view or change the autonomy level
 """
 
 # All recognised command names (must include the leading slash).
