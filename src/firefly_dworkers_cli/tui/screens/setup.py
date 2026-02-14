@@ -14,14 +14,13 @@ The wizard uses Textual widgets for a clean terminal UI experience.
 from __future__ import annotations
 
 import os
-from typing import Any
 
 from textual.app import ComposeResult
 from textual.containers import Center, Vertical, VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Button, Input, Label, RadioButton, RadioSet, Static
 
-from firefly_dworkers_cli.config import ConfigManager, _PROVIDER_ENV_KEYS
+from firefly_dworkers_cli.config import _PROVIDER_ENV_KEYS, ConfigManager
 
 # Model choices per provider
 _PROVIDER_MODELS: dict[str, list[tuple[str, str]]] = {
@@ -178,135 +177,134 @@ class SetupScreen(Screen):
     def compose(self) -> ComposeResult:
         self._detected_providers = self._config_mgr.detect_api_keys()
 
-        with Center():
-            with VerticalScroll(id="setup-container"):
-                yield Static("dworkers", classes="setup-title")
+        with Center(), VerticalScroll(id="setup-container"):
+            yield Static("dworkers", classes="setup-title")
+            yield Static(
+                "Digital Workers as a Service — First-Run Setup",
+                classes="setup-subtitle",
+            )
+
+            # Step 1: API key detection
+            with Vertical(classes="setup-section"):
                 yield Static(
-                    "Digital Workers as a Service — First-Run Setup",
-                    classes="setup-subtitle",
+                    "Step 1: LLM Provider", classes="setup-section-title"
                 )
 
-                # Step 1: API key detection
-                with Vertical(classes="setup-section"):
-                    yield Static(
-                        "Step 1: LLM Provider", classes="setup-section-title"
-                    )
-
-                    if self._detected_providers:
-                        providers = ", ".join(
-                            p.title() for p in sorted(self._detected_providers)
-                        )
-                        yield Static(
-                            f"Detected API keys: {providers}",
-                            classes="setup-detected",
-                        )
-                    else:
-                        yield Static(
-                            "No API keys detected in environment.",
-                            classes="setup-not-detected",
-                        )
-                        yield Static(
-                            "Set OPENAI_API_KEY, ANTHROPIC_API_KEY, etc. in your shell, "
-                            "or enter one below.",
-                            classes="setup-hint",
-                        )
-
-                    # Manual API key entry
-                    yield Static(
-                        "Or enter an API key manually:",
-                        classes="setup-label",
-                    )
-                    yield Input(
-                        placeholder="sk-... or ant-...",
-                        password=True,
-                        id="api-key-input",
-                        classes="setup-input",
-                    )
-
-                # Step 2: Model selection
-                with Vertical(classes="setup-section"):
-                    yield Static(
-                        "Step 2: Default Model", classes="setup-section-title"
-                    )
-
-                    # Build radio buttons for available models
-                    available_models = self._get_available_models()
-                    if available_models:
-                        with RadioSet(id="model-select", classes="setup-radio-set"):
-                            for i, (model_id, label) in enumerate(available_models):
-                                yield RadioButton(
-                                    label, value=i == 0, name=model_id
-                                )
-                        self._selected_model = available_models[0][0]
-                    else:
-                        yield Static(
-                            "Enter an API key above to see available models.",
-                            classes="setup-hint",
-                        )
-                        yield Input(
-                            placeholder="e.g., openai:gpt-4o",
-                            id="model-input",
-                            classes="setup-input",
-                        )
-
-                # Step 3: Backend mode
-                with Vertical(classes="setup-section"):
-                    yield Static(
-                        "Step 3: Backend Mode", classes="setup-section-title"
-                    )
-                    with RadioSet(id="mode-select", classes="setup-radio-set"):
-                        for i, (mode_id, label, description) in enumerate(
-                            _MODE_OPTIONS
-                        ):
-                            yield RadioButton(
-                                f"{label} — {description}",
-                                value=i == 0,
-                                name=mode_id,
-                            )
-                    self._selected_mode = _MODE_OPTIONS[0][0]
-
-                # Step 4: Autonomy level
-                with Vertical(classes="setup-section"):
-                    yield Static(
-                        "Step 4: Autonomy Level", classes="setup-section-title"
-                    )
-                    with RadioSet(
-                        id="autonomy-select", classes="setup-radio-set"
-                    ):
-                        for i, (autonomy_id, label, description) in enumerate(
-                            _AUTONOMY_OPTIONS
-                        ):
-                            yield RadioButton(
-                                f"{label} — {description}",
-                                value=i == 0,
-                                name=autonomy_id,
-                            )
-                    self._selected_autonomy = _AUTONOMY_OPTIONS[0][0]
-
-                # Step 5: Optional integrations
-                with Vertical(classes="setup-section"):
-                    yield Static(
-                        "Step 5: Integrations (optional)",
-                        classes="setup-section-title",
+                if self._detected_providers:
+                    providers = ", ".join(
+                        p.title() for p in sorted(self._detected_providers)
                     )
                     yield Static(
-                        "You can configure Slack, Teams, and other integrations later "
-                        "using /connectors and /setup in the chat.",
+                        f"Detected API keys: {providers}",
+                        classes="setup-detected",
+                    )
+                else:
+                    yield Static(
+                        "No API keys detected in environment.",
+                        classes="setup-not-detected",
+                    )
+                    yield Static(
+                        "Set OPENAI_API_KEY, ANTHROPIC_API_KEY, etc. in your shell, "
+                        "or enter one below.",
                         classes="setup-hint",
                     )
 
-                # Actions
-                with Center(id="setup-actions"):
-                    yield Button(
-                        "Save & Start",
-                        variant="primary",
-                        id="btn-save",
+                # Manual API key entry
+                yield Static(
+                    "Or enter an API key manually:",
+                    classes="setup-label",
+                )
+                yield Input(
+                    placeholder="sk-... or ant-...",
+                    password=True,
+                    id="api-key-input",
+                    classes="setup-input",
+                )
+
+            # Step 2: Model selection
+            with Vertical(classes="setup-section"):
+                yield Static(
+                    "Step 2: Default Model", classes="setup-section-title"
+                )
+
+                # Build radio buttons for available models
+                available_models = self._get_available_models()
+                if available_models:
+                    with RadioSet(id="model-select", classes="setup-radio-set"):
+                        for i, (model_id, label) in enumerate(available_models):
+                            yield RadioButton(
+                                label, value=i == 0, name=model_id
+                            )
+                    self._selected_model = available_models[0][0]
+                else:
+                    yield Static(
+                        "Enter an API key above to see available models.",
+                        classes="setup-hint",
                     )
-                    yield Button(
-                        "Skip (use defaults)",
-                        variant="default",
-                        id="btn-skip",
+                    yield Input(
+                        placeholder="e.g., openai:gpt-4o",
+                        id="model-input",
+                        classes="setup-input",
                     )
+
+            # Step 3: Backend mode
+            with Vertical(classes="setup-section"):
+                yield Static(
+                    "Step 3: Backend Mode", classes="setup-section-title"
+                )
+                with RadioSet(id="mode-select", classes="setup-radio-set"):
+                    for i, (mode_id, label, description) in enumerate(
+                        _MODE_OPTIONS
+                    ):
+                        yield RadioButton(
+                            f"{label} — {description}",
+                            value=i == 0,
+                            name=mode_id,
+                        )
+                self._selected_mode = _MODE_OPTIONS[0][0]
+
+            # Step 4: Autonomy level
+            with Vertical(classes="setup-section"):
+                yield Static(
+                    "Step 4: Autonomy Level", classes="setup-section-title"
+                )
+                with RadioSet(
+                    id="autonomy-select", classes="setup-radio-set"
+                ):
+                    for i, (autonomy_id, label, description) in enumerate(
+                        _AUTONOMY_OPTIONS
+                    ):
+                        yield RadioButton(
+                            f"{label} — {description}",
+                            value=i == 0,
+                            name=autonomy_id,
+                        )
+                self._selected_autonomy = _AUTONOMY_OPTIONS[0][0]
+
+            # Step 5: Optional integrations
+            with Vertical(classes="setup-section"):
+                yield Static(
+                    "Step 5: Integrations (optional)",
+                    classes="setup-section-title",
+                )
+                yield Static(
+                    "You can configure Slack, Teams, and other integrations later "
+                    "using /connectors and /setup in the chat.",
+                    classes="setup-hint",
+                )
+
+            # Actions
+            with Center(id="setup-actions"):
+                yield Button(
+                    "Save & Start",
+                    variant="primary",
+                    id="btn-save",
+                )
+                yield Button(
+                    "Skip (use defaults)",
+                    variant="default",
+                    id="btn-skip",
+                )
 
     def _get_available_models(self) -> list[tuple[str, str]]:
         """Return model choices for detected providers."""
