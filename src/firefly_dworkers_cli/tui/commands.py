@@ -30,6 +30,12 @@ WELCOME_TEXT = """\
     /load <id>     Load a saved conversation
     /config        Current configuration
     /status        Current session info
+    /models        Show available models
+    /model <name>  Switch the default model
+    /usage         Show usage statistics
+    /clear         Clear the chat display
+    /retry         Retry the last message
+    /delete <id>   Delete a conversation
     /autonomy      Show or set autonomy level
     /checkpoints   List pending checkpoints
     /setup         Re-run setup wizard
@@ -46,9 +52,15 @@ Available commands:
   /conversations     List all saved conversations
   /load <id>         Load a saved conversation
   /new               Start a fresh conversation
+  /delete <id>       Delete a saved conversation
+  /clear             Clear the chat display
+  /retry             Retry the last user message
   /status            Show current session status
   /config            Show current configuration
   /connectors        List all connector statuses
+  /models            Show available models and providers
+  /model <name>      Switch the default model
+  /usage             Show usage statistics
   /send <tool> <ch>  Send a message via Slack/Teams/email
   /channels <tool>   List channels for a messaging tool
   /export            Export current conversation as markdown
