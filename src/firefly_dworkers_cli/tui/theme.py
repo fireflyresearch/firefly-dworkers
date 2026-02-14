@@ -60,6 +60,7 @@ Screen {
     scrollbar-size: 1 1;
     scrollbar-background: transparent;
     scrollbar-color: #444444;
+    display: none;
 }
 
 /* ── Message boxes ───────────────────────────── */
@@ -72,8 +73,8 @@ Screen {
 }
 
 .msg-box-ai {
-    border-left: tall #444444;
-    padding: 0 0 0 1;
+    border-left: thick #444444;
+    padding: 0 1 0 1;
     margin: 0 0 1 0;
     width: 1fr;
     height: auto;
@@ -95,7 +96,8 @@ Screen {
 }
 
 .msg-sender-ai {
-    color: #666666;
+    color: #d4d4d4;
+    text-style: bold;
 }
 
 .msg-sender-system {
@@ -133,7 +135,7 @@ Screen {
 /* ── Tool call boxes ─────────────────────────── */
 
 .tool-call {
-    border-left: tall #444444;
+    border-left: thick #444444;
     margin: 0 2 1 2;
     padding: 0 1;
     height: auto;
@@ -279,7 +281,7 @@ Screen {
 /* ── Slash command output ────────────────────── */
 
 .cmd-output {
-    border-left: tall #444444;
+    border-left: thick #444444;
     margin: 0 2 1 2;
     padding: 0 1;
     height: auto;

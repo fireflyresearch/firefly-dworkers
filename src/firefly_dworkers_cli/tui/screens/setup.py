@@ -243,11 +243,15 @@ class ProviderScreen(Screen):
     """Select an LLM provider."""
 
     CSS = _WIZARD_CSS
-    BINDINGS = [("escape", "quit_wizard", "Quit")]
+    BINDINGS = [
+        ("escape", "quit_wizard", "Quit"),
+        ("enter", "confirm", "Confirm"),
+    ]
 
     def __init__(self, detected: dict[str, str]) -> None:
         super().__init__()
         self._detected = detected
+        self._selected: str = ALL_PROVIDERS[0][0]  # default to first
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="wizard-container"):
@@ -270,14 +274,24 @@ class ProviderScreen(Screen):
                         name=provider_id,
                     )
 
+            with Center(id="wizard-actions"):
+                yield Button("Continue", variant="primary", id="btn-continue")
+
         yield Static(
-            "up/down navigate  enter select  esc quit",
+            "up/down navigate  enter confirm  esc quit",
             classes="wizard-footer",
         )
 
     def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         if event.pressed.name:
-            self.dismiss(event.pressed.name)
+            self._selected = event.pressed.name
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-continue":
+            self.dismiss(self._selected)
+
+    def action_confirm(self) -> None:
+        self.dismiss(self._selected)
 
     def action_quit_wizard(self) -> None:
         self.dismiss(None)
@@ -289,11 +303,17 @@ class ModelScreen(Screen):
     """Select a model for the chosen provider."""
 
     CSS = _WIZARD_CSS
-    BINDINGS = [("escape", "go_back", "Back")]
+    BINDINGS = [
+        ("escape", "go_back", "Back"),
+        ("enter", "confirm", "Confirm"),
+    ]
 
     def __init__(self, provider: str) -> None:
         super().__init__()
         self._provider = provider
+        models = _PROVIDER_MODELS.get(provider, [])
+        self._selected: str = models[0][0] if models else ""
+        self._custom_mode: bool = not models
 
     def compose(self) -> ComposeResult:
         models = _PROVIDER_MODELS.get(self._provider, [])
@@ -326,54 +346,60 @@ class ModelScreen(Screen):
                     id="custom-model-input",
                     classes="wizard-input",
                 )
-                with Center(id="wizard-actions"):
-                    yield Button("Continue", variant="primary", id="btn-continue")
+
+            with Center(id="wizard-actions"):
+                yield Button("Continue", variant="primary", id="btn-continue")
 
         yield Static(
-            "up/down navigate  enter select  esc back",
+            "up/down navigate  enter confirm  esc back",
             classes="wizard-footer",
         )
 
-    def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
+    async def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
         if event.pressed.name == "_custom":
-            self._show_custom_input()
+            self._custom_mode = True
+            await self._show_custom_input()
         elif event.pressed.name:
-            self.dismiss(event.pressed.name)
+            self._selected = event.pressed.name
 
-    def _show_custom_input(self) -> None:
+    async def _show_custom_input(self) -> None:
         """Replace the radio set with a text input for custom model."""
         try:
             container = self.query_one(".wizard-container")
             radio = self.query_one("#model-select")
-            radio.remove()
+            await radio.remove()
             input_widget = Input(
                 placeholder=f"e.g., {self._provider}:model-name",
                 id="custom-model-input",
                 classes="wizard-input",
             )
-            container.mount(input_widget)
-            center = Center(id="wizard-actions")
-            container.mount(center)
-            btn = Button("Continue", variant="primary", id="btn-continue")
-            center.mount(btn)
+            actions = self.query_one("#wizard-actions")
+            await container.mount(input_widget, before=actions)
             input_widget.focus()
         except Exception:
             pass
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-continue":
+            self._submit()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "custom-model-input":
+            self._submit()
+
+    def _submit(self) -> None:
+        if self._custom_mode:
             try:
                 value = self.query_one("#custom-model-input", Input).value.strip()
                 if value:
                     self.dismiss(value)
             except Exception:
                 pass
+        elif self._selected:
+            self.dismiss(self._selected)
 
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        if event.input.id == "custom-model-input":
-            value = event.value.strip()
-            if value:
-                self.dismiss(value)
+    def action_confirm(self) -> None:
+        self._submit()
 
     def action_go_back(self) -> None:
         self.dismiss(None)

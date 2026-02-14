@@ -127,7 +127,7 @@ class TestFormatSummary:
             mock_time.monotonic.side_effect = [100.0, 102.1]
             timer.start()
             summary = timer.format_summary(1247)
-        assert "Thought for" in summary
+        assert "total" in summary
         assert "\u00b7" in summary
         assert "tokens" in summary
         assert "1,247" in summary
@@ -169,4 +169,4 @@ class TestFullLifecycle:
             assert timer.thinking_time == 2.0
             assert timer.streaming_time == 3.0
             assert timer.format_elapsed() == "5.0s"
-            assert timer.format_summary(500) == "Thought for 5.0s \u00b7 500 tokens"
+            assert timer.format_summary(500) == "2.0s thinking \u00b7 5.0s total \u00b7 500 tokens \u00b7 167 tok/s"

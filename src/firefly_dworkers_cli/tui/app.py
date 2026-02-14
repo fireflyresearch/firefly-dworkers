@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import re
+import time
 import uuid
 from datetime import UTC, datetime
 
@@ -66,9 +67,10 @@ class SlashCommandProvider(Provider):
     """Slash commands for the Textual command palette (Ctrl+P)."""
 
     async def discover(self) -> Hits:
-        for name, desc in _PALETTE_COMMANDS:
+        total = len(_PALETTE_COMMANDS)
+        for i, (name, desc) in enumerate(_PALETTE_COMMANDS):
             yield Hit(
-                1.0,
+                1.0 - i * (0.5 / total),
                 f"/{name}",
                 self._make_command(name),
                 help=desc,
@@ -105,8 +107,9 @@ class DworkersApp(App):
 
     BINDINGS = [
         Binding("ctrl+q", "quit", "Quit", show=False),
-        Binding("ctrl+c", "quit", "Quit", show=False),
+        Binding("ctrl+c", "cancel_or_quit", "Cancel/Quit", show=False),
         Binding("ctrl+n", "new_conversation", "New Chat", show=False),
+        Binding("ctrl+l", "clear_chat", "Clear", show=False),
         Binding("escape", "focus_input", "Focus Input", show=False),
     ]
 
@@ -133,6 +136,8 @@ class DworkersApp(App):
         )
         self._checkpoint_handler = TUICheckpointHandler()
         self._router.checkpoint_handler = self._checkpoint_handler
+        self._last_ctrl_c: float = 0.0
+        self._config_load_failed: bool = False
         if self._autonomy_override:
             self._router.autonomy_level = self._autonomy_override
 
@@ -140,7 +145,7 @@ class DworkersApp(App):
         # Header bar
         with Horizontal(id="header-bar"):
             yield Static("dworkers", classes="header-title")
-            yield Static("Ctrl+P commands | Ctrl+N new | Ctrl+Q quit", classes="header-hint")
+            yield Static("Ctrl+P commands | Ctrl+N new | Ctrl+L clear | Ctrl+Q quit", classes="header-hint")
 
         # Welcome banner (shown initially, hidden once chat starts)
         with Vertical(id="welcome"):
@@ -154,19 +159,16 @@ class DworkersApp(App):
             with Horizontal(id="input-row"):
                 yield Static("> ", classes="prompt-prefix", id="prompt-prefix")
                 yield TextArea(id="prompt-input")
-            yield Static("@analyst | Enter to send | Escape to cancel | /help",
+            yield Static("Enter to send · Shift+Enter for newline · /help for commands",
                          classes="input-hint", id="input-hint")
 
-        # Status bar
+        # Status bar — model · autonomy · tokens (right: connection)
         with Horizontal(id="status-bar"):
-            yield Static("local", classes="status-item status-model")
-            yield Static(" · ", classes="status-sep")
-            yield Static("local", classes="status-item status-mode", id="status-mode")
-            yield Static(" · ", classes="status-sep")
+            yield Static("local", classes="status-item status-model", id="status-model")
+            yield Static(" · ", classes="status-sep", id="sep-after-model")
             yield Static("semi-supervised", classes="status-item status-autonomy", id="status-autonomy")
-            yield Static(" · ", classes="status-sep")
-            yield Static("~0 tokens", classes="status-item status-tokens", id="token-count")
-            yield Static("\u25cf connected", classes="status-connection status-connected", id="conn-status")
+            yield Static("", classes="status-item status-tokens", id="token-count")
+            yield Static("", classes="status-connection status-connected", id="conn-status")
 
     async def on_mount(self) -> None:
         """Load config, optionally run setup wizard, then connect to backend."""
@@ -184,7 +186,7 @@ class DworkersApp(App):
                 config = self._config_mgr.load()
                 self._update_model_label(config.models.default)
             except Exception:
-                pass
+                self._config_load_failed = True
             await self._connect_and_focus()
 
     def _on_setup_complete(self, result: object) -> None:
@@ -198,20 +200,10 @@ class DworkersApp(App):
         """Update the status bar model label."""
         with contextlib.suppress(NoMatches):
             label = model_string.split(":", 1)[1] if ":" in model_string else model_string
-            self.query_one(".status-model", Static).update(label)
+            self.query_one("#status-model", Static).update(label)
 
     def _update_status_bar(self) -> None:
         """Refresh all status bar items after state changes."""
-        # Mode
-        mode_label = self._mode
-        from firefly_dworkers_cli.tui.backend.remote import RemoteClient
-        if self._client and isinstance(self._client, RemoteClient):
-            mode_label = "remote"
-        elif self._mode == "auto":
-            mode_label = "local"  # auto resolved to local
-        with contextlib.suppress(NoMatches):
-            self.query_one("#status-mode", Static).update(mode_label)
-
         # Autonomy
         autonomy = self._router.autonomy_level
         display = autonomy.replace("_", "-")
@@ -240,6 +232,16 @@ class DworkersApp(App):
         self.query_one("#prompt-input", TextArea).focus()
         self._update_status_bar()
 
+        # Show config load error if it occurred
+        if self._config_load_failed:
+            self._config_load_failed = False
+            self._hide_welcome()
+            message_list = self.query_one("#message-list", VerticalScroll)
+            await self._add_system_message(
+                message_list,
+                "**Warning:** Config file could not be loaded. Run `/setup` to reconfigure.",
+            )
+
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
         """Update the input hint as the user types."""
         if event.text_area.id == "prompt-input":
@@ -247,22 +249,30 @@ class DworkersApp(App):
 
     async def on_key(self, event) -> None:
         """Handle Enter to submit and Escape to cancel streaming."""
-        # Escape cancels streaming
+        # Escape / Ctrl+C cancels streaming
         if event.key == "escape" and self._is_streaming:
             self._cancel_streaming.set()
+            # Instant visual feedback
+            with contextlib.suppress(Exception):
+                for ind in self.query(".streaming-indicator"):
+                    ind.update("Cancelling...")
             event.prevent_default()
             event.stop()
             return
 
         input_widget = self.query_one("#prompt-input", TextArea)
 
-        if event.key == "enter" and self.focused is input_widget:
-            event.prevent_default()
-            event.stop()
-            text = input_widget.text.strip()
-            if text and not self._is_streaming:
-                input_widget.clear()
-                await self._handle_input(text)
+        if self.focused is input_widget:
+            if event.key == "shift+enter":
+                # Allow Shift+Enter to insert a newline (default TextArea behavior)
+                return
+            if event.key == "enter":
+                event.prevent_default()
+                event.stop()
+                text = input_widget.text.strip()
+                if text and not self._is_streaming:
+                    input_widget.clear()
+                    await self._handle_input(text)
 
     async def _handle_input(self, text: str) -> None:
         """Route input to slash commands or message sending."""
@@ -327,6 +337,7 @@ class DworkersApp(App):
         self._is_streaming = True
         tokens: list[str] = []
         first_token_marked = False
+        last_render = 0.0
 
         try:
             if self._client is not None:
@@ -347,15 +358,21 @@ class DworkersApp(App):
                                     timer.mark_first_token()
                                     indicator.set_streaming_mode(timer)
                                 tokens.append(event.content)
-                                await content_widget.update("".join(tokens))
-                                message_list.scroll_end(animate=False)
+                                # Throttle: render at most every 80ms
+                                now = time.monotonic()
+                                if event.type == "complete" or now - last_render >= 0.08:
+                                    last_render = now
+                                    await content_widget.update("".join(tokens))
+                                    if self._is_near_bottom(message_list):
+                                        message_list.scroll_end(animate=False)
                             elif event.type == "tool_call":
                                 tool_box = Vertical(classes="tool-call")
-                                await message_list.mount(tool_box)
+                                await msg_box.mount(tool_box)
                                 await tool_box.mount(
                                     Static(f"\u2699 {event.content}", classes="tool-call-header")
                                 )
-                                message_list.scroll_end(animate=False)
+                                if self._is_near_bottom(message_list):
+                                    message_list.scroll_end(animate=False)
                             elif event.type == "error":
                                 tokens.append(f"\n\n**Error:** {event.content}")
                                 await content_widget.update("".join(tokens))
@@ -372,8 +389,11 @@ class DworkersApp(App):
             indicator.stop()
             indicator.remove()
 
-        # Save agent message
+        # Final flush of any remaining unrendered tokens
         final_content = "".join(tokens)
+        await content_widget.update(final_content)
+
+        # Save agent message
         agent_msg = ChatMessage(
             id=f"msg_{uuid.uuid4().hex[:12]}",
             conversation_id=self._conversation.id,
@@ -391,7 +411,7 @@ class DworkersApp(App):
         token_estimate = self._estimate_tokens(final_content)
         self._total_tokens += token_estimate
         self.query_one("#token-count", Static).update(
-            f"~{self._total_tokens:,} tokens"
+            f" · ~{self._total_tokens:,} tokens"
         )
 
         # Response summary footer
@@ -404,7 +424,7 @@ class DworkersApp(App):
     async def _add_user_message(self, container: VerticalScroll, text: str) -> None:
         """Mount a user message into the message list."""
         msg_box = Vertical(classes="msg-box")
-        header = Static("> You", classes="msg-sender msg-sender-human")
+        header = Static(">", classes="msg-sender msg-sender-human")
         content = Markdown(text, classes="msg-content msg-content-user")
         await container.mount(msg_box)
         await msg_box.mount(header)
@@ -420,9 +440,14 @@ class DworkersApp(App):
         container.scroll_end(animate=False)
 
     @staticmethod
+    def _is_near_bottom(container: VerticalScroll) -> bool:
+        """Check if the user is scrolled near the bottom (within 5 lines)."""
+        return container.scroll_y >= container.max_scroll_y - 5
+
+    @staticmethod
     def _estimate_tokens(text: str) -> int:
-        """Rough token estimate: ~2 tokens per whitespace-delimited word."""
-        return len(text.split()) * 2
+        """Rough token estimate: ~1 token per 4 characters."""
+        return max(1, len(text) // 4)
 
     def _extract_role(self, text: str) -> str | None:
         """Return the first known @role mention in the message text."""
@@ -442,8 +467,10 @@ class DworkersApp(App):
     def _update_input_hint(self, text: str = "") -> None:
         """Update the input hint to reflect the detected @role target."""
         role = self._extract_role(text) if text else None
-        target = role or "analyst"
-        hint = f"@{target} | Enter to send | Escape to cancel | /help"
+        if role:
+            hint = f"@{role} · Enter to send · Shift+Enter for newline"
+        else:
+            hint = "Enter to send · Shift+Enter for newline · /help for commands"
         with contextlib.suppress(NoMatches):
             self.query_one("#input-hint", Static).update(hint)
 
@@ -488,11 +515,12 @@ class DworkersApp(App):
 
             case "/new":
                 self._conversation = None
-                # Clear message list
+                self._total_tokens = 0
+                self.query_one("#token-count", Static).update("")
                 message_list.remove_children()
                 await self._add_system_message(
                     message_list,
-                    "Started a new conversation. Type a message to begin.",
+                    "New conversation. Type a message to begin.",
                 )
 
             case "/status":
@@ -682,7 +710,8 @@ class DworkersApp(App):
                                 indicator.set_streaming_mode(timer)
                             tokens.append(event.content)
                             await content.update("".join(tokens))
-                            container.scroll_end(animate=False)
+                            if self._is_near_bottom(container):
+                                container.scroll_end(animate=False)
                         elif event.type == "error":
                             tokens.append(f"\n\n**Error:** {event.content}")
                             await content.update("".join(tokens))
@@ -704,7 +733,7 @@ class DworkersApp(App):
         token_estimate = self._estimate_tokens(final_content)
         self._total_tokens += token_estimate
         self.query_one("#token-count", Static).update(
-            f"~{self._total_tokens:,} tokens"
+            f" · ~{self._total_tokens:,} tokens"
         )
         summary = Static(timer.format_summary(token_estimate), classes="response-summary")
         await box.mount(summary)
@@ -848,7 +877,8 @@ class DworkersApp(App):
                         else:
                             tokens.append(f"\n{event.content}")
                         await content_widget.update("".join(tokens))
-                        container.scroll_end(animate=False)
+                        if self._is_near_bottom(container):
+                            container.scroll_end(animate=False)
             except TimeoutError:
                 tokens.append("\n\n**Error:** Response timed out after 5 minutes.")
                 await content_widget.update("".join(tokens))
@@ -867,7 +897,7 @@ class DworkersApp(App):
         token_estimate = self._estimate_tokens(final_content)
         self._total_tokens += token_estimate
         self.query_one("#token-count", Static).update(
-            f"~{self._total_tokens:,} tokens"
+            f" · ~{self._total_tokens:,} tokens"
         )
         summary = Static(timer.format_summary(token_estimate), classes="response-summary")
         await msg_box.mount(summary)
@@ -993,12 +1023,47 @@ class DworkersApp(App):
     async def action_new_conversation(self) -> None:
         """Start a new conversation."""
         self._conversation = None
+        self._total_tokens = 0
+        self.query_one("#token-count", Static).update("")
         message_list = self.query_one("#message-list", VerticalScroll)
         message_list.remove_children()
         await self._add_system_message(
             message_list,
-            "Started a new conversation. Type a message to begin.",
+            "New conversation. Type a message to begin.",
         )
+
+    def action_cancel_or_quit(self) -> None:
+        """Ctrl+C: cancel streaming, or double-press within 2s to quit."""
+        if self._is_streaming:
+            self._cancel_streaming.set()
+            with contextlib.suppress(Exception):
+                for ind in self.query(".streaming-indicator"):
+                    ind.update("Cancelling...")
+            return
+        now = time.monotonic()
+        if now - self._last_ctrl_c < 2.0:
+            self.exit()
+        else:
+            self._last_ctrl_c = now
+            with contextlib.suppress(NoMatches):
+                self.query_one("#input-hint", Static).update(
+                    "Press Ctrl+C again to quit"
+                )
+            # Reset hint after 2 seconds
+            self.set_timer(2.0, self._reset_quit_hint)
+
+    async def action_clear_chat(self) -> None:
+        """Clear the chat display (Ctrl+L)."""
+        message_list = self.query_one("#message-list", VerticalScroll)
+        message_list.remove_children()
+        await self._add_system_message(
+            message_list,
+            "Chat cleared. Conversation history preserved — use `/delete` to remove.",
+        )
+
+    def _reset_quit_hint(self) -> None:
+        """Reset the input hint after the Ctrl+C quit window expires."""
+        self._update_input_hint()
 
     def action_focus_input(self) -> None:
         """Focus the input area."""
