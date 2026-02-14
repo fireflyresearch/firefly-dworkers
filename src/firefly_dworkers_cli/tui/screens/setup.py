@@ -22,30 +22,34 @@ from textual.widgets import Button, Input, Label, RadioButton, RadioSet, Static
 
 from firefly_dworkers_cli.config import _PROVIDER_ENV_KEYS, ConfigManager
 
-# Model choices per provider
+# Model choices per provider — updated February 2026
 _PROVIDER_MODELS: dict[str, list[tuple[str, str]]] = {
     "openai": [
-        ("openai:gpt-4o", "GPT-4o (recommended)"),
-        ("openai:gpt-4o-mini", "GPT-4o Mini (faster, cheaper)"),
-        ("openai:gpt-4.1", "GPT-4.1 (latest)"),
-        ("openai:o3-mini", "o3-mini (reasoning)"),
+        ("openai:gpt-5.2", "GPT-5.2 (recommended)"),
+        ("openai:gpt-5.2-pro", "GPT-5.2 Pro (most capable)"),
+        ("openai:o3", "o3 (reasoning)"),
+        ("openai:o3-mini", "o3-mini (fast reasoning)"),
     ],
     "anthropic": [
-        ("anthropic:claude-sonnet-4-5-20250929", "Claude Sonnet 4.5 (recommended)"),
-        ("anthropic:claude-haiku-4-5-20251001", "Claude Haiku 4.5 (faster, cheaper)"),
         ("anthropic:claude-opus-4-6", "Claude Opus 4.6 (most capable)"),
+        ("anthropic:claude-sonnet-4-5-20250929", "Claude Sonnet 4.5 (recommended)"),
+        ("anthropic:claude-haiku-4-5-20251001", "Claude Haiku 4.5 (fastest, cheapest)"),
     ],
     "google": [
-        ("google:gemini-2.0-flash", "Gemini 2.0 Flash"),
+        ("google:gemini-3-flash", "Gemini 3 Flash (latest)"),
         ("google:gemini-2.5-pro", "Gemini 2.5 Pro"),
+        ("google:gemini-2.5-flash", "Gemini 2.5 Flash"),
     ],
     "mistral": [
-        ("mistral:mistral-large-latest", "Mistral Large"),
-        ("mistral:mistral-small-latest", "Mistral Small"),
+        ("mistral:mistral-large-3-25-12", "Mistral Large 3 (latest)"),
+        ("mistral:mistral-small-3-2-25-06", "Mistral Small 3.2"),
+        ("mistral:devstral-2-25-12", "Devstral 2 (coding)"),
     ],
     "groq": [
         ("groq:llama-3.3-70b-versatile", "Llama 3.3 70B"),
-        ("groq:mixtral-8x7b-32768", "Mixtral 8x7B"),
+        ("groq:meta-llama/llama-4-maverick-17b-128e-instruct", "Llama 4 Maverick"),
+        ("groq:deepseek-r1-distill-llama-70b", "DeepSeek R1 (reasoning)"),
+        ("groq:qwen/qwen-3-32b", "Qwen 3 32B"),
     ],
 }
 
@@ -242,7 +246,7 @@ class SetupScreen(Screen):
                         classes="setup-hint",
                     )
                     yield Input(
-                        placeholder="e.g., openai:gpt-4o",
+                        placeholder="e.g., openai:gpt-5.2",
                         id="model-input",
                         classes="setup-input",
                     )
@@ -361,7 +365,7 @@ class SetupScreen(Screen):
             return
 
         # Determine model
-        model = self._selected_model or "openai:gpt-4o"
+        model = self._selected_model or "openai:gpt-5.2"
 
         # If manual API key was entered, detect provider and set env var
         if self._manual_api_key:

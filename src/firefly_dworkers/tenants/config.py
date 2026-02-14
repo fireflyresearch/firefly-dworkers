@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class ModelsConfig(BaseModel):
-    default: str = "openai:gpt-4o"
+    default: str = "openai:gpt-5.2"
     research: str = ""
     analysis: str = ""
 

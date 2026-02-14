@@ -18,7 +18,7 @@ id: "{tenant_id}"
 name: "{tenant_name}"
 
 models:
-  default: "openai:gpt-4o"
+  default: "openai:gpt-5.2"
   research: ""
   analysis: ""
 
