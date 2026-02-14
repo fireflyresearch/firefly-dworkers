@@ -69,25 +69,56 @@ class DworkersClient(Protocol):
     ) -> list[ConversationSummary]: ...
 
 
-async def create_client() -> DworkersClient:
-    """Auto-detect: try remote server first, fall back to local.
+async def create_client(
+    *,
+    mode: str = "auto",
+    server_url: str | None = None,
+) -> DworkersClient:
+    """Create a backend client.
 
-    The remote server URL can be configured via the ``DWORKERS_SERVER_URL``
-    environment variable (default: ``http://localhost:8000``).
+    Parameters
+    ----------
+    mode:
+        ``"auto"`` (default) -- try the remote server first, fall back to
+        local.  ``"local"`` -- skip the server probe and return a
+        :class:`LocalClient` immediately.  ``"remote"`` -- require a
+        reachable server; raise :class:`ConnectionError` if the health
+        endpoint is unreachable.
+    server_url:
+        Override for the ``DWORKERS_SERVER_URL`` environment variable.  When
+        *None* the env-var is read (default ``http://localhost:8000``).
     """
-    server_url = os.environ.get("DWORKERS_SERVER_URL", "http://localhost:8000")
+    if mode == "local":
+        from firefly_dworkers_cli.tui.backend.local import LocalClient
+
+        return LocalClient()
+
+    resolved_url = server_url or os.environ.get(
+        "DWORKERS_SERVER_URL", "http://localhost:8000"
+    )
+
     try:
         import httpx
 
         async with httpx.AsyncClient() as http:
-            resp = await http.get(f"{server_url}/health", timeout=1.0)
+            resp = await http.get(f"{resolved_url}/health", timeout=1.0)
             if resp.status_code == 200:
                 from firefly_dworkers_cli.tui.backend.remote import RemoteClient
 
-                return RemoteClient(base_url=server_url)
+                return RemoteClient(base_url=resolved_url)
     except Exception:
-        pass
+        if mode == "remote":
+            raise ConnectionError(
+                f"Cannot reach dworkers server at {resolved_url}"
+            )
 
+    if mode == "remote":
+        # Server responded but with a non-200 status.
+        raise ConnectionError(
+            f"Cannot reach dworkers server at {resolved_url}"
+        )
+
+    # mode == "auto" -- fall back to local
     from firefly_dworkers_cli.tui.backend.local import LocalClient
 
     return LocalClient()

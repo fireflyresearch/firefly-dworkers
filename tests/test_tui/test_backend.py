@@ -175,3 +175,30 @@ class TestConversationStore:
         loaded = store.get_conversation(conv.id)
         assert loaded is not None
         assert loaded.tags == ["important", "project-x"]
+
+
+# ---------------------------------------------------------------------------
+# create_client() factory tests
+# ---------------------------------------------------------------------------
+
+
+class TestCreateClient:
+    async def test_create_client_local_mode(self) -> None:
+        from firefly_dworkers_cli.tui.backend.client import create_client
+        from firefly_dworkers_cli.tui.backend.local import LocalClient
+
+        client = await create_client(mode="local")
+        assert isinstance(client, LocalClient)
+
+    async def test_create_client_auto_fallback(self) -> None:
+        from firefly_dworkers_cli.tui.backend.client import create_client
+        from firefly_dworkers_cli.tui.backend.local import LocalClient
+
+        client = await create_client(mode="auto")
+        assert isinstance(client, LocalClient)
+
+    async def test_create_client_remote_mode_fails_without_server(self) -> None:
+        from firefly_dworkers_cli.tui.backend.client import create_client
+
+        with pytest.raises(ConnectionError):
+            await create_client(mode="remote")
