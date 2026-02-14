@@ -430,27 +430,24 @@ class TestVLMFallback:
 
     async def test_vlm_not_called_when_xml_succeeds(self) -> None:
         """When XML extraction produces non-empty profile, VLM should not be called."""
-        pptx_mod = pytest.importorskip("pptx")
+        pytest.importorskip("pptx")
 
-        prs = pptx_mod.Presentation()
-        buf = io.BytesIO()
-        prs.save(buf)
-        buf.seek(0)
+        non_empty_profile = DesignProfile(
+            primary_color="#003366", heading_font="Arial", color_palette=["#003366"]
+        )
 
-        with tempfile.NamedTemporaryFile(suffix=".pptx", delete=False) as f:
-            f.write(buf.read())
-            tmp_path = f.name
-
-        try:
-            analyzer = TemplateAnalyzer(vlm_model="test-model")
-            with patch.object(analyzer, "_vlm_analyze", new_callable=AsyncMock) as mock_vlm:
-                profile = await analyzer.analyze(tmp_path)
-                # Default PPTX has colors/fonts from theme, so XML should succeed
-                # VLM should NOT be called when XML produces non-empty profile
-                if not TemplateAnalyzer._is_profile_empty(profile):
-                    mock_vlm.assert_not_called()
-        finally:
-            os.unlink(tmp_path)
+        analyzer = TemplateAnalyzer(vlm_model="test-model")
+        # Patch the PPTX analysis to return a non-empty profile so VLM is skipped
+        with (
+            patch.object(analyzer, "_vlm_analyze", new_callable=AsyncMock) as mock_vlm,
+            patch.object(
+                analyzer, "_analyze_pptx", new_callable=AsyncMock,
+                return_value=non_empty_profile,
+            ),
+        ):
+            profile = await analyzer.analyze("fake.pptx")
+            mock_vlm.assert_not_called()
+            assert profile.primary_color == "#003366"
 
     async def test_vlm_called_when_xml_empty(self) -> None:
         """When XML extraction produces empty profile, VLM should be called."""
