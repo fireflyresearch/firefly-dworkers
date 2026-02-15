@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+from pathlib import Path
 from typing import Any
 
 from fireflyframework_genai.memory.manager import MemoryManager
@@ -45,3 +47,23 @@ class ProjectWorkspace:
     def get_context(self) -> str:
         """Return a human-readable summary of workspace contents."""
         return self._memory.get_working_context()
+
+    def snapshot(self) -> dict:
+        """Serialize workspace state for persistence."""
+        return {"project_id": self._project_id, "facts": self.get_all_facts()}
+
+    def restore(self, data: dict) -> None:
+        """Restore workspace state from snapshot."""
+        for key, value in data.get("facts", {}).items():
+            self.set_fact(key, value)
+
+    def save_to_file(self, path: Path) -> None:
+        """Save workspace snapshot to JSON file."""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(self.snapshot(), indent=2, default=str))
+
+    def load_from_file(self, path: Path) -> None:
+        """Load workspace snapshot from JSON file."""
+        if path.exists():
+            data = json.loads(path.read_text())
+            self.restore(data)
