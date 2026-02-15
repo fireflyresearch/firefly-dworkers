@@ -1,10 +1,12 @@
 """Multi-screen setup wizard for the dworkers TUI.
 
-Guides the user through configuration in 4 steps:
-1. Select an LLM provider (all providers shown, detected ones marked with checkmark)
-2. Select a model (models for the chosen provider)
-3. Enter API key (only if not already in environment)
-4. Configure backend mode + autonomy level
+Guides the user through configuration in 6 steps:
+1. Welcome introduction
+2. About you (name, role, company)
+3. Select an LLM provider (all providers shown, detected ones marked with checkmark)
+4. Select a model (models for the chosen provider)
+5. Enter API key (only if not already in environment)
+6. Configure backend mode + autonomy level
 
 Each step is a separate Textual Screen with keyboard navigation.
 """
@@ -248,14 +250,110 @@ def _detect_provider_from_key(key: str) -> str | None:
     return "unknown"
 
 
-# ── Screen 1: Provider Selection ──────────────────────────────────────
+# ── Screen 1: Welcome ────────────────────────────────────────────────
 
-class ProviderScreen(Screen):
-    """Select an LLM provider."""
+
+class WelcomeScreen(Screen):
+    """Step 1/6: Welcome introduction."""
 
     CSS = _WIZARD_CSS
     BINDINGS = [
         ("escape", "quit_wizard", "Quit"),
+        ("enter", "confirm", "Continue"),
+    ]
+
+    def compose(self) -> ComposeResult:
+        with Middle():
+            with Center():
+                with Vertical(classes="wizard-container"):
+                    yield Static("dworkers", classes="wizard-title")
+                    yield Static("step 1 of 6", classes="wizard-step-indicator")
+                    yield Static(
+                        "Welcome to dworkers — your AI team of\n"
+                        "specialized workers ready to help you.\n\n"
+                        "Let's get you set up in a few quick steps.",
+                        classes="wizard-subtitle",
+                    )
+                    with Center(id="wizard-actions"):
+                        yield Button("Get Started", variant="primary", id="btn-continue")
+        yield Static("enter continue  esc skip", classes="wizard-footer")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-continue":
+            self.dismiss(True)
+
+    def action_confirm(self) -> None:
+        self.dismiss(True)
+
+    def action_quit_wizard(self) -> None:
+        self.dismiss(None)
+
+
+# ── Screen 2: About You ─────────────────────────────────────────────
+
+
+class AboutYouScreen(Screen):
+    """Step 2/6: Collect user name, role, company."""
+
+    CSS = _WIZARD_CSS
+    BINDINGS = [
+        ("escape", "go_back", "Back"),
+    ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._name = ""
+        self._role = ""
+        self._company = ""
+
+    def compose(self) -> ComposeResult:
+        with Middle():
+            with Center():
+                with Vertical(classes="wizard-container"):
+                    yield Static("dworkers", classes="wizard-title")
+                    yield Static("step 2 of 6", classes="wizard-step-indicator")
+                    yield Static("Tell us about yourself", classes="wizard-subtitle")
+
+                    yield Static("Your name", classes="wizard-section-title")
+                    yield Input(placeholder="e.g., Antonio", id="input-name")
+
+                    yield Static("Your role", classes="wizard-section-title")
+                    yield Input(placeholder="e.g., CTO, Product Manager", id="input-role")
+
+                    yield Static("Company", classes="wizard-section-title")
+                    yield Input(placeholder="e.g., Firefly Research", id="input-company")
+
+                    with Center(id="wizard-actions"):
+                        yield Button("Continue", variant="primary", id="btn-continue")
+        yield Static("tab next field  enter continue  esc back", classes="wizard-footer")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-continue":
+            self._submit()
+
+    def _submit(self) -> None:
+        with contextlib.suppress(Exception):
+            self._name = self.query_one("#input-name", Input).value.strip()
+            self._role = self.query_one("#input-role", Input).value.strip()
+            self._company = self.query_one("#input-company", Input).value.strip()
+        self.dismiss({
+            "name": self._name,
+            "role": self._role,
+            "company": self._company,
+        })
+
+    def action_go_back(self) -> None:
+        self.dismiss(None)
+
+
+# ── Screen 3: Provider Selection ──────────────────────────────────────
+
+class ProviderScreen(Screen):
+    """Step 3/6: Select an LLM provider."""
+
+    CSS = _WIZARD_CSS
+    BINDINGS = [
+        ("escape", "go_back", "Back"),
         ("enter", "confirm", "Confirm"),
     ]
 
@@ -269,7 +367,7 @@ class ProviderScreen(Screen):
             with Center():
                 with Vertical(classes="wizard-container"):
                     yield Static("dworkers", classes="wizard-title")
-                    yield Static("step 1 of 4", classes="wizard-step-indicator")
+                    yield Static("step 3 of 6", classes="wizard-step-indicator")
                     yield Static("Select your LLM provider", classes="wizard-subtitle")
 
                     if self._detected:
@@ -291,7 +389,7 @@ class ProviderScreen(Screen):
                         yield Button("Continue", variant="primary", id="btn-continue")
 
         yield Static(
-            "up/down navigate  enter confirm  esc quit",
+            "up/down navigate  enter confirm  esc back",
             classes="wizard-footer",
         )
 
@@ -306,14 +404,14 @@ class ProviderScreen(Screen):
     def action_confirm(self) -> None:
         self.dismiss(self._selected)
 
-    def action_quit_wizard(self) -> None:
+    def action_go_back(self) -> None:
         self.dismiss(None)
 
 
-# ── Screen 2: Model Selection ─────────────────────────────────────────
+# ── Screen 4: Model Selection ─────────────────────────────────────────
 
 class ModelScreen(Screen):
-    """Select a model for the chosen provider."""
+    """Step 4/6: Select a model for the chosen provider."""
 
     CSS = _WIZARD_CSS
     BINDINGS = [
@@ -336,7 +434,7 @@ class ModelScreen(Screen):
             with Center():
                 with Vertical(classes="wizard-container"):
                     yield Static("dworkers", classes="wizard-title")
-                    yield Static("step 2 of 4", classes="wizard-step-indicator")
+                    yield Static("step 4 of 6", classes="wizard-step-indicator")
                     yield Static(
                         f"Select a model  {provider_name}",
                         classes="wizard-subtitle",
@@ -420,10 +518,10 @@ class ModelScreen(Screen):
         self.dismiss(None)
 
 
-# ── Screen 3: API Key Entry ───────────────────────────────────────────
+# ── Screen 5: API Key Entry ───────────────────────────────────────────
 
 class ApiKeyScreen(Screen):
-    """Enter API key for the selected provider."""
+    """Step 5/6: Enter API key for the selected provider."""
 
     CSS = _WIZARD_CSS
     BINDINGS = [("escape", "go_back", "Back")]
@@ -440,7 +538,7 @@ class ApiKeyScreen(Screen):
             with Center():
                 with Vertical(classes="wizard-container"):
                     yield Static("dworkers", classes="wizard-title")
-                    yield Static("step 3 of 4", classes="wizard-step-indicator")
+                    yield Static("step 5 of 6", classes="wizard-step-indicator")
                     yield Static("Enter your API key", classes="wizard-subtitle")
 
                     yield Static(
@@ -493,10 +591,10 @@ class ApiKeyScreen(Screen):
         self.dismiss(None)
 
 
-# ── Screen 4: Mode + Autonomy ─────────────────────────────────────────
+# ── Screen 6: Mode + Autonomy ─────────────────────────────────────────
 
 class ConfigScreen(Screen):
-    """Configure backend mode and autonomy level."""
+    """Step 6/6: Configure backend mode and autonomy level."""
 
     CSS = _WIZARD_CSS
     BINDINGS = [("escape", "go_back", "Back")]
@@ -511,7 +609,7 @@ class ConfigScreen(Screen):
             with Center():
                 with Vertical(classes="wizard-container"):
                     yield Static("dworkers", classes="wizard-title")
-                    yield Static("step 4 of 4", classes="wizard-step-indicator")
+                    yield Static("step 6 of 6", classes="wizard-step-indicator")
                     yield Static("Configuration", classes="wizard-subtitle")
 
                     yield Static("Backend mode", classes="wizard-section-title")
@@ -560,7 +658,8 @@ class ConfigScreen(Screen):
 class SetupWizard(Screen):
     """Multi-screen setup wizard controller.
 
-    Orchestrates the 4-step flow: Provider -> Model -> API Key -> Config.
+    Orchestrates the 6-step flow:
+    Welcome -> About You -> Provider -> Model -> API Key -> Config.
     Pushed onto the app's screen stack by DworkersApp.on_mount().
     """
 
@@ -570,6 +669,7 @@ class SetupWizard(Screen):
         super().__init__()
         self._config_mgr = config_manager or ConfigManager()
         self._detected: dict[str, str] = {}
+        self._user_profile: dict[str, str] = {}
         self._selected_provider: str = ""
         self._selected_model: str = ""
         self._api_key: str = ""
@@ -581,23 +681,53 @@ class SetupWizard(Screen):
 
     def on_mount(self) -> None:
         self._detected = self._config_mgr.detect_api_keys()
+        self._push_welcome()
+
+    # ── Step 1: Welcome ──────────────────────────────────────────────
+
+    def _push_welcome(self) -> None:
+        """Step 1: Welcome introduction."""
+        self.app.push_screen(WelcomeScreen(), callback=self._on_welcome)
+
+    def _on_welcome(self, result: object) -> None:
+        if result is None:
+            self._skip()
+            return
+        self._push_about_you()
+
+    # ── Step 2: About You ────────────────────────────────────────────
+
+    def _push_about_you(self) -> None:
+        """Step 2: Collect user name, role, company."""
+        self.app.push_screen(AboutYouScreen(), callback=self._on_about_you)
+
+    def _on_about_you(self, result: object) -> None:
+        if result is None:
+            self._push_welcome()
+            return
+        if isinstance(result, dict):
+            self._user_profile = result
         self._push_provider()
 
+    # ── Step 3: Provider ─────────────────────────────────────────────
+
     def _push_provider(self) -> None:
-        """Step 1: Provider selection."""
+        """Step 3: Provider selection."""
         self.app.push_screen(
             ProviderScreen(self._detected), callback=self._on_provider
         )
 
     def _on_provider(self, result: object) -> None:
         if result is None:
-            self._skip()
+            self._push_about_you()
             return
         self._selected_provider = str(result)
         self._push_model()
 
+    # ── Step 4: Model ────────────────────────────────────────────────
+
     def _push_model(self) -> None:
-        """Step 2: Model selection."""
+        """Step 4: Model selection."""
         self.app.push_screen(
             ModelScreen(self._selected_provider), callback=self._on_model
         )
@@ -609,8 +739,10 @@ class SetupWizard(Screen):
         self._selected_model = str(result)
         self._push_api_key()
 
+    # ── Step 5: API Key ──────────────────────────────────────────────
+
     def _push_api_key(self) -> None:
-        """Step 3: API key (conditional)."""
+        """Step 5: API key (conditional)."""
         provider = self._selected_provider
         if provider in self._detected or provider == "other":
             self._push_config()
@@ -629,8 +761,10 @@ class SetupWizard(Screen):
             os.environ[env_key] = self._api_key
         self._push_config()
 
+    # ── Step 6: Config ───────────────────────────────────────────────
+
     def _push_config(self) -> None:
-        """Step 4: Mode + Autonomy."""
+        """Step 6: Mode + Autonomy."""
         self.app.push_screen(ConfigScreen(), callback=self._on_config)
 
     def _on_config(self, result: object) -> None:
@@ -642,6 +776,8 @@ class SetupWizard(Screen):
         self._selected_autonomy = str(autonomy)
         self._save_and_finish()
 
+    # ── Save & Finish ────────────────────────────────────────────────
+
     def _save_and_finish(self) -> None:
         """Save config and dismiss."""
         model = self._selected_model or "openai:gpt-5.2"
@@ -649,6 +785,9 @@ class SetupWizard(Screen):
             model=model,
             mode=self._selected_mode,
             default_autonomy=self._selected_autonomy,
+            user_name=self._user_profile.get("name", ""),
+            user_role=self._user_profile.get("role", ""),
+            user_company=self._user_profile.get("company", ""),
         )
         self._config_mgr.save_global(config_data)
         try:

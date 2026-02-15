@@ -5,7 +5,9 @@ from __future__ import annotations
 from firefly_dworkers_cli.config import ConfigManager, _PROVIDER_ENV_KEYS
 from firefly_dworkers_cli.tui.screens.setup import (
     ALL_PROVIDERS,
+    AboutYouScreen,
     SetupWizard,
+    WelcomeScreen,
     ProviderScreen,
     ModelScreen,
     ApiKeyScreen,
@@ -95,6 +97,7 @@ class TestSetupWizard:
         assert wizard._api_key == ""
         assert wizard._selected_mode == "auto"
         assert wizard._selected_autonomy == "semi_supervised"
+        assert wizard._user_profile == {}
 
     def test_instantiates_with_config_manager(self, tmp_path):
         mgr = ConfigManager(project_dir=tmp_path)
