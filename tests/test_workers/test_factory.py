@@ -158,3 +158,68 @@ class TestWorkerFactory:
             model=TestModel(),
         )
         assert worker.name == "custom-analyst"
+
+
+class TestDynamicRegistration:
+    """Tests for worker factory dynamic registration."""
+
+    def test_register_dynamic(self) -> None:
+        worker_factory.register_dynamic(
+            role="test_custom_agent",
+            description="A test custom agent",
+            display_name="Test Agent",
+            avatar="T",
+            avatar_color="blue",
+            prompt_template="custom_agent",
+            prompt_kwargs={"mission": "Test mission", "skills": ["research"]},
+        )
+        meta = worker_factory.get_metadata("test_custom_agent")
+        assert meta.display_name == "Test Agent"
+        assert meta.avatar == "T"
+        assert meta.prompt_template == "custom_agent"
+        assert meta.prompt_kwargs == {"mission": "Test mission", "skills": ["research"]}
+        # Cleanup
+        worker_factory.unregister("test_custom_agent")
+
+    def test_unregister(self) -> None:
+        worker_factory.register_dynamic(
+            role="temp_agent",
+            description="Temporary",
+            display_name="Temp",
+            avatar="X",
+            avatar_color="gray",
+        )
+        worker_factory.unregister("temp_agent")
+        assert not worker_factory.has_role("temp_agent")
+
+    def test_has_role(self) -> None:
+        worker_factory.register_dynamic(
+            role="check_agent",
+            description="Check",
+            display_name="Check",
+            avatar="C",
+            avatar_color="green",
+        )
+        assert worker_factory.has_role("check_agent")
+        assert not worker_factory.has_role("nonexistent_agent")
+        # Cleanup
+        worker_factory.unregister("check_agent")
+
+    def test_register_dynamic_defaults_to_base_worker(self) -> None:
+        from firefly_dworkers.workers.base import BaseWorker
+
+        worker_factory.register_dynamic(
+            role="default_cls_agent",
+            description="Default class test",
+            display_name="Default",
+            avatar="D",
+            avatar_color="white",
+        )
+        meta = worker_factory.get_metadata("default_cls_agent")
+        assert meta.cls is BaseWorker
+        # Cleanup
+        worker_factory.unregister("default_cls_agent")
+
+    def test_unregister_nonexistent_is_noop(self) -> None:
+        # Should not raise
+        worker_factory.unregister("does_not_exist")
