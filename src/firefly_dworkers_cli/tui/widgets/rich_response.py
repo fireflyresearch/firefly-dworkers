@@ -21,9 +21,9 @@ from textual.widgets import Markdown
 # File path patterns to detect and linkify
 # Matches: /absolute/path.py, ./relative/path.py, src/file.py:42, file.py:42:10
 _FILE_PATH_RE = re.compile(
-    r'(?<![(\["\'])'  # Not preceded by link syntax chars
+    r'(?<![(\["\'\w])'  # Not preceded by link syntax chars or word chars
     r'(?:'
-    r'(?:/[\w./-]+)'  # Absolute path: /foo/bar.py
+    r'(?:/[\w.-]+(?:/[\w.-]+)+)'  # Absolute path: /foo/bar (min 2 segments)
     r'|(?:\.\.?/[\w./-]+)'  # Relative: ./foo or ../foo
     r'|(?:[\w][\w./-]*\.(?:py|js|ts|tsx|jsx|rs|go|java|rb|c|cpp|h|hpp|css|html|md|yaml|yml|json|toml|sh|sql|xml))'  # file.ext
     r')'
