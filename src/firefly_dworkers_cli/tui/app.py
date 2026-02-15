@@ -921,7 +921,39 @@ class DworkersApp(App):
             await self._handle_input(event.text)
 
     async def on_key(self, event: events.Key) -> None:
-        """Handle Escape to cancel streaming."""
+        """Handle plan approval keys and Escape to cancel streaming."""
+        # Plan approval
+        if self._pending_plan is not None:
+            if event.key == "enter":
+                await self._execute_approved_plan()
+                event.prevent_default()
+                event.stop()
+                return
+            elif event.key == "m":
+                # Modify: dismiss plan and let user type modification feedback
+                self._pending_plan = None
+                with contextlib.suppress(NoMatches):
+                    for w in self.query(".plan-approval"):
+                        w.remove()
+                try:
+                    prompt_input = self.query_one("#prompt-input", PromptInput)
+                    prompt_input.value = "Please revise the plan: "
+                    prompt_input.focus()
+                except NoMatches:
+                    pass
+                event.prevent_default()
+                event.stop()
+                return
+            elif event.key == "escape":
+                self._pending_plan = None
+                with contextlib.suppress(NoMatches):
+                    for w in self.query(".plan-approval"):
+                        w.remove()
+                event.prevent_default()
+                event.stop()
+                return
+
+        # Existing: Handle Escape to cancel streaming
         if event.key == "escape" and self._is_streaming:
             self._cancel_streaming.set()
             with contextlib.suppress(Exception):
@@ -1127,6 +1159,11 @@ class DworkersApp(App):
                 await content_widget.update(stripped)
             await self._mount_question(question_text, options)
 
+        # Detect structured plan in response
+        detected_plan = self._detect_plan(final_content)
+        if detected_plan is not None:
+            await self._mount_plan_approval(detected_plan)
+
         # Save agent message
         agent_msg = ChatMessage(
             id=f"msg_{uuid.uuid4().hex[:12]}",
@@ -1212,6 +1249,109 @@ class DworkersApp(App):
         if len(matches) < 2:
             return None
         return [(role.lower(), task.strip()) for _, role, task in matches]
+
+    async def _mount_plan_approval(self, steps: list[tuple[str, str]]) -> None:
+        """Show an approval widget for a detected plan."""
+        message_list = self.query_one("#message-list", VerticalScroll)
+
+        plan_box = Vertical(classes="plan-approval")
+        await message_list.mount(plan_box)
+
+        # Show steps
+        lines = [f"**Plan ({len(steps)} steps):**\n"]
+        for i, (role, task) in enumerate(steps, 1):
+            name, avatar, _ = self._get_worker_display(role)
+            prefix = f"({avatar}) " if avatar else ""
+            lines.append(f"{i}. [{prefix}{name}] {task}")
+        lines.append("")
+
+        await plan_box.mount(RichResponseMarkdown("\n".join(lines), classes="plan-steps"))
+
+        # Approval buttons
+        btn_row = Horizontal(classes="plan-buttons")
+        await plan_box.mount(btn_row)
+
+        approve_btn = Static("[Enter] Approve  ", classes="plan-btn-approve", id="plan-approve")
+        modify_btn = Static("[m] Modify  ", classes="plan-btn-modify", id="plan-modify")
+        reject_btn = Static("[Esc] Skip", classes="plan-btn-reject", id="plan-reject")
+        await btn_row.mount(approve_btn)
+        await btn_row.mount(modify_btn)
+        await btn_row.mount(reject_btn)
+
+        # Store plan for execution
+        self._pending_plan = steps
+
+        message_list.scroll_end(animate=False)
+
+    async def _execute_approved_plan(self) -> None:
+        """Execute the approved plan steps sequentially."""
+        if not self._pending_plan or not self._client:
+            return
+
+        steps = self._pending_plan
+        self._pending_plan = None
+
+        # Remove approval widget
+        with contextlib.suppress(NoMatches):
+            for w in self.query(".plan-approval"):
+                w.remove()
+
+        message_list = self.query_one("#message-list", VerticalScroll)
+        self._is_streaming = True
+
+        try:
+            for i, (role, task) in enumerate(steps, 1):
+                name, avatar, avatar_color = self._get_worker_display(role)
+                prefix = f"({avatar}) " if avatar else ""
+                avatar_cls = f" avatar-{avatar_color}" if avatar_color else ""
+
+                # Step header
+                step_box = Vertical(classes="msg-box-ai")
+                await message_list.mount(step_box)
+                await step_box.mount(
+                    Static(
+                        f"Step {i}/{len(steps)}: {prefix}{name}",
+                        classes=f"msg-sender msg-sender-ai{avatar_cls}",
+                    )
+                )
+
+                content_widget = RichResponseMarkdown("", classes="msg-content")
+                await step_box.mount(content_widget)
+
+                # Execute step
+                tokens: list[str] = []
+                try:
+                    async for event in self._client.run_worker(role, task):
+                        if self._cancel_streaming.is_set():
+                            tokens.append("\n\n_[Plan cancelled]_")
+                            await content_widget.update("".join(tokens))
+                            return
+                        if event.type in ("token", "complete"):
+                            tokens.append(event.content)
+                            await content_widget.update("".join(tokens))
+                            if self._is_near_bottom(message_list):
+                                message_list.scroll_end(animate=False)
+                except Exception as e:
+                    tokens.append(f"\n\n**Error:** {e}")
+                    await content_widget.update("".join(tokens))
+
+                # Save step result
+                if self._conversation:
+                    step_msg = ChatMessage(
+                        id=f"msg_{uuid.uuid4().hex[:12]}",
+                        conversation_id=self._conversation.id,
+                        role=role,
+                        sender=name,
+                        content="".join(tokens),
+                        timestamp=datetime.now(UTC),
+                        is_ai=True,
+                    )
+                    self._store.add_message(self._conversation.id, step_msg)
+        finally:
+            self._is_streaming = False
+            self._cancel_streaming.clear()
+
+        message_list.scroll_end(animate=False)
 
     @staticmethod
     def _detect_question(text: str) -> tuple[str, list[str]] | None:

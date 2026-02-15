@@ -593,4 +593,39 @@ Screen {
     padding: 0 1;
     color: #555555;
 }
+
+/* -- Plan approval ----------------------- */
+
+.plan-approval {
+    border-left: thick #f59e0b;
+    margin: 0 2 1 2;
+    padding: 0 1;
+    height: auto;
+}
+
+.plan-steps {
+    height: auto;
+    padding: 0;
+}
+
+.plan-buttons {
+    height: 1;
+    padding: 0;
+}
+
+.plan-btn-approve {
+    color: #10b981;
+    width: auto;
+    text-style: bold;
+}
+
+.plan-btn-modify {
+    color: #f59e0b;
+    width: auto;
+}
+
+.plan-btn-reject {
+    color: #666666;
+    width: auto;
+}
 """
