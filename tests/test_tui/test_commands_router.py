@@ -559,3 +559,18 @@ class TestProjectCommands:
     def test_projects_in_help_text(self):
         router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
         assert "/projects" in router.help_text
+
+
+class TestAgentCommands:
+    def test_agent_command_registered(self):
+        from firefly_dworkers_cli.tui.commands import _COMMANDS
+        assert "/agent" in _COMMANDS
+
+    def test_agent_in_help_text(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        assert "/agent" in router.help_text
+
+    def test_agent_in_palette_commands(self):
+        from firefly_dworkers_cli.tui.app import _PALETTE_COMMANDS
+        names = [name for name, _desc in _PALETTE_COMMANDS]
+        assert "agent" in names

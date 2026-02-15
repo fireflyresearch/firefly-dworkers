@@ -64,6 +64,7 @@ _PALETTE_COMMANDS = [
     ("plan", "List or execute workflow plans"),
     ("project", "Manage projects (create, switch, info, pause, archive, resume)"),
     ("projects", "List all projects"),
+    ("agent", "Create, list, remove, or promote custom agents"),
     ("attach", "Attach a file to the next message"),
     ("detach", "Clear file attachments"),
     ("status", "Show session status"),
@@ -1085,6 +1086,25 @@ class DworkersApp(App):
                                 "Usage: `/project <create|switch|info|pause|archive|resume> [arg]`"
                             )
 
+            case "/agent":
+                parts = arg.split(maxsplit=1)
+                subcmd = parts[0] if parts else ""
+                subarg = parts[1] if len(parts) > 1 else ""
+                match subcmd:
+                    case "create":
+                        await self._cmd_agent_create(message_list)
+                    case "list":
+                        await self._cmd_agent_list(message_list)
+                    case "remove":
+                        await self._cmd_agent_remove(message_list, subarg)
+                    case "promote":
+                        await self._cmd_agent_promote(message_list, subarg)
+                    case _:
+                        await self._add_system_message(
+                            message_list,
+                            "Usage: `/agent <create|list|remove|promote> [name]`"
+                        )
+
             case "/conversations":
                 await self._add_system_message(
                     message_list, self._router.conversations_text(),
@@ -1712,6 +1732,161 @@ class DworkersApp(App):
                 await self._add_system_message(container, "Usage: `/project resume <id or name>`")
                 return
         await self._cmd_project_switch(container, id_or_name)
+
+    # ── Agent commands ────────────────────────────────────────
+
+    async def _cmd_agent_create(self, container) -> None:
+        """Launch the multi-step agent creation wizard."""
+        if not self._active_project:
+            await self._add_system_message(
+                container, "Create a project first with `/project create <name>`."
+            )
+            return
+        from firefly_dworkers_cli.tui.screens.agent_wizard import (
+            AgentIdentityScreen,
+            AgentMissionScreen,
+            AgentSkillsScreen,
+            AgentConfirmScreen,
+        )
+
+        agent_data: dict = {}
+
+        def on_identity(result):
+            nonlocal agent_data
+            if result is None:
+                return
+            agent_data.update(result)
+            self.push_screen(AgentMissionScreen(), callback=on_mission)
+
+        def on_mission(result):
+            nonlocal agent_data
+            if result is None:
+                return
+            agent_data.update(result)
+            self.push_screen(AgentSkillsScreen(), callback=on_skills)
+
+        def on_skills(result):
+            nonlocal agent_data
+            if result is None:
+                return
+            agent_data.update(result)
+            self.push_screen(AgentConfirmScreen(agent_data), callback=on_confirm)
+
+        async def on_confirm(result):
+            if result is None:
+                return
+            import uuid as _uuid
+
+            from firefly_dworkers_cli.tui.backend.models import CustomAgentDefinition
+
+            agent = CustomAgentDefinition(
+                id=f"agent_{_uuid.uuid4().hex[:8]}",
+                name=result["name"],
+                avatar=result["avatar"],
+                avatar_color=result.get("color", "blue"),
+                mission=result["mission"],
+                skills=result.get("skills", []),
+                scope="project",
+                project_id=self._active_project.id,
+            )
+            self._project_store.save_agent(self._active_project.id, agent)
+            self._active_project.custom_agents.append(agent.id)
+            self._project_store.update_project(self._active_project)
+            # Register dynamically
+            from firefly_dworkers.workers.factory import worker_factory
+
+            worker_factory.register_dynamic(
+                role=agent.id,
+                description=agent.mission,
+                display_name=agent.name,
+                avatar=agent.avatar,
+                avatar_color=agent.avatar_color,
+                prompt_template="custom_agent",
+                prompt_kwargs={"mission": agent.mission, "skills": agent.skills},
+            )
+            await self._refresh_workers()
+            ml = self.query_one("#message-list")
+            await self._add_system_message(
+                ml,
+                f"Agent created: ({agent.avatar}) **{agent.name}** — {agent.mission}",
+            )
+
+        self.push_screen(AgentIdentityScreen(), callback=on_identity)
+
+    async def _cmd_agent_list(self, container) -> None:
+        """List built-in workers and custom project agents."""
+        lines = ["**Available Agents**\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"]
+        for w in self._worker_cache:
+            lines.append(
+                f"  ({w.avatar}) {w.name:<20}  @{w.role:<15}  built-in"
+            )
+        if self._active_project:
+            agents = self._project_store.list_agents(self._active_project.id)
+            for a in agents:
+                lines.append(
+                    f"  ({a.avatar}) {a.name:<20}  @{a.id:<15}  project"
+                )
+        lines.append("\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")
+        await self._add_system_message(container, "\n".join(lines))
+
+    async def _cmd_agent_remove(self, container, name_or_id: str) -> None:
+        """Remove a custom agent by name or ID."""
+        if not self._active_project or not name_or_id:
+            await self._add_system_message(
+                container, "Usage: `/agent remove <name or id>`"
+            )
+            return
+        agents = self._project_store.list_agents(self._active_project.id)
+        target = None
+        for a in agents:
+            if a.id == name_or_id or a.name.lower() == name_or_id.lower():
+                target = a
+                break
+        if not target:
+            await self._add_system_message(
+                container, f"Agent not found: {name_or_id}"
+            )
+            return
+        self._project_store.remove_agent(self._active_project.id, target.id)
+        if target.id in self._active_project.custom_agents:
+            self._active_project.custom_agents.remove(target.id)
+            self._project_store.update_project(self._active_project)
+        from firefly_dworkers.workers.factory import worker_factory
+
+        worker_factory.unregister(target.id)
+        await self._add_system_message(
+            container, f"Removed agent: {target.name}"
+        )
+
+    async def _cmd_agent_promote(self, container, name_or_id: str) -> None:
+        """Promote a project agent to global scope."""
+        if not self._active_project or not name_or_id:
+            await self._add_system_message(
+                container, "Usage: `/agent promote <name or id>`"
+            )
+            return
+        agents = self._project_store.list_agents(self._active_project.id)
+        target = None
+        for a in agents:
+            if a.id == name_or_id or a.name.lower() == name_or_id.lower():
+                target = a
+                break
+        if not target:
+            await self._add_system_message(
+                container, f"Agent not found: {name_or_id}"
+            )
+            return
+        target.scope = "global"
+        global_dir = self._project_store._global / "global_agents"
+        global_dir.mkdir(parents=True, exist_ok=True)
+        import yaml
+
+        (global_dir / f"{target.id}.yaml").write_text(
+            yaml.dump(target.model_dump(mode="json"), default_flow_style=False)
+        )
+        await self._add_system_message(
+            container, f"Promoted **{target.name}** to global scope."
+        )
 
     # ── Messaging commands ────────────────────────────────────
 

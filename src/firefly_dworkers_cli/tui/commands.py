@@ -79,6 +79,7 @@ _HELP_TEXT = """\
 | `/checkpoints` | List pending checkpoints |
 | `/approve <id>` | Approve a checkpoint |
 | `/reject <id>` | Reject a checkpoint |
+| `/agent <sub>` | Create, list, remove, or promote custom agents |
 | `/setup` | Re-run setup wizard |
 | `/exit` | Save session and exit with resume info |
 | `/quick` | Send next message as quick chat (skip intent detection) |
@@ -134,6 +135,7 @@ _COMMANDS: set[str] = {
     "/exit",
     "/quick",
     "/projects",
+    "/agent",
 }
 
 
