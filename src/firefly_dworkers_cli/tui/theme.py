@@ -380,4 +380,12 @@ Screen {
     padding: 0;
     margin: 0;
 }
+
+/* ── Avatar colors ──────────────────────────── */
+
+.avatar-green { color: #10b981; }
+.avatar-blue { color: #60a5fa; }
+.avatar-cyan { color: #22d3ee; }
+.avatar-yellow { color: #fbbf24; }
+.avatar-magenta { color: #c084fc; }
 """

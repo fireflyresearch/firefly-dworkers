@@ -93,6 +93,38 @@ class TestStreamingCancellation:
         assert not app._cancel_streaming.is_set()
 
 
+class TestWorkerAvatarDisplay:
+    def test_get_worker_display_with_cache(self):
+        from firefly_dworkers_cli.tui.backend.models import WorkerInfo
+        app = DworkersApp()
+        app._worker_cache = [
+            WorkerInfo(role="manager", name="Amara", avatar="A", avatar_color="green"),
+        ]
+        app._known_roles = {"manager", "amara"}
+        app._name_to_role = {"amara": "manager"}
+        name, avatar, color = app._get_worker_display("manager")
+        assert name == "Amara"
+        assert avatar == "A"
+        assert color == "green"
+
+    def test_get_worker_display_unknown_role(self):
+        app = DworkersApp()
+        app._worker_cache = []
+        name, avatar, color = app._get_worker_display("unknown")
+        assert name == "Unknown"
+        assert avatar == ""
+        assert color == ""
+
+    def test_get_worker_display_fallback_name(self):
+        from firefly_dworkers_cli.tui.backend.models import WorkerInfo
+        app = DworkersApp()
+        app._worker_cache = [
+            WorkerInfo(role="data_analyst", name=""),
+        ]
+        name, avatar, color = app._get_worker_display("data_analyst")
+        assert name == "Data Analyst"
+
+
 class TestStatusBarSeparator:
     def test_no_pipe_separator_in_compose(self):
         """Status bar should use · not │ as separator."""
@@ -100,3 +132,38 @@ class TestStatusBarSeparator:
         source = inspect.getsource(DworkersApp.compose)
         assert "\u2502" not in source
         assert "·" in source
+
+
+class TestSlashCommandDetection:
+    def test_text_starting_with_slash_detected(self):
+        app = DworkersApp()
+        assert app._match_command_fragment("/he") == "he"
+        assert app._match_command_fragment("/") == ""
+        assert app._match_command_fragment("/help extra") is None
+        assert app._match_command_fragment("hello") is None
+        assert app._match_command_fragment("") is None
+
+
+class TestNameBasedMentions:
+    def test_extract_role_by_worker_name(self):
+        app = DworkersApp()
+        app._known_roles = {"manager", "analyst", "researcher", "data_analyst", "designer", "amara", "leo", "yuki", "kofi", "noor"}
+        app._name_to_role = {"amara": "manager", "leo": "analyst", "yuki": "researcher", "kofi": "data_analyst", "noor": "designer"}
+        assert app._extract_role("Hey @amara check this") == "manager"
+        assert app._extract_role("@leo analyze this") == "analyst"
+        assert app._extract_role("@yuki find info") == "researcher"
+        assert app._extract_role("@kofi run query") == "data_analyst"
+        assert app._extract_role("@noor create layout") == "designer"
+
+    def test_extract_role_by_role_name_still_works(self):
+        app = DworkersApp()
+        app._known_roles = {"manager", "analyst", "amara", "leo"}
+        app._name_to_role = {"amara": "manager", "leo": "analyst"}
+        assert app._extract_role("Hey @manager check this") == "manager"
+        assert app._extract_role("@analyst do stuff") == "analyst"
+
+    def test_extract_role_name_takes_priority(self):
+        app = DworkersApp()
+        app._known_roles = {"manager", "amara"}
+        app._name_to_role = {"amara": "manager"}
+        assert app._extract_role("@amara and @manager") == "manager"

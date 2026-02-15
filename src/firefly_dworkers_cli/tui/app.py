@@ -255,6 +255,7 @@ class DworkersApp(App):
         self._worker_cache: list[WorkerInfo] = []
         self._known_roles: set[str] = set(_FALLBACK_ROLES)
         self._role_descriptions: dict[str, str] = {}
+        self._name_to_role: dict[str, str] = {}
         # Private conversation mode — when set, all messages go to this role.
         self._private_role: str | None = None
         # File attachments for the next message.
@@ -462,14 +463,25 @@ class DworkersApp(App):
             return
 
         fragment = match.group(1).lower()
-        # Filter roles that match the typed fragment.
-        matches = [
-            (w.role, w.description)
-            for w in self._worker_cache
-            if w.role.startswith(fragment)
-        ]
-        # Fallback if workers haven't loaded yet.
-        if not self._worker_cache:
+
+        if self._worker_cache:
+            # Name entries first: @amara  Manager — Your team lead
+            name_matches: list[tuple[str, str]] = []
+            role_matches: list[tuple[str, str]] = []
+            for w in self._worker_cache:
+                if w.name:
+                    lower_name = w.name.lower()
+                    if lower_name.startswith(fragment):
+                        role_title = w.role.replace("_", " ").title()
+                        desc = f"{role_title} — {w.description}" if w.description else role_title
+                        name_matches.append((lower_name, desc))
+                if w.role.startswith(fragment):
+                    name_label = w.name if w.name else ""
+                    desc = f"{name_label} — {w.description}" if w.description and name_label else (name_label or w.description or "")
+                    role_matches.append((w.role, desc))
+            matches = name_matches + role_matches
+        else:
+            # Fallback if workers haven't loaded yet.
             matches = [
                 (r, "") for r in sorted(_FALLBACK_ROLES) if r.startswith(fragment)
             ]
@@ -564,12 +576,15 @@ class DworkersApp(App):
             role = self._private_role
         else:
             role = self._extract_role(text) or "manager"
-        sender_name = role.replace("_", " ").title()
+        display_name, avatar, avatar_color = self._get_worker_display(role)
+        sender_name = display_name
+        sender_label = f"({avatar}) {display_name}" if avatar else display_name
+        avatar_cls = f" avatar-{avatar_color}" if avatar_color else ""
 
         # Add AI response header
         ai_header = Static(
-            f"{sender_name}",
-            classes="msg-sender msg-sender-ai",
+            sender_label,
+            classes=f"msg-sender msg-sender-ai{avatar_cls}",
         )
         msg_box = Vertical(classes="msg-box-ai")
         await message_list.mount(msg_box)
@@ -718,16 +733,35 @@ class DworkersApp(App):
             self._role_descriptions = {
                 w.role: w.description for w in self._worker_cache if w.description
             }
+            # Build name-to-role alias mapping
+            self._name_to_role = {}
+            for w in self._worker_cache:
+                if w.name:
+                    lower_name = w.name.lower()
+                    self._name_to_role[lower_name] = w.role
+                    self._known_roles.add(lower_name)
         except Exception:
             # Keep fallback roles if the backend call fails.
             pass
 
+    def _get_worker_display(self, role: str) -> tuple[str, str, str]:
+        """Return (display_name, avatar, avatar_color) for a worker role."""
+        for w in self._worker_cache:
+            if w.role == role:
+                return (w.name or role.replace("_", " ").title(), w.avatar, w.avatar_color)
+        return (role.replace("_", " ").title(), "", "")
+
     def _extract_role(self, text: str) -> str | None:
-        """Return the first known @role mention in the message text."""
+        """Return the first known @role mention in the message text.
+
+        Name mentions (e.g. ``@amara``) are resolved to the underlying role
+        via ``_name_to_role``.  Direct role mentions (``@manager``) pass
+        through unchanged.
+        """
         for match in _MENTION_RE.finditer(text):
             mention = match.group(1).lower()
             if mention in self._known_roles:
-                return mention
+                return self._name_to_role.get(mention, mention)
         return None
 
     def _hide_welcome(self) -> None:
@@ -1016,10 +1050,12 @@ class DworkersApp(App):
             await self._add_system_message(container, "Client not connected.")
             return
         workers = await self._client.list_workers()
-        lines = ["**Team Members:**\n"]
+        lines = ["**Your Team:**\n"]
         for w in workers:
-            status = "\u2713" if w.enabled else "\u2717"
-            lines.append(f"- {status} **{w.name}** (`@{w.role}`) — {w.autonomy}")
+            avatar = f"({w.avatar})" if w.avatar else ""
+            name = w.name or w.role.replace("_", " ").title()
+            tagline = w.tagline or w.description
+            lines.append(f"{avatar} **{name}** \u00b7 @{w.role} \u00b7 {tagline}")
         await self._add_system_message(container, "\n".join(lines))
 
     async def _cmd_list_plans(self, container: VerticalScroll) -> None:
