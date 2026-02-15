@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -84,6 +84,20 @@ class ProjectSummary(BaseModel):
     updated_at: datetime
     conversation_count: int = 0
     participant_count: int = 0
+
+
+class CustomAgentDefinition(BaseModel):
+    """Definition of a user-created agent."""
+
+    id: str
+    name: str
+    avatar: str = ""
+    avatar_color: str = ""
+    mission: str = ""
+    skills: list[str] = Field(default_factory=list)
+    scope: str = "project"  # "project" or "global"
+    project_id: str | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class PlanInfo(BaseModel):

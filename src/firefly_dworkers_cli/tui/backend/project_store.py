@@ -13,7 +13,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Generator
 
-from firefly_dworkers_cli.tui.backend.models import Project, ProjectSummary
+import yaml
+
+from firefly_dworkers_cli.tui.backend.models import (
+    CustomAgentDefinition,
+    Project,
+    ProjectSummary,
+)
 
 
 class ProjectStore:
@@ -185,6 +191,42 @@ class ProjectStore:
         if not path.exists():
             return {}
         return json.loads(path.read_text())
+
+    # -- Agent persistence ----------------------------------------------------
+
+    def save_agent(self, project_id: str, agent: CustomAgentDefinition) -> None:
+        agents_dir = self._global / project_id / "agents"
+        agents_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = agent.id.replace(" ", "_").lower()
+        path = agents_dir / f"{safe_name}.yaml"
+        path.write_text(yaml.dump(agent.model_dump(mode="json"), default_flow_style=False))
+
+    def list_agents(self, project_id: str) -> list[CustomAgentDefinition]:
+        agents_dir = self._global / project_id / "agents"
+        if not agents_dir.exists():
+            return []
+        agents = []
+        for path in agents_dir.glob("*.yaml"):
+            data = yaml.safe_load(path.read_text())
+            agents.append(CustomAgentDefinition.model_validate(data))
+        return agents
+
+    def get_agent(self, project_id: str, agent_id: str) -> CustomAgentDefinition | None:
+        for agent in self.list_agents(project_id):
+            if agent.id == agent_id:
+                return agent
+        return None
+
+    def remove_agent(self, project_id: str, agent_id: str) -> bool:
+        agents_dir = self._global / project_id / "agents"
+        if not agents_dir.exists():
+            return False
+        safe_name = agent_id.replace(" ", "_").lower()
+        path = agents_dir / f"{safe_name}.yaml"
+        if path.exists():
+            path.unlink()
+            return True
+        return False
 
     # -- Private helpers ------------------------------------------------------
 

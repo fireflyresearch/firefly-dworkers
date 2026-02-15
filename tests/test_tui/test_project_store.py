@@ -91,3 +91,60 @@ class TestProjectMemoryPersistence:
         store = ProjectStore(global_dir=tmp_path / "projects")
         proj = store.create_project("Test")
         assert store.load_memory(proj.id) == {}
+
+
+class TestCustomAgentStorage:
+    def test_save_and_load_agent(self, tmp_path: Path):
+        from firefly_dworkers_cli.tui.backend.models import CustomAgentDefinition
+        from firefly_dworkers_cli.tui.backend.project_store import ProjectStore
+        store = ProjectStore(global_dir=tmp_path / "projects")
+        proj = store.create_project("Test")
+        agent = CustomAgentDefinition(
+            id="agent_sec01",
+            name="Security Auditor",
+            avatar="S",
+            avatar_color="red",
+            mission="Audit for security vulnerabilities.",
+            skills=["research", "code_review"],
+            scope="project",
+            project_id=proj.id,
+        )
+        store.save_agent(proj.id, agent)
+        loaded = store.list_agents(proj.id)
+        assert len(loaded) == 1
+        assert loaded[0].name == "Security Auditor"
+
+    def test_load_agent_by_id(self, tmp_path: Path):
+        from firefly_dworkers_cli.tui.backend.models import CustomAgentDefinition
+        from firefly_dworkers_cli.tui.backend.project_store import ProjectStore
+        store = ProjectStore(global_dir=tmp_path / "projects")
+        proj = store.create_project("Test")
+        agent = CustomAgentDefinition(
+            id="agent_abc",
+            name="Test Agent",
+            avatar="T",
+            avatar_color="blue",
+            mission="Test mission.",
+            skills=["research"],
+        )
+        store.save_agent(proj.id, agent)
+        loaded = store.get_agent(proj.id, "agent_abc")
+        assert loaded is not None
+        assert loaded.mission == "Test mission."
+
+    def test_remove_agent(self, tmp_path: Path):
+        from firefly_dworkers_cli.tui.backend.models import CustomAgentDefinition
+        from firefly_dworkers_cli.tui.backend.project_store import ProjectStore
+        store = ProjectStore(global_dir=tmp_path / "projects")
+        proj = store.create_project("Test")
+        agent = CustomAgentDefinition(
+            id="agent_rm",
+            name="Removable",
+            avatar="R",
+            avatar_color="gray",
+            mission="To be removed.",
+            skills=[],
+        )
+        store.save_agent(proj.id, agent)
+        store.remove_agent(proj.id, "agent_rm")
+        assert len(store.list_agents(proj.id)) == 0

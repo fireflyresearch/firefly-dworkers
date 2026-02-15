@@ -53,6 +53,18 @@ def main(
         help="Override autonomy level.",
         click_type=click.Choice(["manual", "semi_supervised", "autonomous"]),
     ),
+    resume: str | None = typer.Option(  # noqa: B008
+        None,
+        "--resume",
+        "-r",
+        help="Resume a project or conversation by ID or name.",
+    ),
+    project: str | None = typer.Option(  # noqa: B008
+        None,
+        "--project",
+        "-p",
+        help="Open or create a project by name or ID.",
+    ),
 ) -> None:
     """Firefly Dworkers -- Digital Workers as a Service CLI."""
     if ctx.invoked_subcommand is None:
@@ -71,6 +83,8 @@ def main(
             mode=mode,
             autonomy_override=autonomy,
             server_url=server_url,
+            resume_id=resume,
+            project_id=project,
         ).run()
 
 
