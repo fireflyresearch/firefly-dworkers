@@ -39,3 +39,52 @@ class TestTokenCounter:
         assert TokenCounter.get_model_context_limit("gpt-4") >= 128000
         assert TokenCounter.get_model_context_limit("claude-3") >= 200000
         assert TokenCounter.get_model_context_limit("unknown") >= 100000
+
+
+from datetime import datetime, timezone
+
+from firefly_dworkers_cli.tui.backend.models import ChatMessage
+
+
+def _make_message(content: str, sender: str = "You", role: str = "user", is_ai: bool = False) -> ChatMessage:
+    return ChatMessage(
+        id=f"msg_{hash(content) % 10000}",
+        conversation_id="conv_test",
+        role=role,
+        sender=sender,
+        content=content,
+        timestamp=datetime.now(timezone.utc),
+        is_ai=is_ai,
+    )
+
+
+class TestConversationContextBuilder:
+    def test_small_conversation_returns_all(self):
+        from firefly_dworkers_cli.tui.backend.context import ConversationContextBuilder
+        builder = ConversationContextBuilder()
+        messages = [_make_message(f"Message {i}") for i in range(5)]
+        context = builder.build(messages)
+        assert "Message 0" in context
+        assert "Message 4" in context
+
+    def test_large_conversation_splits_recent(self):
+        from firefly_dworkers_cli.tui.backend.context import ConversationContextBuilder, CONTEXT_RECENT_COUNT
+        builder = ConversationContextBuilder()
+        messages = [_make_message(f"Message {i}") for i in range(30)]
+        context = builder.build(messages)
+        # Recent messages should be verbatim
+        assert "Message 29" in context
+        assert "Message 28" in context
+        # Should have a summary section header
+        assert "CONVERSATION SUMMARY" in context or "RECENT MESSAGES" in context
+
+    def test_format_messages_includes_sender(self):
+        from firefly_dworkers_cli.tui.backend.context import ConversationContextBuilder
+        builder = ConversationContextBuilder()
+        messages = [
+            _make_message("Hello", sender="You", role="user"),
+            _make_message("Hi there!", sender="Amara", role="manager", is_ai=True),
+        ]
+        context = builder.build(messages)
+        assert "[You]" in context
+        assert "[Amara]" in context

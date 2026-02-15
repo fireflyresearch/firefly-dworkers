@@ -41,3 +41,52 @@ class TokenCounter:
             if prefix in model_lower:
                 return limit
         return DEFAULT_CONTEXT_LIMIT
+
+
+class ConversationContextBuilder:
+    """Builds conversation context with hierarchical summary + recent messages."""
+
+    def __init__(self) -> None:
+        self._counter = TokenCounter()
+
+    def build(self, messages: list[ChatMessage], *, cached_summary: str = "") -> str:
+        if not messages:
+            return ""
+
+        total = len(messages)
+
+        if total <= CONTEXT_RECENT_COUNT:
+            return self._format_messages(messages)
+
+        older = messages[:-CONTEXT_RECENT_COUNT]
+        recent = messages[-CONTEXT_RECENT_COUNT:]
+
+        summary = cached_summary or self._simple_summary(older)
+
+        return (
+            f"--- CONVERSATION SUMMARY (older messages) ---\n{summary}\n\n"
+            f"--- RECENT MESSAGES ---\n{self._format_messages(recent)}"
+        )
+
+    def _format_messages(self, messages: list[ChatMessage]) -> str:
+        lines = []
+        for msg in messages:
+            lines.append(f"[{msg.sender}] {msg.content}")
+        return "\n".join(lines)
+
+    def _simple_summary(self, messages: list[ChatMessage]) -> str:
+        if not messages:
+            return ""
+        participants = {m.sender for m in messages}
+        first_content = messages[0].content[:100]
+        last_content = messages[-1].content[:100]
+        return (
+            f"Conversation with {', '.join(sorted(participants))} "
+            f"({len(messages)} messages). "
+            f"Started with: \"{first_content}...\" "
+            f"Last topic: \"{last_content}...\""
+        )
+
+    def needs_summary(self, message_count: int, cached_summary_count: int = 0) -> bool:
+        uncovered = message_count - cached_summary_count
+        return uncovered >= SUMMARY_TRIGGER
