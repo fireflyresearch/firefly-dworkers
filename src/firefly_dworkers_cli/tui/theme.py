@@ -358,6 +358,13 @@ Screen {
     padding: 0 0;
 }
 
+#project-indicator {
+    width: auto;
+    height: 1;
+    color: #555555;
+    padding: 0 0;
+}
+
 /* ── Header ──────────────────────────────────── */
 
 #header-bar {

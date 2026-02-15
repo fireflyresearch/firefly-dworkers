@@ -199,3 +199,11 @@ class TestSessionState:
         app = DworkersApp()
         assert hasattr(app, "_restore_session_state")
         assert callable(app._restore_session_state)
+
+
+class TestProjectDisplay:
+    def test_app_has_update_project_display(self):
+        from firefly_dworkers_cli.tui.app import DworkersApp
+        app = DworkersApp()
+        assert hasattr(app, "_update_project_display")
+        assert callable(app._update_project_display)
