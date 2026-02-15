@@ -67,7 +67,11 @@ class DocumentDesignerWorker(BaseWorker):
             self.checkpoint_handler = checkpoint_handler
 
     @staticmethod
-    def _build_instructions(config: TenantConfig) -> str:
+    def _build_instructions(
+        config: TenantConfig,
+        *,
+        user_profile: dict[str, str] | None = None,
+    ) -> str:
         """Build role-specific system prompt using Jinja2 template."""
         from firefly_dworkers.prompts import get_worker_prompt, load_prompts
         from firefly_dworkers.verticals import get_vertical
@@ -91,4 +95,8 @@ class DocumentDesignerWorker(BaseWorker):
             company_name=config.branding.company_name,
             verticals="\n".join(vertical_parts),
             custom_instructions=settings.custom_instructions,
+            worker_display_name="Noor",
+            user_name=(user_profile or {}).get("name", ""),
+            user_role=(user_profile or {}).get("role", ""),
+            user_company=(user_profile or {}).get("company", ""),
         )
