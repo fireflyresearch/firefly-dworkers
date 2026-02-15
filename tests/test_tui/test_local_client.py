@@ -120,3 +120,44 @@ class TestFactoryMetadata:
         meta = factory.get_metadata(WorkerRole.DESIGNER)
         assert meta.description == ""
         assert meta.tags == []
+
+
+class TestFactoryIdentityFields:
+    def test_factory_stores_display_name(self):
+        from firefly_dworkers.workers.factory import WorkerFactory
+        from firefly_dworkers.types import WorkerRole
+
+        factory = WorkerFactory()
+
+        @factory.register(
+            WorkerRole.ANALYST,
+            description="Test analyst",
+            display_name="Leo",
+            avatar="L",
+            avatar_color="blue",
+            tagline="Strategic analysis",
+        )
+        class FakeAnalyst:
+            pass
+
+        meta = factory.get_metadata(WorkerRole.ANALYST)
+        assert meta.display_name == "Leo"
+        assert meta.avatar == "L"
+        assert meta.avatar_color == "blue"
+        assert meta.tagline == "Strategic analysis"
+
+    def test_factory_identity_defaults_empty(self):
+        from firefly_dworkers.workers.factory import WorkerFactory
+        from firefly_dworkers.types import WorkerRole
+
+        factory = WorkerFactory()
+
+        @factory.register(WorkerRole.DESIGNER)
+        class FakeDesigner:
+            pass
+
+        meta = factory.get_metadata(WorkerRole.DESIGNER)
+        assert meta.display_name == ""
+        assert meta.avatar == ""
+        assert meta.avatar_color == ""
+        assert meta.tagline == ""

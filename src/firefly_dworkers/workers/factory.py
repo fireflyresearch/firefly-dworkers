@@ -29,12 +29,25 @@ if TYPE_CHECKING:
 class _WorkerMeta:
     """Metadata stored alongside a registered worker class."""
 
-    __slots__ = ("cls", "description", "tags")
+    __slots__ = ("cls", "description", "tags", "display_name", "avatar", "avatar_color", "tagline")
 
-    def __init__(self, cls: type, description: str = "", tags: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        cls: type,
+        description: str = "",
+        tags: list[str] | None = None,
+        display_name: str = "",
+        avatar: str = "",
+        avatar_color: str = "",
+        tagline: str = "",
+    ) -> None:
         self.cls = cls
         self.description = description
         self.tags: list[str] = tags or []
+        self.display_name = display_name
+        self.avatar = avatar
+        self.avatar_color = avatar_color
+        self.tagline = tagline
 
 
 class WorkerFactory:
@@ -52,6 +65,10 @@ class WorkerFactory:
         *,
         description: str = "",
         tags: list[str] | None = None,
+        display_name: str = "",
+        avatar: str = "",
+        avatar_color: str = "",
+        tagline: str = "",
     ) -> Any:
         """Decorator that registers a worker class for *role*.
 
@@ -59,6 +76,10 @@ class WorkerFactory:
             role: The :class:`WorkerRole` to register.
             description: Human-readable description of the worker.
             tags: Optional tags for categorisation.
+            display_name: Human-friendly name for the worker persona.
+            avatar: Single character or emoji used as the worker's avatar.
+            avatar_color: CSS/Textual color name for the avatar.
+            tagline: Short phrase describing the worker's personality or focus.
 
         Returns:
             The original class, unmodified.
@@ -73,7 +94,15 @@ class WorkerFactory:
                         f"{existing.cls.__qualname__}; cannot register "
                         f"{cls.__qualname__}."
                     )
-                self._workers[role] = _WorkerMeta(cls, description=description, tags=tags)
+                self._workers[role] = _WorkerMeta(
+                    cls,
+                    description=description,
+                    tags=tags,
+                    display_name=display_name,
+                    avatar=avatar,
+                    avatar_color=avatar_color,
+                    tagline=tagline,
+                )
             return cls
 
         return decorator
