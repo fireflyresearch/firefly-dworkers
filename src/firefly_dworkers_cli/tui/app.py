@@ -266,11 +266,11 @@ class DworkersApp(App):
         # Header bar
         with Horizontal(id="header-bar"):
             yield Static("dworkers", classes="header-title")
-            yield Static("Ctrl+P commands | Ctrl+N new | Ctrl+L clear | Ctrl+Q quit", classes="header-hint")
+            yield Static("Ctrl+P commands · Ctrl+N new · Ctrl+L clear · Ctrl+Q quit", classes="header-hint")
 
         # Welcome banner (shown initially, hidden once chat starts)
         with Vertical(id="welcome"):
-            yield Static(CommandRouter.WELCOME_TEXT, classes="welcome-hint")
+            yield Static(CommandRouter.WELCOME_TEXT, classes="welcome-text")
 
         # Message list (hidden initially, shown once chat starts)
         yield VerticalScroll(id="message-list")
@@ -284,10 +284,12 @@ class DworkersApp(App):
             yield Static("Enter to send · Shift+Enter for newline · /help for commands",
                          classes="input-hint", id="input-hint")
 
-        # Status bar — model · autonomy · participants · tokens (right: connection)
+        # Status bar — model · model-location · autonomy · participants · tokens (right: connection)
         with Horizontal(id="status-bar"):
             yield Static("local", classes="status-item status-model", id="status-model")
             yield Static(" · ", classes="status-sep", id="sep-after-model")
+            yield Static("\u2601 cloud", classes="status-item status-model-loc", id="status-model-loc")
+            yield Static(" · ", classes="status-sep", id="sep-after-model-loc")
             yield Static("\u25cf", classes="status-item autonomy-semi-supervised", id="autonomy-dot")
             yield Static(" semi-supervised", classes="status-item status-autonomy", id="status-autonomy")
             yield Static("", classes="status-item status-private", id="status-private")
@@ -321,11 +323,33 @@ class DworkersApp(App):
         self._update_status_bar()
         self.call_after_refresh(self._connect_and_focus)
 
+    # Providers whose models run locally (on-device).
+    _LOCAL_MODEL_PROVIDERS = {"ollama", "llamacpp", "llama.cpp", "lmstudio", "local", "gguf"}
+
     def _update_model_label(self, model_string: str) -> None:
-        """Update the status bar model label."""
+        """Update the status bar model label and local/cloud indicator."""
         with contextlib.suppress(NoMatches):
-            label = model_string.split(":", 1)[1] if ":" in model_string else model_string
-            self.query_one("#status-model", Static).update(label)
+            if ":" in model_string:
+                provider, model_name = model_string.split(":", 1)
+            else:
+                provider, model_name = "", model_string
+            self.query_one("#status-model", Static).update(model_name)
+
+            # Determine if model is local or cloud.
+            is_local_model = provider.lower() in self._LOCAL_MODEL_PROVIDERS
+            loc_widget = self.query_one("#status-model-loc", Static)
+            if is_local_model:
+                loc_widget.update("\u2302 local model")
+                for cls in list(loc_widget.classes):
+                    if cls.startswith("model-loc-"):
+                        loc_widget.remove_class(cls)
+                loc_widget.add_class("model-loc-local")
+            else:
+                loc_widget.update("\u2601 cloud model")
+                for cls in list(loc_widget.classes):
+                    if cls.startswith("model-loc-"):
+                        loc_widget.remove_class(cls)
+                loc_widget.add_class("model-loc-cloud")
 
     # Mapping from autonomy level to CSS class suffix.
     _AUTONOMY_CSS_MAP: dict[str, str] = {
@@ -390,14 +414,15 @@ class DworkersApp(App):
         )
         self._router.client = self._client
 
-        # Update connection status
+        # Update connection status — shows whether dworkers backend is local or remote.
         conn = self.query_one("#conn-status", Static)
         client_type = type(self._client).__name__
         if client_type == "RemoteClient":
-            conn.update("\u25cf remote")
-            self._update_model_label("remote")
+            conn.update("\u25cf remote server")
+            conn.remove_class("status-connected")
+            conn.add_class("status-remote")
         else:
-            conn.update("\u25cf local")
+            conn.update("\u25cf local server")
 
         # Cache available workers for autocomplete and mention detection.
         await self._refresh_workers()
@@ -658,7 +683,7 @@ class DworkersApp(App):
     async def _add_user_message(self, container: VerticalScroll, text: str) -> None:
         """Mount a user message into the message list."""
         msg_box = Vertical(classes="msg-box")
-        header = Static(">", classes="msg-sender msg-sender-human")
+        header = Static("You", classes="msg-sender msg-sender-human")
         content = Markdown(text, classes="msg-content msg-content-user")
         await container.mount(msg_box)
         await msg_box.mount(header)

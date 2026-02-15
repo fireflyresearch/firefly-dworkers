@@ -32,24 +32,17 @@ Screen {
 
 #welcome {
     width: 1fr;
-    height: auto;
+    height: 1fr;
+    align: center middle;
+    padding: 2 4;
+}
+
+#welcome .welcome-text {
+    color: #666666;
+    text-align: center;
+    width: auto;
+    max-width: 52;
     content-align: center middle;
-    padding: 4 8;
-    color: #666666;
-}
-
-#welcome .welcome-title {
-    text-style: bold;
-    color: #d4d4d4;
-    text-align: center;
-    width: 1fr;
-    padding: 1 0;
-}
-
-#welcome .welcome-hint {
-    color: #666666;
-    text-align: center;
-    width: 1fr;
 }
 
 /* ── Message list ────────────────────────────── */
@@ -278,8 +271,24 @@ Screen {
     color: #10b981;
 }
 
+#status-bar .status-remote {
+    color: #60a5fa;
+}
+
 #status-bar .status-disconnected {
     color: #ef4444;
+}
+
+#status-bar .status-model-loc {
+    color: #888888;
+}
+
+#status-bar .model-loc-local {
+    color: #10b981;
+}
+
+#status-bar .model-loc-cloud {
+    color: #888888;
 }
 
 #status-bar .status-mode {
@@ -326,10 +335,12 @@ Screen {
     dock: top;
     height: 1;
     padding: 0 2;
+    background: #1a1a1a;
 }
 
 #header-bar .header-title {
-    color: #d4d4d4;
+    color: #e5e5e5;
+    text-style: bold;
     width: 1fr;
 }
 
@@ -355,5 +366,18 @@ Screen {
 
 .cmd-output-content {
     height: auto;
+    padding: 0;
+}
+
+.cmd-output-content MarkdownH2 {
+    text-style: bold;
+    color: #d4d4d4;
+    margin: 0;
+    padding: 0 0 1 0;
+}
+
+.cmd-output-content MarkdownTable {
+    padding: 0;
+    margin: 0;
 }
 """

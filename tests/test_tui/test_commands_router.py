@@ -71,7 +71,7 @@ class TestHelpText:
     def test_help_text(self):
         router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
         text = router.help_text
-        assert "Available commands:" in text
+        assert "**Commands**" in text
         assert "/autonomy" in text
         assert "/help" in text
         assert "/export" in text
@@ -410,9 +410,9 @@ class TestModelText:
 
 class TestWelcomeTextMinimal:
     def test_welcome_text_is_short(self):
-        """Welcome text should be concise — 10 lines or fewer."""
+        """Welcome text should be concise — 20 lines or fewer (including mascot)."""
         lines = [l for l in WELCOME_TEXT.strip().split("\n") if l.strip()]
-        assert len(lines) <= 10
+        assert len(lines) <= 20
 
     def test_welcome_text_mentions_help(self):
         assert "/help" in WELCOME_TEXT
@@ -427,7 +427,7 @@ class TestDefaultRoleIsManager:
 
     def test_help_text_mentions_manager_default(self):
         router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
-        assert "Default worker is @manager" in router.help_text
+        assert "`@manager`" in router.help_text
 
 
 class TestNewCommandsRegistered:

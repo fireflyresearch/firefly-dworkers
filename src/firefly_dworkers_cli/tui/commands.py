@@ -15,62 +15,73 @@ if TYPE_CHECKING:
     from firefly_dworkers_cli.tui.backend.models import Conversation
     from firefly_dworkers_cli.tui.backend.store import ConversationStore
 
-WELCOME_TEXT = """\
+_MASCOT = r"""
+    )  (
+   (  )  )
+    )( /(
+   _____
+  |     |>
+  |     |
+  `-----'
+"""
+
+WELCOME_TEXT = f"""\
+{_MASCOT}
   dworkers v0.1.0
 
-  Your AI team of specialized workers — manager, analyst, researcher, designer, and more.
+  Your AI team of specialized workers.
+  Messages go to @manager by default.
 
-  Getting started:
-    Messages go to @manager by default — your AI team lead who routes tasks and launches plans.
-    Use @role to target a specific worker (e.g., @researcher summarize...).
-    Use /plan <name> to run multi-step workflows across workers.
-    Use /project <brief> to orchestrate a full project with all workers.
-
-  /help for all commands · /team to see your workers\
+  @role    Route to a specific worker
+  /plan    Run multi-step workflows
+  /project Orchestrate a full project
+  /team    See your available workers
+  /help    All commands\
 """
 
 _HELP_TEXT = """\
-Available commands:
-  /help              Show this help message
-  /team              List available AI workers and their status
-  /invite <role>     Invite a worker to the conversation
-  /private [role]    Start/end a private conversation with a worker
-  /plan              List available workflow plans
-  /plan <name>       Execute a named plan
-  /project <brief>   Run a multi-worker project
-  /attach <path>     Attach a file to the next message
-  /detach            Clear all file attachments
-  /conversations     List all saved conversations
-  /load <id>         Load a saved conversation
-  /new               Start a fresh conversation
-  /delete <id>       Delete a saved conversation
-  /clear             Clear the chat display
-  /retry             Retry the last user message
-  /status            Show current session status
-  /config            Show current configuration
-  /connectors        List all connector statuses
-  /models            Show available models and providers
-  /model <name>      Switch the default model
-  /usage             Show usage statistics
-  /send <tool> <ch>  Send a message via Slack/Teams/email
-  /channels <tool>   List channels for a messaging tool
-  /export            Export current conversation as markdown
-  /autonomy [level]  Show or change autonomy level
-  /checkpoints       List pending checkpoints
-  /approve <id>      Approve a pending checkpoint
-  /reject <id>       Reject a pending checkpoint (with optional reason)
-  /setup             Re-run the setup wizard
-  /quit              Exit dworkers
+**Commands**
 
-Tips:
-  - Type @role to route messages to a specific worker (autocomplete with Tab)
-  - Default worker is @manager — your team lead who routes tasks and launches plans
-  - Use /invite to bring workers into the conversation
-  - Use /private @role for focused 1-on-1 sessions
-  - Attach files with /attach <path> (images, PDFs, code, text)
-  - Messages support markdown formatting
-  - Press Escape during streaming to cancel
-  - Use /autonomy to view or change the autonomy level
+| Command | Description |
+|---------|-------------|
+| `/help` | Show this help message |
+| `/team` | List available AI workers |
+| `/invite <role>` | Invite a worker to the conversation |
+| `/private [role]` | Start/end private conversation |
+| `/plan [name]` | List or execute workflow plans |
+| `/project <brief>` | Run a multi-worker project |
+| `/attach <path>` | Attach a file to the next message |
+| `/detach` | Clear file attachments |
+| `/new` | Start a fresh conversation |
+| `/conversations` | List saved conversations |
+| `/load <id>` | Load a saved conversation |
+| `/delete <id>` | Delete a saved conversation |
+| `/clear` | Clear the chat display |
+| `/retry` | Retry the last message |
+| `/status` | Show session status |
+| `/config` | Show configuration |
+| `/connectors` | List connector statuses |
+| `/models` | Show available models |
+| `/model <name>` | Switch the default model |
+| `/usage` | Show usage statistics |
+| `/send <tool> <ch>` | Send via Slack/Teams/email |
+| `/channels <tool>` | List messaging channels |
+| `/export` | Export conversation as markdown |
+| `/autonomy [level]` | Show or change autonomy level |
+| `/checkpoints` | List pending checkpoints |
+| `/approve <id>` | Approve a checkpoint |
+| `/reject <id>` | Reject a checkpoint |
+| `/setup` | Re-run setup wizard |
+| `/quit` | Exit dworkers |
+
+**Tips**
+
+- Type `@role` to route to a specific worker (Tab to autocomplete)
+- Default worker is `@manager` — routes tasks and launches plans
+- `/invite` brings workers into the conversation
+- `/private @role` for focused 1-on-1 sessions
+- `/attach <path>` supports images, PDFs, code, and text
+- Press `Escape` during streaming to cancel
 """
 
 # All recognised command names (must include the leading slash).

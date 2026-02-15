@@ -175,10 +175,16 @@ class LocalClient:
             if attachments:
                 input_content = self._build_multimodal_content(prompt, attachments)
 
-            # Prefer streaming when available
+            # Prefer streaming when available.
+            # FireflyAgent.run_stream() returns an async context manager
+            # (not an async generator), so we use ``async with await ...``.
             if hasattr(worker, "run_stream") and callable(worker.run_stream):
-                async for event in worker.run_stream(input_content):
-                    yield event
+                async with await worker.run_stream(
+                    input_content, streaming_mode="incremental",
+                ) as stream:
+                    async for token in stream.stream_tokens():
+                        yield StreamEvent(type="token", content=token)
+                yield StreamEvent(type="complete", content="")
             else:
                 result = await worker.run(input_content)
                 output = str(result.output) if hasattr(result, "output") else str(result)
