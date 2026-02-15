@@ -1196,6 +1196,23 @@ class DworkersApp(App):
     # Numbered option pattern: "1. Option text" or "1) Option text"
     _NUMBERED_OPTION_RE = re.compile(r"^\s*(\d+)[.)]\s+(.+)", re.MULTILINE)
 
+    # Plan step pattern: "1. [role] Task description"
+    _PLAN_STEP_RE = re.compile(
+        r"^\s*(\d+)\.\s+\[(\w+)\]\s+(.+)",
+        re.MULTILINE,
+    )
+
+    def _detect_plan(self, content: str) -> list[tuple[str, str]] | None:
+        """Detect structured plan steps in an AI response.
+
+        Returns list of (role, task_description) tuples, or None if no plan found.
+        Requires at least 2 steps to be considered a plan.
+        """
+        matches = self._PLAN_STEP_RE.findall(content)
+        if len(matches) < 2:
+            return None
+        return [(role.lower(), task.strip()) for _, role, task in matches]
+
     @staticmethod
     def _detect_question(text: str) -> tuple[str, list[str]] | None:
         """Detect a numbered question at the end of an AI response.
