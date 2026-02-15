@@ -653,6 +653,52 @@ class ConfigScreen(Screen):
         self.dismiss(None)
 
 
+# ── Screen 7: Meet the Team ──────────────────────────────────────────
+
+
+class MeetTheTeamScreen(Screen):
+    """Final screen: introduce the AI team to the user."""
+
+    CSS = _WIZARD_CSS
+    BINDINGS = [("enter", "confirm", "Start")]
+
+    def __init__(self, user_name: str = "") -> None:
+        super().__init__()
+        self._user_name = user_name
+
+    def compose(self) -> ComposeResult:
+        greeting = f"Welcome{', ' + self._user_name if self._user_name else ''}!"
+        team_text = (
+            f"{greeting} Meet your AI team:\n\n"
+            "(A) Amara  Manager\n"
+            "    Your team lead — routes tasks and launches plans\n\n"
+            "(L) Leo  Analyst\n"
+            "    Strategic analysis and actionable recommendations\n\n"
+            "(Y) Yuki  Researcher\n"
+            "    Deep research and knowledge synthesis\n\n"
+            "(K) Kofi  Data Analyst\n"
+            "    Data processing, queries, and visualization\n\n"
+            "(N) Noor  Designer\n"
+            "    Document design and creative work"
+        )
+        with Middle():
+            with Center():
+                with Vertical(classes="wizard-container"):
+                    yield Static("dworkers", classes="wizard-title")
+                    yield Static("Your team is ready", classes="wizard-subtitle")
+                    yield Static(team_text, classes="wizard-hint")
+                    with Center(id="wizard-actions"):
+                        yield Button("Start chatting", variant="primary", id="btn-start")
+        yield Static("enter start", classes="wizard-footer")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn-start":
+            self.dismiss(True)
+
+    def action_confirm(self) -> None:
+        self.dismiss(True)
+
+
 # ── Wizard Controller ─────────────────────────────────────────────────
 
 class SetupWizard(Screen):
@@ -779,7 +825,7 @@ class SetupWizard(Screen):
     # ── Save & Finish ────────────────────────────────────────────────
 
     def _save_and_finish(self) -> None:
-        """Save config and dismiss."""
+        """Save config and show Meet the Team screen."""
         model = self._selected_model or "openai:gpt-5.2"
         config_data = self._config_mgr.build_default_config(
             model=model,
@@ -790,6 +836,14 @@ class SetupWizard(Screen):
             user_company=self._user_profile.get("company", ""),
         )
         self._config_mgr.save_global(config_data)
+        user_name = self._user_profile.get("name", "")
+        self.app.push_screen(
+            MeetTheTeamScreen(user_name=user_name),
+            callback=self._on_meet_team,
+        )
+
+    def _on_meet_team(self, result: object) -> None:
+        """Callback after Meet the Team screen dismisses."""
         try:
             config = self._config_mgr.load()
             self.dismiss(config)
