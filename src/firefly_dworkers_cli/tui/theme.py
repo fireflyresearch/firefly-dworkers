@@ -205,6 +205,7 @@ Screen {
 /* ── @mention autocomplete popup ─────────────── */
 
 #mention-popup {
+    display: none;
     height: auto;
     max-height: 8;
     width: auto;
@@ -213,6 +214,10 @@ Screen {
     border: solid #444444;
     color: #d4d4d4;
     background: #1e1e1e;
+}
+
+#mention-popup.visible {
+    display: block;
 }
 
 #mention-popup .mention-item {
@@ -234,6 +239,7 @@ Screen {
 /* ── Slash command autocomplete popup ───────── */
 
 #command-popup {
+    display: none;
     height: auto;
     max-height: 10;
     width: auto;
@@ -242,6 +248,10 @@ Screen {
     border: solid #444444;
     color: #d4d4d4;
     background: #1e1e1e;
+}
+
+#command-popup.visible {
+    display: block;
 }
 
 #command-popup .command-item {

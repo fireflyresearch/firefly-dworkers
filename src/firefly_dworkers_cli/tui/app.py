@@ -92,29 +92,23 @@ _PALETTE_COMMANDS = [
 
 
 class MentionPopup(Vertical):
-    """Autocomplete popup for @mentions, showing matching worker roles."""
+    """Persistent autocomplete popup for @mentions. Hidden by default via CSS."""
 
-    def __init__(self, items: list[tuple[str, str]]) -> None:
+    def __init__(self) -> None:
         super().__init__(id="mention-popup")
-        self._items = items  # [(role, description), ...]
+        self._items: list[tuple[str, str]] = []
         self._selected = 0
 
-    def compose(self) -> ComposeResult:
-        for i, (role, desc) in enumerate(self._items):
-            label = f"@{role}  {desc}" if desc else f"@{role}"
-            cls = "mention-item-selected" if i == 0 else "mention-item"
-            yield Static(label, classes=cls, id=f"mention-{i}")
+    def update_items(self, items: list[tuple[str, str]]) -> None:
+        """Replace popup content with new matching items."""
+        self._items = items
+        self._selected = 0
 
     def move(self, delta: int) -> None:
         """Move selection by *delta* (-1 = up, +1 = down)."""
         if not self._items:
             return
-        old = self._selected
         self._selected = max(0, min(len(self._items) - 1, self._selected + delta))
-        if old != self._selected:
-            with contextlib.suppress(NoMatches):
-                self.query_one(f"#mention-{old}", Static).set_classes("mention-item")
-                self.query_one(f"#mention-{self._selected}", Static).set_classes("mention-item-selected")
 
     @property
     def selected_role(self) -> str | None:
@@ -124,31 +118,23 @@ class MentionPopup(Vertical):
 
 
 class CommandPopup(Vertical):
-    """Autocomplete popup for /slash commands."""
+    """Persistent autocomplete popup for /slash commands. Hidden by default via CSS."""
 
-    def __init__(self, items: list[tuple[str, str]]) -> None:
+    def __init__(self) -> None:
         super().__init__(id="command-popup")
-        self._items = items
+        self._items: list[tuple[str, str]] = []
         self._selected = 0
 
-    def compose(self) -> ComposeResult:
-        for i, (cmd, desc) in enumerate(self._items):
-            label = f"/{cmd}  {desc}"
-            cls = "command-item-selected" if i == 0 else "command-item"
-            yield Static(label, classes=cls, id=f"cmd-{i}")
+    def update_items(self, items: list[tuple[str, str]]) -> None:
+        """Replace popup content with new matching items."""
+        self._items = items
+        self._selected = 0
 
     def move(self, delta: int) -> None:
         """Move selection by *delta* (-1 = up, +1 = down)."""
         if not self._items:
             return
-        old = self._selected
         self._selected = max(0, min(len(self._items) - 1, self._selected + delta))
-        if old != self._selected:
-            with contextlib.suppress(NoMatches):
-                self.query_one(f"#cmd-{old}", Static).set_classes("command-item")
-                self.query_one(f"#cmd-{self._selected}", Static).set_classes(
-                    "command-item-selected"
-                )
 
     @property
     def selected_command(self) -> str | None:
@@ -240,14 +226,16 @@ class PromptInput(TextArea):
     def _get_mention_popup(self) -> MentionPopup | None:
         """Return the active mention popup, or None."""
         try:
-            return self.app.query_one("#mention-popup", MentionPopup)
+            popup = self.app.query_one("#mention-popup", MentionPopup)
+            return popup if popup.has_class("visible") else None
         except NoMatches:
             return None
 
     def _get_command_popup(self) -> CommandPopup | None:
         """Return the active command popup, or None."""
         try:
-            return self.app.query_one("#command-popup", CommandPopup)
+            popup = self.app.query_one("#command-popup", CommandPopup)
+            return popup if popup.has_class("visible") else None
         except NoMatches:
             return None
 
@@ -403,6 +391,8 @@ class DworkersApp(App):
         # Input area
         with Vertical(id="input-area"):
             yield Static("", id="attachment-bar")
+            yield MentionPopup()
+            yield CommandPopup()
             with Horizontal(id="input-row"):
                 yield Static("> ", classes="prompt-prefix", id="prompt-prefix")
                 yield PromptInput(id="prompt-input")
@@ -627,16 +617,14 @@ class DworkersApp(App):
             self._dismiss_mention_popup()
             return
 
-        # Replace existing popup to reflect new filter.
-        self._dismiss_mention_popup()
-        popup = MentionPopup(matches)
-        input_area = self.query_one("#input-area", Vertical)
-        input_area.mount(popup, before=self.query_one("#input-row", Horizontal))
+        popup = self.query_one("#mention-popup", MentionPopup)
+        popup.update_items(matches)
+        popup.add_class("visible")
 
     def _dismiss_mention_popup(self) -> None:
-        """Remove the mention popup if it exists."""
+        """Hide the mention popup."""
         with contextlib.suppress(NoMatches):
-            self.query_one("#mention-popup", MentionPopup).remove()
+            self.query_one("#mention-popup", MentionPopup).remove_class("visible")
 
     def _complete_mention(self, role: str) -> None:
         """Replace the partial @fragment with the completed @role."""
@@ -673,16 +661,14 @@ class DworkersApp(App):
             self._dismiss_command_popup()
             return
 
-        # Replace existing popup to reflect new filter.
-        self._dismiss_command_popup()
-        popup = CommandPopup(matches[:10])
-        input_area = self.query_one("#input-area", Vertical)
-        input_area.mount(popup, before=self.query_one("#input-row", Horizontal))
+        popup = self.query_one("#command-popup", CommandPopup)
+        popup.update_items(matches[:10])
+        popup.add_class("visible")
 
     def _dismiss_command_popup(self) -> None:
-        """Remove the command popup if it exists."""
+        """Hide the command popup."""
         with contextlib.suppress(NoMatches):
-            self.query_one("#command-popup", CommandPopup).remove()
+            self.query_one("#command-popup", CommandPopup).remove_class("visible")
 
     def _complete_command(self, cmd: str) -> None:
         """Replace the partial /fragment with the completed /command."""
