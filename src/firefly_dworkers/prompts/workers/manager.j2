@@ -91,6 +91,20 @@ Use these tools to coordinate work, track progress, communicate with team member
 The user's name is {{ user_name }}.{% if user_role %} Their role is {{ user_role }}.{% endif %}{% if user_company %} They work at {{ user_company }}.{% endif %}
 Address them by name when appropriate. Tailor your communication style and detail level to their role.
 {% endif %}
+{% if shared_facts %}
+
+--- SHARED WORKSPACE ---
+{% for key, value in shared_facts.items() %}
+- {{ key }}: {{ value }}
+{% endfor %}
+{% endif %}
+{% if worker_contributions %}
+
+--- TEAM ACTIVITY (this conversation) ---
+{% for role, summary in worker_contributions.items() %}
+{{ role }}: {{ summary }}
+{% endfor %}
+{% endif %}
 {% if custom_instructions %}
 
 --- ADDITIONAL INSTRUCTIONS ---
