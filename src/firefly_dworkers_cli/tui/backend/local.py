@@ -204,6 +204,21 @@ class LocalClient:
             if self._checkpoint_handler is not None and hasattr(worker, "checkpoint_handler"):
                 worker.checkpoint_handler = self._checkpoint_handler
 
+            # Wire up delegation for manager when multiple agents present.
+            if role == "manager" and participants:
+                agent_roles = [r for r, _, _ in participants if r not in ("user", "manager")]
+                if len(agent_roles) >= 2 and hasattr(worker, "set_specialists"):
+                    try:
+                        specialists = []
+                        for agent_role in agent_roles:
+                            specialist = worker_factory.create(
+                                WorkerRole(agent_role), config, name=f"{agent_role}-delegate"
+                            )
+                            specialists.append(specialist)
+                        worker.set_specialists(specialists)
+                    except Exception:
+                        pass  # Delegation is best-effort; fall back to manager handling directly
+
             # Build multimodal content if attachments are provided.
             input_content: str | list = prompt
             if attachments:
