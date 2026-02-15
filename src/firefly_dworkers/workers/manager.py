@@ -203,6 +203,7 @@ class ManagerWorker(BaseWorker):
             company_name=config.branding.company_name,
             verticals="\n".join(vertical_parts),
             custom_instructions=settings.custom_instructions,
+            autonomy_level=settings.autonomy,
             worker_display_name="Amara",
             user_name=(user_profile or {}).get("name", ""),
             user_role=(user_profile or {}).get("role", ""),

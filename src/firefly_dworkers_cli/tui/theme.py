@@ -294,7 +294,10 @@ Screen {
 .interactive-question {
     height: auto;
     padding: 0 1;
-    margin: 0 0 1 0;
+}
+
+#input-area.question-active {
+    max-height: 50%;
 }
 
 .question-text {

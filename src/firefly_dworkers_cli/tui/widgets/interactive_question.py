@@ -1,8 +1,8 @@
 """Interactive question widget — inline numbered options with arrow-key navigation.
 
-Mounted in the chat area when the AI asks a question. The user navigates
-with Up/Down arrows, confirms with Enter, or presses Tab to switch to
-free-form text input.
+Mounted in the input area (replacing the prompt) when the AI asks a question.
+The user navigates with Up/Down arrows, confirms with Enter, or presses Tab
+to switch to free-form text input.
 """
 
 from __future__ import annotations
@@ -16,8 +16,28 @@ from textual.message import Message
 from textual.widgets import Input, Static
 
 
-class InteractiveQuestion(Vertical):
-    """Inline question with selectable options."""
+class QuestionInput(Input):
+    """Free-form input that delegates Tab/Escape to parent via messages."""
+
+    class ExitFreeForm(Message):
+        """Posted when user presses Tab or Escape in free-form mode."""
+
+    async def _on_key(self, event: events.Key) -> None:
+        if event.key in ("tab", "escape"):
+            event.stop()
+            event.prevent_default()
+            self.post_message(self.ExitFreeForm())
+            return
+        await super()._on_key(event)
+
+
+class InteractiveQuestion(Vertical, can_focus=True):
+    """Inline question with selectable options.
+
+    Mounted in the input area (replacing the prompt) when the AI asks a
+    numbered question. Arrow keys navigate, Enter confirms, Tab switches
+    to free-form text input.
+    """
 
     class Answered(Message):
         """Posted when the user picks an option or submits free text."""
@@ -72,64 +92,76 @@ class InteractiveQuestion(Vertical):
     def selected_option(self) -> str:
         return self._options[self._selected]
 
-    def toggle_free_form(self) -> None:
+    async def toggle_free_form(self) -> None:
         """Toggle between option selection and free-form text input."""
         self._free_form = not self._free_form
         if self._free_form:
             try:
                 self.query_one("#question-options", Static).display = False
-                self.mount(Input(placeholder="Type your answer...", id="free-input"))
-                self.query_one("#free-input", Input).focus()
+                self.query_one(".question-hint", Static).update(
+                    "  type your answer \u00b7 enter to submit \u00b7 tab/esc to go back"
+                )
+                await self.mount(QuestionInput(placeholder="Type your answer...", id="free-input"))
+                self.query_one("#free-input", QuestionInput).focus()
             except Exception:
                 pass
         else:
             try:
-                self.query_one("#free-input", Input).remove()
+                inp = self.query_one("#free-input", QuestionInput)
+                await inp.remove()
                 self.query_one("#question-options", Static).display = True
+                self.query_one(".question-hint", Static).update(
+                    "  \u2191\u2193 navigate \u00b7 enter to select \u00b7 tab for free input"
+                )
+                self.focus()
             except Exception:
                 pass
 
     def _submit_answer(self, choice: str, index: int | None = None) -> None:
-        """Post the answer and collapse the widget."""
+        """Post the answer."""
         if self._answered:
             return
         self._answered = True
         self.post_message(self.Answered(choice, index))
-        # Collapse to show chosen answer
-        for child in list(self.children):
-            child.remove()
-        display = f"  > {index + 1}. {choice}" if index is not None else f"  > {choice}"
-        self.mount(Static(display, classes="question-answered"))
+
+    async def on_question_input_exit_free_form(
+        self, event: QuestionInput.ExitFreeForm
+    ) -> None:
+        """Handle Tab/Escape in free-form input."""
+        await self.toggle_free_form()
+        event.stop()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle Enter in free-form input."""
+        if self._free_form and not self._answered:
+            text = event.value.strip()
+            if text:
+                self._submit_answer(text)
+        event.stop()
 
     async def on_key(self, event: events.Key) -> None:
-        """Handle navigation keys."""
+        """Handle navigation keys when in option selection mode."""
         if self._answered:
             return
-        if self._free_form:
-            if event.key == "escape" or event.key == "tab":
-                self.toggle_free_form()
-                event.stop()
-            elif event.key == "enter":
-                try:
-                    text = self.query_one("#free-input", Input).value.strip()
-                    if text:
-                        self._submit_answer(text)
-                except Exception:
-                    pass
-                event.stop()
-        else:
+        # Free-form keys (Tab/Escape/Enter) handled via QuestionInput messages
+        if not self._free_form:
             if event.key == "up":
                 self.move(-1)
                 event.stop()
+                event.prevent_default()
             elif event.key == "down":
                 self.move(1)
                 event.stop()
+                event.prevent_default()
             elif event.key == "enter":
                 self._submit_answer(self.selected_option, self._selected)
                 event.stop()
+                event.prevent_default()
             elif event.key == "tab":
-                self.toggle_free_form()
+                await self.toggle_free_form()
                 event.stop()
+                event.prevent_default()
             elif event.key == "escape":
                 self._submit_answer(self.selected_option, self._selected)
                 event.stop()
+                event.prevent_default()

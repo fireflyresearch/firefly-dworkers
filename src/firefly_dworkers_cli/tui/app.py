@@ -334,6 +334,7 @@ class DworkersApp(App):
         self._active_project: Project | None = None
         self._intent_classifier = IntentClassifier()
         self._quick_chat_mode: bool = False
+        self._connecting_timer: asyncio.Task | None = None
         if self._autonomy_override:
             self._router.autonomy_level = self._autonomy_override
 
@@ -431,8 +432,8 @@ class DworkersApp(App):
                 self._update_model_label(config.models.default)
             except Exception:
                 self._config_load_failed = True
-            # Focus input immediately, connect in background
-            self.query_one("#prompt-input", PromptInput).focus()
+            # Hide input until connected, show animated connecting status
+            self._hide_input_area()
             self._show_connecting_status()
             asyncio.create_task(self._connect_and_focus())
 
@@ -441,7 +442,7 @@ class DworkersApp(App):
         if result is not None and hasattr(result, "models"):
             self._update_model_label(result.models.default)
         self._update_status_bar()
-        self.query_one("#prompt-input", PromptInput).focus()
+        self._hide_input_area()
         self._show_connecting_status()
         asyncio.create_task(self._connect_and_focus())
 
@@ -538,13 +539,43 @@ class DworkersApp(App):
         else:
             indicator.update(" No project")
 
+    _CONNECTING_FRAMES = ["-", "\\", "|", "/"]
+
+    def _hide_input_area(self) -> None:
+        """Hide the prompt input area during startup."""
+        with contextlib.suppress(NoMatches):
+            self.query_one("#input-row").display = False
+            self.query_one("#input-hint").display = False
+
+    def _show_input_area(self) -> None:
+        """Reveal the prompt input area after connection."""
+        with contextlib.suppress(NoMatches):
+            self.query_one("#input-row").display = True
+            self.query_one("#input-hint").display = True
+
     def _show_connecting_status(self) -> None:
-        """Show a connecting indicator in the status bar while backend initializes."""
+        """Show an animated connecting indicator in the status bar."""
         with contextlib.suppress(NoMatches):
             conn = self.query_one("#conn-status", Static)
-            conn.update("- connecting...")
+            conn.update(f"{self._CONNECTING_FRAMES[0]} connecting...")
             conn.remove_class("status-connected")
             conn.remove_class("status-remote")
+        self._connecting_timer = asyncio.create_task(self._animate_connecting())
+
+    async def _animate_connecting(self) -> None:
+        """Animate the connecting spinner in the status bar."""
+        idx = 0
+        try:
+            while True:
+                await asyncio.sleep(0.15)
+                idx = (idx + 1) % len(self._CONNECTING_FRAMES)
+                frame = self._CONNECTING_FRAMES[idx]
+                with contextlib.suppress(NoMatches):
+                    self.query_one("#conn-status", Static).update(
+                        f"{frame} connecting..."
+                    )
+        except asyncio.CancelledError:
+            pass
 
     async def _connect_and_focus(self) -> None:
         """Connect to backend client and update status when ready."""
@@ -554,6 +585,11 @@ class DworkersApp(App):
             checkpoint_handler=self._checkpoint_handler,
         )
         self._router.client = self._client
+
+        # Stop the connecting animation.
+        if self._connecting_timer is not None:
+            self._connecting_timer.cancel()
+            self._connecting_timer = None
 
         # Update connection status — shows whether dworkers backend is local or remote.
         conn = self.query_one("#conn-status", Static)
@@ -565,6 +601,10 @@ class DworkersApp(App):
         else:
             conn.update("\u25cf local server")
             conn.add_class("status-connected")
+
+        # Reveal the input area and focus the prompt.
+        self._show_input_area()
+        self.query_one("#prompt-input", PromptInput).focus()
 
         # Cache available workers for autocomplete and mention detection.
         await self._refresh_workers()
@@ -884,7 +924,11 @@ class DworkersApp(App):
         detected = self._detect_question(final_content)
         if detected is not None:
             question_text, options = detected
-            await self._mount_question(message_list, question_text, options)
+            # Strip the question+options from the rendered markdown to avoid duplication
+            stripped = self._strip_trailing_question(final_content, len(options))
+            if stripped != final_content:
+                await content_widget.update(stripped)
+            await self._mount_question(question_text, options)
 
         # Save agent message
         agent_msg = ChatMessage(
@@ -995,6 +1039,37 @@ class DworkersApp(App):
             return None
 
         return question, options
+
+    @staticmethod
+    def _strip_trailing_question(text: str, num_options: int) -> str:
+        """Remove the trailing question + numbered options from rendered text.
+
+        Strips the numbered options block and the question line(s) preceding it
+        so that the markdown response doesn't duplicate what the interactive
+        question widget will display.
+        """
+        lines = text.rstrip().split("\n")
+        # Walk backwards past the numbered options
+        i = len(lines) - 1
+        removed = 0
+        while i >= 0 and removed < num_options:
+            if re.match(r"^\s*\d+[.)]\s+", lines[i]):
+                removed += 1
+                i -= 1
+            else:
+                break
+        if removed < num_options:
+            return text  # couldn't strip cleanly
+        # Walk back past blank lines
+        while i >= 0 and not lines[i].strip():
+            i -= 1
+        # Walk back past question line(s) ending in ? or :
+        count = 0
+        while i >= 0 and lines[i].strip() and count < 3:
+            i -= 1
+            count += 1
+        # Return the remaining text
+        return "\n".join(lines[: i + 1]).rstrip()
 
     async def _refresh_workers(self) -> None:
         """Fetch workers from the backend and update the local cache."""
@@ -2152,20 +2227,44 @@ class DworkersApp(App):
 
     async def _mount_question(
         self,
-        container: VerticalScroll,
         question: str,
         options: list[str],
     ) -> None:
-        """Mount an interactive question in the chat area."""
+        """Mount an interactive question in the input area, replacing the prompt."""
         from firefly_dworkers_cli.tui.widgets.interactive_question import InteractiveQuestion
+
+        # Hide the normal input row and hint while question is active
+        try:
+            self.query_one("#input-row").display = False
+            self.query_one("#input-hint").display = False
+        except NoMatches:
+            pass
+
+        input_area = self.query_one("#input-area", Vertical)
+        input_area.add_class("question-active")
         widget = InteractiveQuestion(question=question, options=options)
-        await container.mount(widget)
-        container.scroll_end(animate=False)
+        await input_area.mount(widget)
         widget.focus()
 
     async def on_interactive_question_answered(self, event) -> None:
         """Handle the user's answer to an interactive question."""
-        # Send the chosen answer as the next user message
+        from firefly_dworkers_cli.tui.widgets.interactive_question import InteractiveQuestion
+
+        # Remove the question widget from the input area
+        for widget in self.query(InteractiveQuestion):
+            await widget.remove()
+
+        # Restore max-height and input row
+        input_area = self.query_one("#input-area", Vertical)
+        input_area.remove_class("question-active")
+        try:
+            self.query_one("#input-row").display = True
+            self.query_one("#input-hint").display = True
+        except NoMatches:
+            pass
+
+        # Re-focus the prompt and send the chosen answer
+        self.query_one("#prompt-input", PromptInput).focus()
         await self._handle_input(event.choice)
 
     @staticmethod

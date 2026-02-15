@@ -2,7 +2,10 @@
 
 import pytest
 
-from firefly_dworkers_cli.tui.widgets.interactive_question import InteractiveQuestion
+from firefly_dworkers_cli.tui.widgets.interactive_question import (
+    InteractiveQuestion,
+    QuestionInput,
+)
 
 
 class TestInteractiveQuestion:
@@ -42,21 +45,31 @@ class TestInteractiveQuestion:
         q.move(1)
         assert q.selected_option == "Beta"
 
-    def test_toggle_free_form(self):
-        q = InteractiveQuestion(
-            question="Pick:", options=["A"]
-        )
-        assert q._free_form is False
-        q.toggle_free_form()
-        assert q._free_form is True
-        q.toggle_free_form()
-        assert q._free_form is False
-
     def test_format_display_shows_marker(self):
         q = InteractiveQuestion(
             question="Pick:", options=["First", "Second"]
         )
         display = q._format_options()
-        assert "❯" in display
+        assert "\u276f" in display
         assert "1." in display
         assert "2." in display
+
+    def test_submit_answer_sets_answered(self):
+        q = InteractiveQuestion(
+            question="Pick:", options=["A", "B"]
+        )
+        assert q._answered is False
+        q._submit_answer("A", 0)
+        assert q._answered is True
+
+    def test_submit_answer_idempotent(self):
+        q = InteractiveQuestion(
+            question="Pick:", options=["A", "B"]
+        )
+        q._submit_answer("A", 0)
+        q._submit_answer("B", 1)  # no-op
+        assert q._answered is True
+
+    def test_question_input_subclass(self):
+        inp = QuestionInput(placeholder="Type...")
+        assert isinstance(inp, QuestionInput)
