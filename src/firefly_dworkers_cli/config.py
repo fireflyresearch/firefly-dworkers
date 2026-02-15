@@ -193,11 +193,19 @@ class ConfigManager:
         tenant_name: str = "Default",
         mode: str = "auto",
         default_autonomy: str = "semi_supervised",
+        user_name: str = "",
+        user_role: str = "",
+        user_company: str = "",
     ) -> dict[str, Any]:
         """Build a minimal config dict suitable for saving."""
         config: dict[str, Any] = {
             "id": tenant_id,
             "name": tenant_name,
+            "user_profile": {
+                "name": user_name,
+                "role": user_role,
+                "company": user_company,
+            },
             "models": {
                 "default": model,
                 "research": "",
@@ -220,6 +228,16 @@ class ConfigManager:
         config["mode"] = mode
         config["default_autonomy"] = default_autonomy
         return config
+
+    def get_user_profile(self) -> dict[str, str]:
+        """Return the user profile from the global config, or defaults."""
+        raw = self._read_yaml(self.global_config_path) or {}
+        profile = raw.get("user_profile", {})
+        return {
+            "name": profile.get("name", ""),
+            "role": profile.get("role", ""),
+            "company": profile.get("company", ""),
+        }
 
     # -- Internal helpers -----------------------------------------------------
 
