@@ -1476,14 +1476,13 @@ class DworkersApp(App):
 
             case "/quit":
                 self._save_session_state()
-                self.exit()
+                banner = self._build_exit_banner()
+                self.exit(result=banner)
 
             case "/exit":
                 self._save_session_state()
                 banner = self._build_exit_banner()
-                await self._add_system_message(message_list, banner)
-                await asyncio.sleep(1.5)
-                self.exit()
+                self.exit(result=banner)
 
             case "/quick":
                 self._quick_chat_mode = True

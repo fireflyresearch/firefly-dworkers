@@ -79,13 +79,15 @@ def main(
             if remote and remote != "True":
                 server_url = remote
 
-        DworkersApp(
+        result = DworkersApp(
             mode=mode,
             autonomy_override=autonomy,
             server_url=server_url,
             resume_id=resume,
             project_id=project,
         ).run()
+        if result:
+            print(result)
 
 
 app.command(name="init")(init)
