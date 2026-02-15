@@ -492,3 +492,13 @@ class TestDetachText:
         router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
         text = router.detach_text()
         assert "cleared" in text.lower() or "Cleared" in text
+
+
+class TestTeamDisplayWithIdentities:
+    def test_welcome_text_mentions_amara(self):
+        from firefly_dworkers_cli.tui.commands import WELCOME_TEXT
+        assert "Amara" in WELCOME_TEXT
+
+    def test_welcome_text_has_mascot(self):
+        from firefly_dworkers_cli.tui.commands import WELCOME_TEXT
+        assert "dworkers" in WELCOME_TEXT

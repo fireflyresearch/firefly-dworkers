@@ -30,12 +30,13 @@ WELCOME_TEXT = f"""\
   dworkers v0.1.0
 
   Your AI team of specialized workers.
-  Messages go to @manager by default.
+  Messages go to Amara (@manager) by default.
 
-  @role    Route to a specific worker
+  @name    Chat with a worker by name
+  @role    Route to a worker by role
   /plan    Run multi-step workflows
   /project Orchestrate a full project
-  /team    See your available workers
+  /team    Meet your workers
   /help    All commands\
 """
 

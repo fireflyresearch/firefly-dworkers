@@ -778,18 +778,32 @@ class DworkersApp(App):
         elif not text:
             hint = "Enter to send · Shift+Enter for newline · /help for commands"
         else:
+            # Capture the raw @mention text for display purposes.
+            raw_mention: str | None = None
+            raw_match = _MENTION_RE.search(text)
+            if raw_match:
+                raw_mention = raw_match.group(1).lower()
+
             role = self._extract_role(text)
             if role:
+                # Look up the worker for rich display.
+                worker_name, avatar, _ = self._worker_display(role)
+                avatar_prefix = f"({avatar}) " if avatar else ""
                 desc = self._role_descriptions.get(role, "")
-                if desc:
-                    hint = f"@{role} — {desc} · Enter to send"
+                if raw_mention and raw_mention != role:
+                    # Name-based mention: @amara -> (A) Amara · description
+                    label = f"@{raw_mention} -> {avatar_prefix}{worker_name}"
                 else:
-                    hint = f"@{role} · Enter to send · Shift+Enter for newline"
+                    # Role-based mention: @manager -> (A) Amara · description
+                    label = f"@{role} -> {avatar_prefix}{worker_name}"
+                if desc:
+                    hint = f"{label} · {desc} · Enter to send"
+                else:
+                    hint = f"{label} · Enter to send"
             else:
                 # Check for an unrecognised @mention to warn the user.
-                raw_match = _MENTION_RE.search(text)
-                if raw_match and raw_match.group(1).lower() not in self._known_roles:
-                    hint = f"@{raw_match.group(1)} — unknown role · Enter to send"
+                if raw_mention and raw_mention not in self._known_roles:
+                    hint = f"@{raw_mention} — unknown role · Enter to send"
                 else:
                     hint = "Enter to send · Shift+Enter for newline · /help for commands"
         with contextlib.suppress(NoMatches):
