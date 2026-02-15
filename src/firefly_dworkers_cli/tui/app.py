@@ -2041,3 +2041,21 @@ class DworkersApp(App):
     def action_focus_input(self) -> None:
         """Focus the input area."""
         self.query_one("#prompt-input", PromptInput).focus()
+
+    @staticmethod
+    def _format_status_hints(
+        *,
+        is_streaming: bool = False,
+        has_question: bool = False,
+        private_role: str | None = None,
+    ) -> str:
+        """Build contextual keyboard hints for the status bar."""
+        if is_streaming:
+            return "esc to cancel"
+        if has_question:
+            return "\u2191\u2193 navigate \u00b7 enter to select \u00b7 tab for text"
+        parts = []
+        if private_role:
+            parts.append(f"private @{private_role}")
+        parts.append("enter to send \u00b7 /help")
+        return " \u00b7 ".join(parts)
