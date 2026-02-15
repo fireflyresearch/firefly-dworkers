@@ -51,24 +51,26 @@ class ConversationContextBuilder:
     def __init__(self) -> None:
         self._counter = TokenCounter()
 
-    def build(self, messages: list[ChatMessage], *, cached_summary: str = "") -> str:
+    def build(self, messages: list[ChatMessage], *, cached_summary: str = "", project_context: str = "") -> str:
         if not messages:
-            return ""
+            return project_context or ""
 
         total = len(messages)
+        parts: list[str] = []
+
+        if project_context:
+            parts.append(f"--- PROJECT CONTEXT ---\n{project_context}")
 
         if total <= CONTEXT_RECENT_COUNT:
-            return self._format_messages(messages)
+            parts.append(self._format_messages(messages))
+        else:
+            older = messages[:-CONTEXT_RECENT_COUNT]
+            recent = messages[-CONTEXT_RECENT_COUNT:]
+            summary = cached_summary or self._simple_summary(older)
+            parts.append(f"--- CONVERSATION SUMMARY (older messages) ---\n{summary}")
+            parts.append(f"--- RECENT MESSAGES ---\n{self._format_messages(recent)}")
 
-        older = messages[:-CONTEXT_RECENT_COUNT]
-        recent = messages[-CONTEXT_RECENT_COUNT:]
-
-        summary = cached_summary or self._simple_summary(older)
-
-        return (
-            f"--- CONVERSATION SUMMARY (older messages) ---\n{summary}\n\n"
-            f"--- RECENT MESSAGES ---\n{self._format_messages(recent)}"
-        )
+        return "\n\n".join(parts)
 
     def _format_messages(self, messages: list[ChatMessage]) -> str:
         lines = []

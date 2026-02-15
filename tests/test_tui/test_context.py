@@ -90,6 +90,27 @@ class TestConversationContextBuilder:
         assert "[Amara]" in context
 
 
+class TestProjectContextInBuilder:
+    def test_build_with_project_context(self):
+        from firefly_dworkers_cli.tui.backend.context import ConversationContextBuilder
+        builder = ConversationContextBuilder()
+        messages = [_make_message(f"Message {i}") for i in range(3)]
+        context = builder.build(
+            messages,
+            project_context="Project: EV Analysis\nFact: market_size = $4.2B",
+        )
+        assert "PROJECT CONTEXT" in context
+        assert "market_size" in context
+        assert "Message 0" in context
+
+    def test_build_without_project_context(self):
+        from firefly_dworkers_cli.tui.backend.context import ConversationContextBuilder
+        builder = ConversationContextBuilder()
+        messages = [_make_message("Hello")]
+        context = builder.build(messages)
+        assert "PROJECT CONTEXT" not in context
+
+
 class TestCompactionEngine:
     def test_should_compact_under_threshold(self):
         from firefly_dworkers_cli.tui.backend.context import CompactionEngine
