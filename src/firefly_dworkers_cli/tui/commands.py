@@ -16,13 +16,13 @@ if TYPE_CHECKING:
     from firefly_dworkers_cli.tui.backend.store import ConversationStore
 
 _MASCOT = r"""
-    )  (
-   (  )  )
-    )( /(
-   _____
-  |     |>
-  |     |
-  `-----'
+    ┌─────┐
+    │ ◉ ◉ │
+    │  ▽  │
+    └──┬──┘
+   ┌───┴───┐
+   │ dw    │
+   └───────┘
 """
 
 WELCOME_TEXT = f"""\
@@ -388,3 +388,32 @@ class CommandRouter:
     def detach_text(self) -> str:
         """Return confirmation text for clearing all attachments."""
         return "All attachments cleared."
+
+    def context_text(
+        self,
+        conversation: "Conversation | None",
+        total_tokens: int,
+    ) -> str:
+        """Context dashboard showing conversation stats."""
+        if not conversation:
+            return "No active conversation.\n\nStart chatting to build context."
+        msg_count = len(conversation.messages)
+        ai_msgs = sum(1 for m in conversation.messages if m.is_ai)
+        user_msgs = msg_count - ai_msgs
+        lines = [
+            "**Context Dashboard:**\n",
+            f"- **Messages:** {msg_count} ({user_msgs} user, {ai_msgs} agent)",
+            f"- **Tokens:** ~{total_tokens:,}",
+            f"- **Participants:** {', '.join(conversation.participants) or 'none'}",
+            f"- **Status:** {conversation.status}",
+        ]
+        if conversation.project_id:
+            lines.append(f"- **Project:** {conversation.project_id}")
+        return "\n".join(lines)
+
+    def compact_text(self, conversation: "Conversation | None") -> str:
+        """Return text for the /compact command."""
+        if not conversation or not conversation.messages:
+            return "Nothing to compact."
+        msg_count = len(conversation.messages)
+        return f"Compacted {msg_count} messages. Recent context preserved."
