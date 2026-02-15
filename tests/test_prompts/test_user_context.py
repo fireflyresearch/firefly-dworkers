@@ -54,3 +54,28 @@ class TestSharedFactsInPrompts:
     def test_no_shared_facts_section_when_empty(self, role):
         prompt = get_worker_prompt(role)
         assert "SHARED WORKSPACE" not in prompt
+
+
+class TestCustomAgentTemplate:
+    @pytest.fixture(autouse=True)
+    def _load(self):
+        load_prompts()
+
+    def test_custom_agent_prompt_renders(self):
+        prompt = get_worker_prompt(
+            "custom_agent",
+            worker_display_name="Security Auditor",
+            mission="Audit code for security vulnerabilities.",
+            skills=["Research", "Code review"],
+        )
+        assert "Security Auditor" in prompt
+        assert "Audit code for security vulnerabilities" in prompt
+        assert "Research" in prompt
+
+    def test_custom_agent_without_shared_facts(self):
+        prompt = get_worker_prompt(
+            "custom_agent",
+            mission="Test mission.",
+            skills=["Research"],
+        )
+        assert "SHARED WORKSPACE" not in prompt
