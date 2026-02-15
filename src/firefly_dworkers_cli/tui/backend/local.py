@@ -42,6 +42,27 @@ _CONNECTOR_CATEGORIES: dict[str, str] = {
 }
 
 
+def _build_participant_context(
+    participants: list[tuple[str, str, str]],
+    current_role: str,
+) -> str:
+    """Build conversation context prefix for a worker prompt.
+
+    Args:
+        participants: List of (role, display_name, tagline) tuples.
+        current_role: The role receiving this prompt (excluded from list).
+    """
+    others = [
+        (role, name, tagline)
+        for role, name, tagline in participants
+        if role != current_role and role != "user"
+    ]
+    if not others:
+        return ""
+    labels = [f"{name} (@{role})" for role, name, tagline in others]
+    return f"[Conversation participants: {', '.join(labels)}]\n\n"
+
+
 class LocalClient:
     """Backend that calls the dworkers Python APIs directly.
 
@@ -167,6 +188,7 @@ class LocalClient:
         tenant_id: str = "default",
         conversation_id: str | None = None,
         message_history: list | None = None,
+        participants: list[tuple[str, str, str]] | None = None,
     ) -> AsyncIterator[StreamEvent]:
         try:
             self._ensure_workers_registered()
@@ -186,6 +208,14 @@ class LocalClient:
             input_content: str | list = prompt
             if attachments:
                 input_content = self._build_multimodal_content(prompt, attachments)
+
+            if participants:
+                context_prefix = _build_participant_context(participants, role)
+                if context_prefix:
+                    if isinstance(input_content, str):
+                        input_content = context_prefix + input_content
+                    elif isinstance(input_content, list):
+                        input_content[0] = context_prefix + str(input_content[0])
 
             # Prefer streaming when available.
             # FireflyAgent.run_stream() returns an async context manager

@@ -909,12 +909,24 @@ class DworkersApp(App):
                         # Pass pending attachments and conversation history.
                         send_attachments = self._attachments or None
                         history = self._build_message_history()
+
+                        # Build participant info for context injection.
+                        participant_info: list[tuple[str, str, str]] = []
+                        if self._conversation and self._conversation.participants:
+                            for p in self._conversation.participants:
+                                if p == "user":
+                                    continue
+                                name, _avatar, _color = self._get_worker_display(p)
+                                desc = self._role_descriptions.get(p, "")
+                                participant_info.append((p, name, desc))
+
                         async for event in self._client.run_worker(
                             role,
                             text,
                             attachments=send_attachments,
                             conversation_id=self._conversation.id,
                             message_history=history,
+                            participants=participant_info,
                         ):
                             if self._cancel_streaming.is_set():
                                 tokens.append("\n\n_[Cancelled by user]_")

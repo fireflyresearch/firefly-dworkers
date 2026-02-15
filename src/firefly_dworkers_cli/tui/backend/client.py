@@ -40,6 +40,7 @@ class DworkersClient(Protocol):
         tenant_id: str = "default",
         conversation_id: str | None = None,
         message_history: list[Any] | None = None,
+        participants: list[tuple[str, str, str]] | None = None,
     ) -> AsyncIterator[StreamEvent]: ...
 
     async def run_project(

@@ -85,6 +85,7 @@ class RemoteClient:
         tenant_id: str = "default",
         conversation_id: str | None = None,
         message_history: list | None = None,
+        participants: list[tuple[str, str, str]] | None = None,
     ) -> AsyncIterator[StreamEvent]:
         import base64
 
@@ -103,6 +104,10 @@ class RemoteClient:
                     "data_b64": base64.b64encode(a.data).decode(),
                 }
                 for a in attachments
+            ]
+        if participants:
+            body["participants"] = [
+                {"role": r, "name": n, "tagline": t} for r, n, t in participants
             ]
 
         try:
