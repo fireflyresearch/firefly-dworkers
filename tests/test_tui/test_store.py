@@ -65,3 +65,40 @@ class TestSessionState:
         store = ConversationStore(base_dir=tmp_path / "convs")
         state = store.load_session_state()
         assert state == {}
+
+
+class TestProjectFiltering:
+    def test_create_conversation_with_project_id(self, tmp_path: Path):
+        store = ConversationStore(base_dir=tmp_path / "convs")
+        conv = store.create_conversation("Project Chat", project_id="proj_abc")
+        assert conv.project_id == "proj_abc"
+
+    def test_list_conversations_by_project(self, tmp_path: Path):
+        store = ConversationStore(base_dir=tmp_path / "convs")
+        store.create_conversation("Project Chat", project_id="proj_abc")
+        store.create_conversation("Quick Chat")
+        store.create_conversation("Another Project Chat", project_id="proj_abc")
+        filtered = store.list_conversations(project_id="proj_abc")
+        assert len(filtered) == 2
+        assert all(c.title in ("Project Chat", "Another Project Chat") for c in filtered)
+
+    def test_list_conversations_no_filter_returns_all(self, tmp_path: Path):
+        store = ConversationStore(base_dir=tmp_path / "convs")
+        store.create_conversation("A", project_id="proj_abc")
+        store.create_conversation("B")
+        all_convs = store.list_conversations()
+        assert len(all_convs) == 2
+
+    def test_project_id_persisted_in_json(self, tmp_path: Path):
+        store = ConversationStore(base_dir=tmp_path / "convs")
+        conv = store.create_conversation("Proj Chat", project_id="proj_xyz")
+        reloaded = store.get_conversation(conv.id)
+        assert reloaded is not None
+        assert reloaded.project_id == "proj_xyz"
+
+    def test_list_conversations_filter_empty_result(self, tmp_path: Path):
+        store = ConversationStore(base_dir=tmp_path / "convs")
+        store.create_conversation("A", project_id="proj_abc")
+        store.create_conversation("B")
+        filtered = store.list_conversations(project_id="proj_nonexistent")
+        assert len(filtered) == 0

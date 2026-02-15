@@ -47,7 +47,8 @@ class ConversationStore:
                     participants  TEXT NOT NULL DEFAULT '[]',
                     message_count INTEGER NOT NULL DEFAULT 0,
                     status        TEXT NOT NULL DEFAULT 'active',
-                    tags          TEXT NOT NULL DEFAULT '[]'
+                    tags          TEXT NOT NULL DEFAULT '[]',
+                    project_id    TEXT
                 );
 
                 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
@@ -73,6 +74,12 @@ class ConversationStore:
                 );
                 """
             )
+            # Migration: add project_id column if it doesn't exist
+            try:
+                conn.execute("ALTER TABLE conversations ADD COLUMN project_id TEXT")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass  # Column already exists
 
     @contextmanager
     def _db(self) -> Generator[sqlite3.Connection, None, None]:
@@ -87,18 +94,29 @@ class ConversationStore:
 
     # ── Public API ─────────────────────────────────────────────────
 
-    def list_conversations(self) -> list[ConversationSummary]:
+    def list_conversations(self, *, project_id: str | None = None) -> list[ConversationSummary]:
         """Return conversation summaries from SQLite index.
 
         Falls back to index.json when the SQLite table is empty
         (backward compatibility for stores created before the migration).
+
+        Args:
+            project_id: When provided, only return conversations belonging
+                to this project. When ``None`` (the default), return all
+                conversations.
         """
         with self._db() as conn:
-            rows = conn.execute(
-                "SELECT * FROM conversations ORDER BY updated_at DESC"
-            ).fetchall()
+            if project_id is not None:
+                rows = conn.execute(
+                    "SELECT * FROM conversations WHERE project_id = ? ORDER BY updated_at DESC",
+                    (project_id,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM conversations ORDER BY updated_at DESC"
+                ).fetchall()
 
-        if rows:
+        if rows or project_id is not None:
             return [
                 ConversationSummary(
                     id=r["id"],
@@ -129,6 +147,7 @@ class ConversationStore:
         self,
         title: str,
         *,
+        project_id: str | None = None,
         tenant_id: str = "default",
         tags: list[str] | None = None,
     ) -> Conversation:
@@ -139,6 +158,7 @@ class ConversationStore:
             updated_at=datetime.now(UTC),
             tenant_id=tenant_id,
             tags=tags or [],
+            project_id=project_id,
         )
         self._save_conversation(conv)
         self._update_index(conv)
@@ -230,15 +250,16 @@ class ConversationStore:
                 """\
                 INSERT INTO conversations
                     (id, title, created_at, updated_at, participants,
-                     message_count, status, tags)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                     message_count, status, tags, project_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     title         = excluded.title,
                     updated_at    = excluded.updated_at,
                     participants  = excluded.participants,
                     message_count = excluded.message_count,
                     status        = excluded.status,
-                    tags          = excluded.tags
+                    tags          = excluded.tags,
+                    project_id    = excluded.project_id
                 """,
                 (
                     conv.id,
@@ -249,6 +270,7 @@ class ConversationStore:
                     len(conv.messages),
                     conv.status,
                     json.dumps(conv.tags),
+                    conv.project_id,
                 ),
             )
 
