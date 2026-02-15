@@ -201,6 +201,62 @@ class TestSessionState:
         assert callable(app._restore_session_state)
 
 
+class TestDetectQuestion:
+    def test_detects_numbered_question_with_question_mark(self):
+        text = (
+            "I can help with that.\n\n"
+            "What would you like to focus on?\n"
+            "1. Research the market\n"
+            "2. Create a strategy\n"
+            "3. Analyze the data"
+        )
+        result = DworkersApp._detect_question(text)
+        assert result is not None
+        question, options = result
+        assert "focus on" in question
+        assert len(options) == 3
+        assert "Research the market" in options[0]
+
+    def test_detects_question_with_colon(self):
+        text = (
+            "Please clarify:\n"
+            "1) Option A\n"
+            "2) Option B"
+        )
+        result = DworkersApp._detect_question(text)
+        assert result is not None
+        _, options = result
+        assert len(options) == 2
+
+    def test_no_question_for_plain_text(self):
+        text = "This is just regular text without any numbered options."
+        assert DworkersApp._detect_question(text) is None
+
+    def test_no_question_without_question_or_colon(self):
+        text = (
+            "Here are the steps\n"
+            "1. First step\n"
+            "2. Second step"
+        )
+        assert DworkersApp._detect_question(text) is None
+
+    def test_no_question_for_single_option(self):
+        text = (
+            "What to do?\n"
+            "1. Only one option"
+        )
+        assert DworkersApp._detect_question(text) is None
+
+    def test_detects_up_to_eight_options(self):
+        text = "Choose one:\n" + "\n".join(
+            f"{i}. Option {i}" for i in range(1, 7)
+        )
+        result = DworkersApp._detect_question(text)
+        assert result is not None
+        _, options = result
+        assert len(options) == 6
+
+
 class TestProjectDisplay:
     def test_app_has_update_project_display(self):
         from firefly_dworkers_cli.tui.app import DworkersApp

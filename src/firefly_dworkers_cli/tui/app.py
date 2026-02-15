@@ -868,6 +868,12 @@ class DworkersApp(App):
         final_content = "".join(tokens)
         await content_widget.update(final_content)
 
+        # Detect interactive questions at end of response
+        detected = self._detect_question(final_content)
+        if detected is not None:
+            question_text, options = detected
+            await self._mount_question(message_list, question_text, options)
+
         # Save agent message
         agent_msg = ChatMessage(
             id=f"msg_{uuid.uuid4().hex[:12]}",
@@ -927,6 +933,56 @@ class DworkersApp(App):
     def _estimate_tokens(text: str) -> int:
         """Rough token estimate: ~1 token per 4 characters."""
         return max(1, len(text) // 4)
+
+    # Numbered option pattern: "1. Option text" or "1) Option text"
+    _NUMBERED_OPTION_RE = re.compile(r"^\s*(\d+)[.)]\s+(.+)", re.MULTILINE)
+
+    @staticmethod
+    def _detect_question(text: str) -> tuple[str, list[str]] | None:
+        """Detect a numbered question at the end of an AI response.
+
+        Returns (question_text, options) if found, else None.
+        Only triggers for 2-6 consecutive options at the tail of the text.
+        """
+        lines = text.rstrip().split("\n")
+        if len(lines) < 3:
+            return None
+
+        # Walk backwards to find the block of numbered options
+        options: list[str] = []
+        i = len(lines) - 1
+        while i >= 0:
+            m = re.match(r"^\s*(\d+)[.)]\s+(.+)", lines[i].strip())
+            if m:
+                options.insert(0, m.group(2).strip())
+                i -= 1
+            else:
+                break
+
+        if len(options) < 2 or len(options) > 8:
+            return None
+
+        # The question is the text just before the numbered block.
+        # Walk back past any blank lines to find the question line(s).
+        question_lines: list[str] = []
+        while i >= 0 and not lines[i].strip():
+            i -= 1
+        # Grab 1-3 lines of question context (stop at blank line or start)
+        count = 0
+        while i >= 0 and lines[i].strip() and count < 3:
+            question_lines.insert(0, lines[i].strip())
+            i -= 1
+            count += 1
+
+        if not question_lines:
+            return None
+
+        question = " ".join(question_lines)
+        # Heuristic: question should end with ? or : to be considered interactive
+        if not question.rstrip().endswith(("?", ":")):
+            return None
+
+        return question, options
 
     async def _refresh_workers(self) -> None:
         """Fetch workers from the backend and update the local cache."""
