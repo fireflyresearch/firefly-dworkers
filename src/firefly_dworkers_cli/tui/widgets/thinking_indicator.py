@@ -35,8 +35,8 @@ THINKING_VERBS: list[str] = [
     "Feeding the hamsters...",
 ]
 
-# Animated asterisk — rotates through states to create a pulsing effect.
-SPINNER_FRAMES = ["*", " *", "  *", " *", "*", "* ", "*  ", "* "]
+# Rotating characters — cycles through symbols like Claude Code's spinner.
+SPINNER_FRAMES = ["-", "\\", "|", "/", "-", "\\", "|", "/"]
 
 
 @runtime_checkable
@@ -61,7 +61,7 @@ class ThinkingIndicator(Static):
         self._spinner_index: int = 0
         verb = THINKING_VERBS[self._verb_pool[0]]
         super().__init__(
-            f"  * {verb}",
+            f"  {SPINNER_FRAMES[0]} {verb}",
             classes="streaming-indicator",
             **kwargs,
         )

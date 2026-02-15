@@ -431,14 +431,19 @@ class DworkersApp(App):
                 self._update_model_label(config.models.default)
             except Exception:
                 self._config_load_failed = True
-            await self._connect_and_focus()
+            # Focus input immediately, connect in background
+            self.query_one("#prompt-input", PromptInput).focus()
+            self._show_connecting_status()
+            asyncio.create_task(self._connect_and_focus())
 
     def _on_setup_complete(self, result: object) -> None:
         """Callback when setup wizard finishes."""
         if result is not None and hasattr(result, "models"):
             self._update_model_label(result.models.default)
         self._update_status_bar()
-        self.call_after_refresh(self._connect_and_focus)
+        self.query_one("#prompt-input", PromptInput).focus()
+        self._show_connecting_status()
+        asyncio.create_task(self._connect_and_focus())
 
     # Providers whose models run locally (on-device).
     _LOCAL_MODEL_PROVIDERS = {"ollama", "llamacpp", "llama.cpp", "lmstudio", "local", "gguf"}
@@ -533,8 +538,16 @@ class DworkersApp(App):
         else:
             indicator.update(" No project")
 
+    def _show_connecting_status(self) -> None:
+        """Show a connecting indicator in the status bar while backend initializes."""
+        with contextlib.suppress(NoMatches):
+            conn = self.query_one("#conn-status", Static)
+            conn.update("- connecting...")
+            conn.remove_class("status-connected")
+            conn.remove_class("status-remote")
+
     async def _connect_and_focus(self) -> None:
-        """Connect to backend client and focus the input."""
+        """Connect to backend client and update status when ready."""
         self._client = await create_client(
             mode=self._mode,
             server_url=self._server_url,
@@ -551,12 +564,11 @@ class DworkersApp(App):
             conn.add_class("status-remote")
         else:
             conn.update("\u25cf local server")
+            conn.add_class("status-connected")
 
         # Cache available workers for autocomplete and mention detection.
         await self._refresh_workers()
 
-        # Focus the input
-        self.query_one("#prompt-input", PromptInput).focus()
         self._update_status_bar()
 
         # Show config load error if it occurred

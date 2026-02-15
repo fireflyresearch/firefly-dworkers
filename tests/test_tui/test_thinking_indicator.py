@@ -27,9 +27,13 @@ class TestThinkingVerbs:
 
 
 class TestSpinnerFrames:
-    def test_frames_use_asterisk(self):
+    def test_frames_are_single_characters(self):
         for frame in SPINNER_FRAMES:
-            assert "*" in frame, f"Frame should contain asterisk: {frame!r}"
+            assert len(frame) == 1, f"Frame should be a single char: {frame!r}"
+
+    def test_frames_are_ascii(self):
+        for frame in SPINNER_FRAMES:
+            assert all(ord(c) < 128 for c in frame), f"Non-ASCII in frame: {frame!r}"
 
     def test_no_emoji_in_frames(self):
         for frame in SPINNER_FRAMES:
@@ -43,10 +47,11 @@ class TestThinkingIndicatorInit:
         found = any(verb in text for verb in THINKING_VERBS)
         assert found, f"Initial text '{text}' doesn't contain any thinking verb"
 
-    def test_initial_text_has_asterisk(self):
+    def test_initial_text_has_spinner_char(self):
         indicator = ThinkingIndicator()
         text = str(indicator.render())
-        assert "*" in text, f"Initial text should contain asterisk: {text!r}"
+        has_spinner = any(frame in text for frame in SPINNER_FRAMES)
+        assert has_spinner, f"Initial text should contain a spinner char: {text!r}"
 
     def test_verb_rotation_advances_index(self):
         indicator = ThinkingIndicator()
