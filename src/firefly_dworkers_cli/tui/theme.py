@@ -231,6 +231,35 @@ Screen {
     text-style: bold;
 }
 
+/* ── Slash command autocomplete popup ───────── */
+
+#command-popup {
+    height: auto;
+    max-height: 10;
+    width: auto;
+    min-width: 32;
+    padding: 0 1;
+    border: solid #444444;
+    color: #d4d4d4;
+    background: #1e1e1e;
+}
+
+#command-popup .command-item {
+    height: 1;
+    width: 1fr;
+    padding: 0 1;
+    color: #999999;
+}
+
+#command-popup .command-item-selected {
+    height: 1;
+    width: 1fr;
+    padding: 0 1;
+    color: #d4d4d4;
+    background: #333333;
+    text-style: bold;
+}
+
 /* ── Attachment indicator ────────────────────── */
 
 #attachment-bar {
