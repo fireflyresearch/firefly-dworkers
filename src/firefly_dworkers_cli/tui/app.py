@@ -1652,10 +1652,28 @@ class DworkersApp(App):
                 await self._cmd_team(message_list)
 
             case "/plan":
-                if arg:
+                if arg.startswith("create "):
+                    brief = arg[7:].strip()
+                    if brief:
+                        plan_prompt = (
+                            f"Create a structured execution plan for this task. "
+                            f"Format each step as 'N. [role] Task description'. "
+                            f"Brief: {brief}"
+                        )
+                        await self._send_message(plan_prompt)
+                    else:
+                        await self._add_system_message(
+                            message_list,
+                            "Usage: `/plan create <brief>`\n\nExample: `/plan create Analyze our competitor landscape`",
+                        )
+                elif arg:
                     await self._cmd_execute_plan(message_list, arg)
                 else:
                     await self._cmd_list_plans(message_list)
+                    await self._add_system_message(
+                        message_list,
+                        "\nOr create a custom plan: `/plan create <describe your task>`",
+                    )
 
             case "/projects":
                 await self._cmd_projects(message_list)
