@@ -15,7 +15,11 @@ from firefly_dworkers.workers.factory import worker_factory
 logger = logging.getLogger(__name__)
 
 
-@worker_factory.register(WorkerRole.ANALYST)
+@worker_factory.register(
+    WorkerRole.ANALYST,
+    description="Consulting analyst — analysis & reporting",
+    tags=["analyst", "consulting"],
+)
 class AnalystWorker(BaseWorker):
     """Digital worker specialised in consulting analysis.
 

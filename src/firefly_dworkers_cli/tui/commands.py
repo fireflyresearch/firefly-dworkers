@@ -18,10 +18,10 @@ if TYPE_CHECKING:
 WELCOME_TEXT = """\
   dworkers v0.1.0
 
-  Your AI team of specialized workers — analyst, researcher, designer, and more.
+  Your AI team of specialized workers — manager, analyst, researcher, designer, and more.
 
   Getting started:
-    Type a message to chat with the default analyst worker.
+    Messages go to @manager by default — your AI team lead who routes tasks and launches plans.
     Use @role to target a specific worker (e.g., @researcher summarize...).
     Use /plan <name> to run multi-step workflows across workers.
     Use /project <brief> to orchestrate a full project with all workers.
@@ -33,9 +33,13 @@ _HELP_TEXT = """\
 Available commands:
   /help              Show this help message
   /team              List available AI workers and their status
+  /invite <role>     Invite a worker to the conversation
+  /private [role]    Start/end a private conversation with a worker
   /plan              List available workflow plans
   /plan <name>       Execute a named plan
   /project <brief>   Run a multi-worker project
+  /attach <path>     Attach a file to the next message
+  /detach            Clear all file attachments
   /conversations     List all saved conversations
   /load <id>         Load a saved conversation
   /new               Start a fresh conversation
@@ -59,12 +63,12 @@ Available commands:
   /quit              Exit dworkers
 
 Tips:
-  - Use @analyst, @researcher, @data_analyst, @manager, @designer
-    to route your message to a specific worker role
-  - Default worker is @analyst if no role is specified
+  - Type @role to route messages to a specific worker (autocomplete with Tab)
+  - Default worker is @manager — your team lead who routes tasks and launches plans
+  - Use /invite to bring workers into the conversation
+  - Use /private @role for focused 1-on-1 sessions
+  - Attach files with /attach <path> (images, PDFs, code, text)
   - Messages support markdown formatting
-  - Use /send slack #general <message> to send via Slack
-  - Use /channels slack to list Slack channels
   - Press Escape during streaming to cancel
   - Use /autonomy to view or change the autonomy level
 """
@@ -96,6 +100,10 @@ _COMMANDS: set[str] = {
     "/retry",
     "/models",
     "/model",
+    "/invite",
+    "/private",
+    "/attach",
+    "/detach",
 }
 
 
@@ -318,3 +326,33 @@ class CommandRouter:
         self.checkpoint_handler.reject(checkpoint_id, reason=reason)
         reason_suffix = f" Reason: {reason}" if reason else ""
         return f"Rejected checkpoint `{checkpoint_id}` (**{cp.worker_name}** at _{cp.phase}_).{reason_suffix}"
+
+    # -- invite / private / attach / detach ------------------------------------
+
+    def invite_text(self, role: str, *, known_roles: set[str] | None = None) -> str:
+        """Validate and confirm inviting a worker to the conversation."""
+        role = role.strip().lstrip("@").lower()
+        if not role:
+            return "Usage: `/invite <role>`\n\nExample: `/invite researcher`"
+        if known_roles and role not in known_roles:
+            available = ", ".join(sorted(known_roles))
+            return f"Unknown role: `{role}`\n\nAvailable: {available}"
+        return f"Invited **@{role}** to the conversation."
+
+    def private_text(self, role: str | None) -> str:
+        """Return text for entering or exiting private conversation mode."""
+        if role:
+            role = role.strip().lstrip("@").lower()
+            return f"Entering private conversation with **@{role}**. All messages will go to @{role}.\n\nUse `/private` to exit."
+        return "Exited private mode. Messages route normally."
+
+    def attach_text(self, path: str) -> str:
+        """Return confirmation text for attaching a file."""
+        path = path.strip()
+        if not path:
+            return "Usage: `/attach <file-path>`\n\nExample: `/attach ~/report.pdf`"
+        return f"Attached **{path}**."
+
+    def detach_text(self) -> str:
+        """Return confirmation text for clearing all attachments."""
+        return "All attachments cleared."

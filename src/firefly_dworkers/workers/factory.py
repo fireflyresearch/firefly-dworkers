@@ -26,17 +26,39 @@ if TYPE_CHECKING:
     from firefly_dworkers.workers.base import BaseWorker
 
 
+class _WorkerMeta:
+    """Metadata stored alongside a registered worker class."""
+
+    __slots__ = ("cls", "description", "tags")
+
+    def __init__(self, cls: type, description: str = "", tags: list[str] | None = None) -> None:
+        self.cls = cls
+        self.description = description
+        self.tags: list[str] = tags or []
+
+
 class WorkerFactory:
     """Thread-safe factory mapping :class:`WorkerRole` to worker classes."""
 
     def __init__(self) -> None:
-        self._workers: dict[WorkerRole, type] = {}
+        self._workers: dict[WorkerRole, _WorkerMeta] = {}
         self._lock = threading.Lock()
 
     # -- Registration --------------------------------------------------------
 
-    def register(self, role: WorkerRole) -> Any:
+    def register(
+        self,
+        role: WorkerRole,
+        *,
+        description: str = "",
+        tags: list[str] | None = None,
+    ) -> Any:
         """Decorator that registers a worker class for *role*.
+
+        Parameters:
+            role: The :class:`WorkerRole` to register.
+            description: Human-readable description of the worker.
+            tags: Optional tags for categorisation.
 
         Returns:
             The original class, unmodified.
@@ -45,13 +67,13 @@ class WorkerFactory:
         def decorator(cls: type) -> type:
             with self._lock:
                 existing = self._workers.get(role)
-                if existing is not None and existing is not cls:
+                if existing is not None and existing.cls is not cls:
                     raise ValueError(
                         f"Role '{role}' already registered to "
-                        f"{existing.__qualname__}; cannot register "
+                        f"{existing.cls.__qualname__}; cannot register "
                         f"{cls.__qualname__}."
                     )
-                self._workers[role] = cls
+                self._workers[role] = _WorkerMeta(cls, description=description, tags=tags)
             return cls
 
         return decorator
@@ -65,18 +87,26 @@ class WorkerFactory:
             KeyError: If no worker is registered for *role*.
         """
         with self._lock:
-            cls = self._workers.get(role)
-        if cls is None:
+            meta = self._workers.get(role)
+        if meta is None:
             raise KeyError(f"No worker registered for role '{role}'. Available: {self.list_roles()}")
-        return cls(tenant_config, **kwargs)
+        return meta.cls(tenant_config, **kwargs)
 
     def get_class(self, role: WorkerRole) -> type:
         """Return the raw class for *role* without instantiating."""
         with self._lock:
-            cls = self._workers.get(role)
-        if cls is None:
+            meta = self._workers.get(role)
+        if meta is None:
             raise KeyError(f"No worker registered for role '{role}'.")
-        return cls
+        return meta.cls
+
+    def get_metadata(self, role: WorkerRole) -> _WorkerMeta:
+        """Return the metadata for *role* without instantiating."""
+        with self._lock:
+            meta = self._workers.get(role)
+        if meta is None:
+            raise KeyError(f"No worker registered for role '{role}'.")
+        return meta
 
     def has(self, role: WorkerRole) -> bool:
         """Return ``True`` if a worker is registered for *role*."""

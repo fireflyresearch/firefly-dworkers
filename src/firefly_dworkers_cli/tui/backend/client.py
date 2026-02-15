@@ -10,6 +10,7 @@ from firefly_dworkers.sdk.models import ProjectEvent, StreamEvent
 from firefly_dworkers_cli.tui.backend.models import (
     ConnectorStatus,
     ConversationSummary,
+    FileAttachment,
     PlanInfo,
     UsageStats,
     WorkerInfo,
@@ -35,6 +36,7 @@ class DworkersClient(Protocol):
         role: str,
         prompt: str,
         *,
+        attachments: list[FileAttachment] | None = None,
         tenant_id: str = "default",
         conversation_id: str | None = None,
     ) -> AsyncIterator[StreamEvent]: ...

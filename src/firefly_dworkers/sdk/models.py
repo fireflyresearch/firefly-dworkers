@@ -11,6 +11,14 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 
+class FileAttachmentPayload(BaseModel):
+    """File attachment in API request (base64-encoded)."""
+
+    filename: str
+    media_type: str
+    data_b64: str  # base64-encoded file content
+
+
 class RunWorkerRequest(BaseModel):
     """Request to run a digital worker."""
 
@@ -20,6 +28,7 @@ class RunWorkerRequest(BaseModel):
     conversation_id: str | None = None
     autonomy_level: str | None = None  # override
     model: str | None = None  # override
+    attachments: list[FileAttachmentPayload] = Field(default_factory=list)
 
 
 class ExecutePlanRequest(BaseModel):

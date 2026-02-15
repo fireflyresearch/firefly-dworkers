@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from pathlib import Path
 import re
 import time
 import uuid
@@ -28,7 +29,15 @@ from textual.widgets import Markdown, Static, TextArea
 
 from firefly_dworkers_cli.config import ConfigManager
 from firefly_dworkers_cli.tui.backend.client import DworkersClient, create_client
-from firefly_dworkers_cli.tui.backend.models import ChatMessage, Conversation
+from firefly_dworkers_cli.tui.backend.models import (
+    EXTENSION_MIME_MAP,
+    MAX_ATTACHMENT_SIZE,
+    MAX_ATTACHMENTS,
+    ChatMessage,
+    Conversation,
+    FileAttachment,
+    WorkerInfo,
+)
 from firefly_dworkers_cli.tui.backend.store import ConversationStore
 from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
 from firefly_dworkers_cli.tui.commands import CommandRouter
@@ -36,8 +45,8 @@ from firefly_dworkers_cli.tui.response_timer import ResponseTimer
 from firefly_dworkers_cli.tui.theme import APP_CSS
 from firefly_dworkers_cli.tui.widgets.thinking_indicator import ThinkingIndicator
 
-# Known worker roles for @mention detection.
-_KNOWN_ROLES = {"analyst", "researcher", "data_analyst", "manager", "designer"}
+# Fallback roles used before the backend has been queried.
+_FALLBACK_ROLES = {"analyst", "researcher", "data_analyst", "manager", "designer"}
 _MENTION_RE = re.compile(r"@(\w+)")
 
 # Streaming timeout in seconds (5 minutes).
@@ -47,8 +56,12 @@ _STREAMING_TIMEOUT = 300
 _PALETTE_COMMANDS = [
     ("help", "Show available commands"),
     ("team", "List available AI workers"),
+    ("invite", "Invite a worker to the conversation"),
+    ("private", "Start/end private conversation"),
     ("plan", "List or execute workflow plans"),
     ("project", "Run a multi-worker project"),
+    ("attach", "Attach a file to the next message"),
+    ("detach", "Clear file attachments"),
     ("status", "Show session status"),
     ("config", "Show current configuration"),
     ("new", "Start a new conversation"),
@@ -65,6 +78,38 @@ _PALETTE_COMMANDS = [
 ]
 
 
+class MentionPopup(Vertical):
+    """Autocomplete popup for @mentions, showing matching worker roles."""
+
+    def __init__(self, items: list[tuple[str, str]]) -> None:
+        super().__init__(id="mention-popup")
+        self._items = items  # [(role, description), ...]
+        self._selected = 0
+
+    def compose(self) -> ComposeResult:
+        for i, (role, desc) in enumerate(self._items):
+            label = f"@{role}  {desc}" if desc else f"@{role}"
+            cls = "mention-item-selected" if i == 0 else "mention-item"
+            yield Static(label, classes=cls, id=f"mention-{i}")
+
+    def move(self, delta: int) -> None:
+        """Move selection by *delta* (-1 = up, +1 = down)."""
+        if not self._items:
+            return
+        old = self._selected
+        self._selected = max(0, min(len(self._items) - 1, self._selected + delta))
+        if old != self._selected:
+            with contextlib.suppress(NoMatches):
+                self.query_one(f"#mention-{old}", Static).set_classes("mention-item")
+                self.query_one(f"#mention-{self._selected}", Static).set_classes("mention-item-selected")
+
+    @property
+    def selected_role(self) -> str | None:
+        if self._items:
+            return self._items[self._selected][0]
+        return None
+
+
 class PromptInput(TextArea):
     """Chat input — Enter submits, Shift+Enter inserts newline.
 
@@ -72,6 +117,9 @@ class PromptInput(TextArea):
     calls ``event.stop()``, so the key never bubbles to the App.  This
     subclass intercepts Enter *before* the parent handler, posts a
     :class:`Submitted` message, and lets the App handle it.
+
+    Also provides @mention autocomplete when the user types ``@`` followed
+    by characters. The popup is managed by the parent :class:`DworkersApp`.
     """
 
     class Submitted(Message):
@@ -82,6 +130,27 @@ class PromptInput(TextArea):
             self.text = text
 
     async def _on_key(self, event: events.Key) -> None:
+        # If mention popup is visible, intercept navigation keys.
+        popup = self._get_mention_popup()
+        if popup is not None:
+            if event.key == "escape":
+                self.app._dismiss_mention_popup()
+                event.stop()
+                event.prevent_default()
+                return
+            if event.key in ("up", "down"):
+                popup.move(-1 if event.key == "up" else 1)
+                event.stop()
+                event.prevent_default()
+                return
+            if event.key in ("tab", "enter"):
+                role = popup.selected_role
+                if role:
+                    self.app._complete_mention(role)
+                event.stop()
+                event.prevent_default()
+                return
+
         if event.key == "enter":
             text = self.text.strip()
             if text:
@@ -98,6 +167,13 @@ class PromptInput(TextArea):
             event.prevent_default()
             return
         await super()._on_key(event)
+
+    def _get_mention_popup(self) -> MentionPopup | None:
+        """Return the active mention popup, or None."""
+        try:
+            return self.app.query_one("#mention-popup", MentionPopup)
+        except NoMatches:
+            return None
 
 
 class SlashCommandProvider(Provider):
@@ -175,6 +251,14 @@ class DworkersApp(App):
         self._router.checkpoint_handler = self._checkpoint_handler
         self._last_ctrl_c: float = 0.0
         self._config_load_failed: bool = False
+        # Dynamic worker cache — populated after backend connects.
+        self._workers: list[WorkerInfo] = []
+        self._known_roles: set[str] = set(_FALLBACK_ROLES)
+        self._role_descriptions: dict[str, str] = {}
+        # Private conversation mode — when set, all messages go to this role.
+        self._private_role: str | None = None
+        # File attachments for the next message.
+        self._attachments: list[FileAttachment] = []
         if self._autonomy_override:
             self._router.autonomy_level = self._autonomy_override
 
@@ -193,17 +277,21 @@ class DworkersApp(App):
 
         # Input area
         with Vertical(id="input-area"):
+            yield Static("", id="attachment-bar")
             with Horizontal(id="input-row"):
                 yield Static("> ", classes="prompt-prefix", id="prompt-prefix")
                 yield PromptInput(id="prompt-input")
             yield Static("Enter to send · Shift+Enter for newline · /help for commands",
                          classes="input-hint", id="input-hint")
 
-        # Status bar — model · autonomy · tokens (right: connection)
+        # Status bar — model · autonomy · participants · tokens (right: connection)
         with Horizontal(id="status-bar"):
             yield Static("local", classes="status-item status-model", id="status-model")
             yield Static(" · ", classes="status-sep", id="sep-after-model")
-            yield Static("semi-supervised", classes="status-item status-autonomy", id="status-autonomy")
+            yield Static("\u25cf", classes="status-item autonomy-semi-supervised", id="autonomy-dot")
+            yield Static(" semi-supervised", classes="status-item status-autonomy", id="status-autonomy")
+            yield Static("", classes="status-item status-private", id="status-private")
+            yield Static("", classes="status-item status-participants", id="status-participants")
             yield Static("", classes="status-item status-tokens", id="token-count")
             yield Static("", classes="status-connection status-connected", id="conn-status")
 
@@ -239,13 +327,59 @@ class DworkersApp(App):
             label = model_string.split(":", 1)[1] if ":" in model_string else model_string
             self.query_one("#status-model", Static).update(label)
 
+    # Mapping from autonomy level to CSS class suffix.
+    _AUTONOMY_CSS_MAP: dict[str, str] = {
+        "autonomous": "autonomy-autonomous",
+        "semi_supervised": "autonomy-semi-supervised",
+        "manual": "autonomy-manual",
+    }
+
+    def _update_autonomy_display(self) -> None:
+        """Set the autonomy dot color based on the current level."""
+        autonomy = self._router.autonomy_level
+        css_class = self._AUTONOMY_CSS_MAP.get(autonomy, "autonomy-semi-supervised")
+        with contextlib.suppress(NoMatches):
+            dot = self.query_one("#autonomy-dot", Static)
+            # Remove all autonomy-* classes and set the correct one
+            for cls in list(dot.classes):
+                if cls.startswith("autonomy-"):
+                    dot.remove_class(cls)
+            dot.add_class(css_class)
+
     def _update_status_bar(self) -> None:
         """Refresh all status bar items after state changes."""
         # Autonomy
         autonomy = self._router.autonomy_level
         display = autonomy.replace("_", "-")
         with contextlib.suppress(NoMatches):
-            self.query_one("#status-autonomy", Static).update(display)
+            self.query_one("#status-autonomy", Static).update(f" {display}")
+        self._update_autonomy_display()
+        self._update_participants_display()
+
+    def _update_participants_display(self) -> None:
+        """Update the participants indicator in the status bar."""
+        with contextlib.suppress(NoMatches):
+            # Private mode indicator
+            private_widget = self.query_one("#status-private", Static)
+            if self._private_role:
+                private_widget.update(f" · [private: @{self._private_role}]")
+            else:
+                private_widget.update("")
+
+            # Participants list (agent roles active in the conversation).
+            parts_widget = self.query_one("#status-participants", Static)
+            if self._conversation and self._conversation.participants:
+                agent_roles = [
+                    p for p in self._conversation.participants if p != "user"
+                ]
+                if agent_roles:
+                    parts_widget.update(
+                        " · " + " ".join(f"@{r}" for r in agent_roles)
+                    )
+                else:
+                    parts_widget.update("")
+            else:
+                parts_widget.update("")
 
     async def _connect_and_focus(self) -> None:
         """Connect to backend client and focus the input."""
@@ -265,6 +399,9 @@ class DworkersApp(App):
         else:
             conn.update("\u25cf local")
 
+        # Cache available workers for autocomplete and mention detection.
+        await self._refresh_workers()
+
         # Focus the input
         self.query_one("#prompt-input", PromptInput).focus()
         self._update_status_bar()
@@ -279,10 +416,64 @@ class DworkersApp(App):
                 "**Warning:** Config file could not be loaded. Run `/setup` to reconfigure.",
             )
 
+    # ── @mention autocomplete ────────────────────────────────
+
+    # Regex to find an @mention fragment at the end of the current text.
+    _MENTION_PARTIAL_RE = re.compile(r"@(\w*)$")
+
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
-        """Update the input hint as the user types."""
-        if event.text_area.id == "prompt-input":
-            self._update_input_hint(event.text_area.text)
+        """Update the input hint and manage @mention popup as the user types."""
+        if event.text_area.id != "prompt-input":
+            return
+        text = event.text_area.text
+        self._update_input_hint(text)
+        self._update_mention_popup(text)
+
+    def _update_mention_popup(self, text: str) -> None:
+        """Show, update, or dismiss the @mention autocomplete popup."""
+        match = self._MENTION_PARTIAL_RE.search(text)
+        if match is None:
+            self._dismiss_mention_popup()
+            return
+
+        fragment = match.group(1).lower()
+        # Filter roles that match the typed fragment.
+        matches = [
+            (w.role, w.description)
+            for w in self._workers
+            if w.role.startswith(fragment)
+        ]
+        # Fallback if workers haven't loaded yet.
+        if not self._workers:
+            matches = [
+                (r, "") for r in sorted(_FALLBACK_ROLES) if r.startswith(fragment)
+            ]
+
+        if not matches:
+            self._dismiss_mention_popup()
+            return
+
+        # Replace existing popup to reflect new filter.
+        self._dismiss_mention_popup()
+        popup = MentionPopup(matches)
+        input_area = self.query_one("#input-area", Vertical)
+        input_area.mount(popup, before=self.query_one("#input-row", Horizontal))
+
+    def _dismiss_mention_popup(self) -> None:
+        """Remove the mention popup if it exists."""
+        with contextlib.suppress(NoMatches):
+            self.query_one("#mention-popup", MentionPopup).remove()
+
+    def _complete_mention(self, role: str) -> None:
+        """Replace the partial @fragment with the completed @role."""
+        self._dismiss_mention_popup()
+        prompt = self.query_one("#prompt-input", PromptInput)
+        text = prompt.text
+        match = self._MENTION_PARTIAL_RE.search(text)
+        if match:
+            new_text = text[: match.start()] + f"@{role} "
+            prompt.clear()
+            prompt.insert(new_text)
 
     async def on_prompt_input_submitted(self, event: PromptInput.Submitted) -> None:
         """Handle Enter-to-submit from the chat input."""
@@ -320,6 +511,13 @@ class DworkersApp(App):
         message_list = self.query_one("#message-list", VerticalScroll)
 
         # Add user message
+        # Build metadata for attachment info (without raw data).
+        msg_metadata: dict = {}
+        if self._attachments:
+            msg_metadata["attachments"] = [
+                {"filename": a.filename, "size": a.size, "media_type": a.media_type}
+                for a in self._attachments
+            ]
         user_msg = ChatMessage(
             id=f"msg_{uuid.uuid4().hex[:12]}",
             conversation_id=self._conversation.id,
@@ -328,6 +526,7 @@ class DworkersApp(App):
             content=text,
             timestamp=datetime.now(UTC),
             is_ai=False,
+            metadata=msg_metadata,
         )
         self._store.add_message(self._conversation.id, user_msg)
         # Track participants
@@ -335,8 +534,11 @@ class DworkersApp(App):
             self._conversation.participants.append("user")
         await self._add_user_message(message_list, text)
 
-        # Determine target worker role
-        role = self._extract_role(text) or "analyst"
+        # Determine target worker role (private mode overrides @mentions).
+        if self._private_role:
+            role = self._private_role
+        else:
+            role = self._extract_role(text) or "manager"
         sender_name = role.replace("_", " ").title()
 
         # Add AI response header
@@ -368,9 +570,12 @@ class DworkersApp(App):
             if self._client is not None:
                 try:
                     async with asyncio.timeout(_STREAMING_TIMEOUT):
+                        # Pass pending attachments if any.
+                        send_attachments = self._attachments or None
                         async for event in self._client.run_worker(
                             role,
                             text,
+                            attachments=send_attachments,
                             conversation_id=self._conversation.id,
                         ):
                             if self._cancel_streaming.is_set():
@@ -431,6 +636,7 @@ class DworkersApp(App):
         self._store.add_message(self._conversation.id, agent_msg)
         if role not in self._conversation.participants:
             self._conversation.participants.append(role)
+        self._update_participants_display()
 
         # Update token count (rough estimate)
         token_estimate = self._estimate_tokens(final_content)
@@ -444,6 +650,9 @@ class DworkersApp(App):
         await msg_box.mount(summary)
 
         message_list.scroll_end(animate=False)
+        # Clear attachments after sending.
+        if self._attachments:
+            self._clear_attachments()
         self._update_input_hint()
 
     async def _add_user_message(self, container: VerticalScroll, text: str) -> None:
@@ -474,11 +683,25 @@ class DworkersApp(App):
         """Rough token estimate: ~1 token per 4 characters."""
         return max(1, len(text) // 4)
 
+    async def _refresh_workers(self) -> None:
+        """Fetch workers from the backend and update the local cache."""
+        if self._client is None:
+            return
+        try:
+            self._workers = await self._client.list_workers()
+            self._known_roles = {w.role for w in self._workers}
+            self._role_descriptions = {
+                w.role: w.description for w in self._workers if w.description
+            }
+        except Exception:
+            # Keep fallback roles if the backend call fails.
+            pass
+
     def _extract_role(self, text: str) -> str | None:
         """Return the first known @role mention in the message text."""
         for match in _MENTION_RE.finditer(text):
             mention = match.group(1).lower()
-            if mention in _KNOWN_ROLES:
+            if mention in self._known_roles:
                 return mention
         return None
 
@@ -491,13 +714,74 @@ class DworkersApp(App):
 
     def _update_input_hint(self, text: str = "") -> None:
         """Update the input hint to reflect the detected @role target."""
-        role = self._extract_role(text) if text else None
-        if role:
-            hint = f"@{role} · Enter to send · Shift+Enter for newline"
-        else:
+        if self._private_role:
+            hint = f"Private chat with @{self._private_role} · Enter to send"
+        elif not text:
             hint = "Enter to send · Shift+Enter for newline · /help for commands"
+        else:
+            role = self._extract_role(text)
+            if role:
+                desc = self._role_descriptions.get(role, "")
+                if desc:
+                    hint = f"@{role} — {desc} · Enter to send"
+                else:
+                    hint = f"@{role} · Enter to send · Shift+Enter for newline"
+            else:
+                # Check for an unrecognised @mention to warn the user.
+                raw_match = _MENTION_RE.search(text)
+                if raw_match and raw_match.group(1).lower() not in self._known_roles:
+                    hint = f"@{raw_match.group(1)} — unknown role · Enter to send"
+                else:
+                    hint = "Enter to send · Shift+Enter for newline · /help for commands"
         with contextlib.suppress(NoMatches):
             self.query_one("#input-hint", Static).update(hint)
+
+    # ── File attachments ─────────────────────────────────────
+
+    def _attach_file(self, path_str: str) -> str:
+        """Read a file from *path_str* and add to pending attachments.
+
+        Returns a status message string.
+        """
+        path = Path(path_str).expanduser().resolve()
+        if not path.is_file():
+            return f"**Error:** File not found: `{path}`"
+        size = path.stat().st_size
+        if size > MAX_ATTACHMENT_SIZE:
+            limit_mb = MAX_ATTACHMENT_SIZE // (1024 * 1024)
+            return f"**Error:** File too large ({size:,} bytes). Max {limit_mb}MB."
+        if len(self._attachments) >= MAX_ATTACHMENTS:
+            return f"**Error:** Maximum {MAX_ATTACHMENTS} attachments reached. Use `/detach` to clear."
+        ext = path.suffix.lower()
+        media_type = EXTENSION_MIME_MAP.get(ext, "application/octet-stream")
+        data = path.read_bytes()
+        att = FileAttachment(
+            filename=path.name,
+            media_type=media_type,
+            data=data,
+            size=len(data),
+        )
+        self._attachments.append(att)
+        self._update_attachment_bar()
+        return self._router.attach_text(path.name)
+
+    def _clear_attachments(self) -> None:
+        """Remove all pending attachments and update the UI."""
+        self._attachments.clear()
+        self._update_attachment_bar()
+
+    def _update_attachment_bar(self) -> None:
+        """Update (or hide) the attachment indicator above the input."""
+        with contextlib.suppress(NoMatches):
+            bar = self.query_one("#attachment-bar", Static)
+            if self._attachments:
+                parts = []
+                for att in self._attachments:
+                    size_kb = att.size / 1024
+                    parts.append(f"{att.filename} ({size_kb:.0f}KB)")
+                bar.update("Attachments: " + ", ".join(parts))
+            else:
+                bar.update("")
 
     # ── Slash commands ───────────────────────────────────────
 
@@ -662,6 +946,38 @@ class DworkersApp(App):
                 await self._add_system_message(message_list, text)
                 if arg.strip():
                     self._update_model_label(arg.strip())
+
+            case "/invite":
+                result = self._router.invite_text(arg, known_roles=self._known_roles)
+                await self._add_system_message(message_list, result)
+                # Track invited role in conversation participants.
+                role = arg.strip().lstrip("@").lower()
+                if role in self._known_roles and self._conversation is not None:
+                    if role not in self._conversation.participants:
+                        self._conversation.participants.append(role)
+                    self._update_participants_display()
+
+            case "/private":
+                role = arg.strip().lstrip("@").lower() if arg.strip() else None
+                if role:
+                    self._private_role = role
+                else:
+                    self._private_role = None
+                await self._add_system_message(
+                    message_list, self._router.private_text(role),
+                )
+                self._update_participants_display()
+                self._update_input_hint()
+
+            case "/attach":
+                result = self._attach_file(arg)
+                await self._add_system_message(message_list, result)
+
+            case "/detach":
+                self._clear_attachments()
+                await self._add_system_message(
+                    message_list, self._router.detach_text(),
+                )
 
             case _:
                 await self._add_system_message(

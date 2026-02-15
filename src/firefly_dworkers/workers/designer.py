@@ -15,7 +15,11 @@ from firefly_dworkers.workers.factory import worker_factory
 logger = logging.getLogger(__name__)
 
 
-@worker_factory.register(WorkerRole.DESIGNER)
+@worker_factory.register(
+    WorkerRole.DESIGNER,
+    description="Designer — document design & creative work",
+    tags=["designer", "creative"],
+)
 class DocumentDesignerWorker(BaseWorker):
     """Digital worker specialised in document design and creative direction.
 

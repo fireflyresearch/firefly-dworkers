@@ -2,7 +2,7 @@
 
 import asyncio
 
-from firefly_dworkers_cli.tui.app import DworkersApp, _KNOWN_ROLES
+from firefly_dworkers_cli.tui.app import DworkersApp, _FALLBACK_ROLES
 from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
 
 
@@ -14,12 +14,12 @@ class TestDworkersApp:
         assert app._total_tokens == 0
         assert app._is_streaming is False
 
-    def test_known_roles(self):
-        assert "analyst" in _KNOWN_ROLES
-        assert "researcher" in _KNOWN_ROLES
-        assert "data_analyst" in _KNOWN_ROLES
-        assert "manager" in _KNOWN_ROLES
-        assert "designer" in _KNOWN_ROLES
+    def test_fallback_roles(self):
+        assert "analyst" in _FALLBACK_ROLES
+        assert "researcher" in _FALLBACK_ROLES
+        assert "data_analyst" in _FALLBACK_ROLES
+        assert "manager" in _FALLBACK_ROLES
+        assert "designer" in _FALLBACK_ROLES
 
     def test_extract_role_from_mention(self):
         app = DworkersApp()

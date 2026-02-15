@@ -13,6 +13,7 @@ from firefly_dworkers.sdk.models import ProjectEvent, StreamEvent
 from firefly_dworkers_cli.tui.backend.models import (
     ConnectorStatus,
     ConversationSummary,
+    FileAttachment,
     PlanInfo,
     UsageStats,
     WorkerInfo,
@@ -80,9 +81,12 @@ class RemoteClient:
         role: str,
         prompt: str,
         *,
+        attachments: list[FileAttachment] | None = None,
         tenant_id: str = "default",
         conversation_id: str | None = None,
     ) -> AsyncIterator[StreamEvent]:
+        import base64
+
         body: dict[str, Any] = {
             "worker_role": role,
             "prompt": prompt,
@@ -90,6 +94,15 @@ class RemoteClient:
         }
         if conversation_id:
             body["conversation_id"] = conversation_id
+        if attachments:
+            body["attachments"] = [
+                {
+                    "filename": a.filename,
+                    "media_type": a.media_type,
+                    "data_b64": base64.b64encode(a.data).decode(),
+                }
+                for a in attachments
+            ]
 
         try:
             async with httpx.AsyncClient() as http, http.stream(

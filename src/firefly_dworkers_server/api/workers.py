@@ -55,13 +55,56 @@ async def _create_worker(request: RunWorkerRequest):
     return worker
 
 
+def _build_input_content(request: RunWorkerRequest) -> str | list:
+    """Build the input content for a worker, handling attachments.
+
+    If the request contains file attachments, they are decoded from base64
+    and converted to framework-native ``UserContent`` types so the LLM
+    receives them as multimodal content alongside the text prompt.
+    """
+    if not request.attachments:
+        return request.prompt
+
+    import base64
+
+    content: list = [request.prompt]
+    for att in request.attachments:
+        raw = base64.b64decode(att.data_b64)
+        b64 = att.data_b64  # already base64
+        data_url = f"data:{att.media_type};base64,{b64}"
+
+        if att.media_type.startswith("image/"):
+            try:
+                from fireflyframework_genai.types import ImageUrl
+                content.append(ImageUrl(url=data_url))
+            except ImportError:
+                content.append(f"[Image: {att.filename}]")
+        elif att.media_type == "application/pdf":
+            try:
+                from fireflyframework_genai.types import DocumentUrl
+                content.append(DocumentUrl(url=data_url))
+            except ImportError:
+                content.append(f"[Document: {att.filename}]")
+        else:
+            try:
+                from fireflyframework_genai.types import BinaryContent
+                content.append(BinaryContent(data=raw, media_type=att.media_type))
+            except ImportError:
+                try:
+                    content.append(f"--- {att.filename} ---\n{raw.decode('utf-8')}")
+                except UnicodeDecodeError:
+                    content.append(f"[Binary file: {att.filename}]")
+    return content
+
+
 async def _stream_worker_events(request: RunWorkerRequest) -> AsyncIterator[str]:
     """Generator that yields SSE events from a worker execution."""
     try:
         worker = await _create_worker(request)
+        input_content = _build_input_content(request)
 
         stream_ctx = await worker.run_stream(
-            request.prompt,
+            input_content,
             conversation_id=request.conversation_id,
             streaming_mode="incremental",
         )

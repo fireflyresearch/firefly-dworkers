@@ -416,3 +416,79 @@ class TestWelcomeTextMinimal:
 
     def test_welcome_text_mentions_help(self):
         assert "/help" in WELCOME_TEXT
+
+    def test_welcome_text_mentions_manager(self):
+        assert "@manager" in WELCOME_TEXT
+
+
+class TestDefaultRoleIsManager:
+    def test_welcome_text_mentions_manager_default(self):
+        assert "manager" in WELCOME_TEXT.lower()
+
+    def test_help_text_mentions_manager_default(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        assert "Default worker is @manager" in router.help_text
+
+
+class TestNewCommandsRegistered:
+    @pytest.mark.parametrize("cmd", ["/invite", "/private", "/attach", "/detach"])
+    def test_new_command_registered(self, cmd):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        assert cmd in router.commands
+
+
+class TestInviteText:
+    def test_invite_no_arg(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        text = router.invite_text("")
+        assert "Usage" in text
+
+    def test_invite_valid_role(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        text = router.invite_text("researcher", known_roles={"researcher", "analyst"})
+        assert "Invited" in text
+        assert "@researcher" in text
+
+    def test_invite_unknown_role(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        text = router.invite_text("wizard", known_roles={"researcher", "analyst"})
+        assert "Unknown role" in text
+
+    def test_invite_strips_at_sign(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        text = router.invite_text("@researcher", known_roles={"researcher"})
+        assert "Invited" in text
+        assert "@researcher" in text
+
+
+class TestPrivateText:
+    def test_private_enter(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        text = router.private_text("researcher")
+        assert "private" in text.lower()
+        assert "@researcher" in text
+
+    def test_private_exit(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        text = router.private_text(None)
+        assert "Exited" in text or "exit" in text.lower()
+
+
+class TestAttachText:
+    def test_attach_no_arg(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        text = router.attach_text("")
+        assert "Usage" in text
+
+    def test_attach_with_path(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        text = router.attach_text("report.pdf")
+        assert "Attached" in text
+        assert "report.pdf" in text
+
+
+class TestDetachText:
+    def test_detach(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        text = router.detach_text()
+        assert "cleared" in text.lower() or "Cleared" in text

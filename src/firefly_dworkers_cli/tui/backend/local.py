@@ -10,6 +10,7 @@ from firefly_dworkers.sdk.models import ProjectEvent, StreamEvent
 from firefly_dworkers_cli.tui.backend.models import (
     ConnectorStatus,
     ConversationSummary,
+    FileAttachment,
     PlanInfo,
     UsageStats,
     WorkerInfo,
@@ -77,10 +78,17 @@ class LocalClient:
             workers: list[WorkerInfo] = []
             for role in roles:
                 settings = config.workers.settings_for(role.value)
+                # Pull description from factory metadata (registered at import time).
+                try:
+                    meta = worker_factory.get_metadata(role)
+                    description = meta.description
+                except KeyError:
+                    description = ""
                 workers.append(
                     WorkerInfo(
                         role=role.value,
                         name=role.value.replace("_", " ").title(),
+                        description=description,
                         enabled=settings.enabled,
                         autonomy=settings.autonomy,
                         model=config.models.default,
@@ -97,11 +105,54 @@ class LocalClient:
                 WorkerInfo(role="designer", name="Designer"),
             ]
 
+    @staticmethod
+    def _build_multimodal_content(
+        prompt: str, attachments: list[FileAttachment],
+    ) -> list:
+        """Convert a text prompt + file attachments into a UserContent list.
+
+        The framework's ``FireflyAgent.run_stream()`` accepts
+        ``str | Sequence[UserContent]``.  When attachments are present we
+        build a list: the text prompt first, then each attachment converted
+        to the appropriate framework content type.
+        """
+        import base64
+
+        content: list = [prompt]
+        for att in attachments:
+            b64 = base64.b64encode(att.data).decode()
+            data_url = f"data:{att.media_type};base64,{b64}"
+            if att.media_type.startswith("image/"):
+                try:
+                    from fireflyframework_genai.types import ImageUrl
+                    content.append(ImageUrl(url=data_url))
+                except ImportError:
+                    content.append(f"[Image: {att.filename}]")
+            elif att.media_type == "application/pdf":
+                try:
+                    from fireflyframework_genai.types import DocumentUrl
+                    content.append(DocumentUrl(url=data_url))
+                except ImportError:
+                    content.append(f"[Document: {att.filename}]")
+            else:
+                try:
+                    from fireflyframework_genai.types import BinaryContent
+                    content.append(BinaryContent(data=att.data, media_type=att.media_type))
+                except ImportError:
+                    # Fallback: embed text content directly.
+                    try:
+                        text_content = att.data.decode("utf-8")
+                        content.append(f"--- {att.filename} ---\n{text_content}")
+                    except UnicodeDecodeError:
+                        content.append(f"[Binary file: {att.filename}]")
+        return content
+
     async def run_worker(
         self,
         role: str,
         prompt: str,
         *,
+        attachments: list[FileAttachment] | None = None,
         tenant_id: str = "default",
         conversation_id: str | None = None,
     ) -> AsyncIterator[StreamEvent]:
@@ -119,12 +170,17 @@ class LocalClient:
             if self._checkpoint_handler is not None and hasattr(worker, "checkpoint_handler"):
                 worker.checkpoint_handler = self._checkpoint_handler
 
+            # Build multimodal content if attachments are provided.
+            input_content: str | list = prompt
+            if attachments:
+                input_content = self._build_multimodal_content(prompt, attachments)
+
             # Prefer streaming when available
             if hasattr(worker, "run_stream") and callable(worker.run_stream):
-                async for event in worker.run_stream(prompt):
+                async for event in worker.run_stream(input_content):
                     yield event
             else:
-                result = await worker.run(prompt)
+                result = await worker.run(input_content)
                 output = str(result.output) if hasattr(result, "output") else str(result)
                 yield StreamEvent(type="complete", content=output)
         except Exception as exc:

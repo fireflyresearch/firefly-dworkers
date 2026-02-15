@@ -209,6 +209,43 @@ Screen {
     text-align: right;
 }
 
+/* ── @mention autocomplete popup ─────────────── */
+
+#mention-popup {
+    height: auto;
+    max-height: 8;
+    width: auto;
+    min-width: 24;
+    padding: 0 1;
+    border: solid #444444;
+    color: #d4d4d4;
+    background: #1e1e1e;
+}
+
+#mention-popup .mention-item {
+    height: 1;
+    width: 1fr;
+    padding: 0 1;
+    color: #999999;
+}
+
+#mention-popup .mention-item-selected {
+    height: 1;
+    width: 1fr;
+    padding: 0 1;
+    color: #d4d4d4;
+    background: #333333;
+    text-style: bold;
+}
+
+/* ── Attachment indicator ────────────────────── */
+
+#attachment-bar {
+    height: auto;
+    padding: 0 1;
+    color: #f59e0b;
+}
+
 /* ── Status bar ──────────────────────────────── */
 
 #status-bar {
@@ -253,8 +290,32 @@ Screen {
     color: #666666;
 }
 
+#status-bar .autonomy-autonomous {
+    color: #10b981;
+}
+
+#status-bar .autonomy-semi-supervised {
+    color: #f59e0b;
+}
+
+#status-bar .autonomy-manual {
+    color: #ef4444;
+}
+
 #status-bar .status-sep {
     color: #555555;
+    width: auto;
+    padding: 0 0;
+}
+
+#status-bar .status-participants {
+    color: #888888;
+    width: auto;
+    padding: 0 0;
+}
+
+#status-bar .status-private {
+    color: #f59e0b;
     width: auto;
     padding: 0 0;
 }

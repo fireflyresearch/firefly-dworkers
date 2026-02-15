@@ -57,7 +57,11 @@ except ImportError:
     RoundRobinStrategy = None  # type: ignore[assignment,misc]
 
 
-@worker_factory.register(WorkerRole.MANAGER)
+@worker_factory.register(
+    WorkerRole.MANAGER,
+    description="Manager — team lead who routes tasks & launches plans",
+    tags=["manager", "orchestration"],
+)
 class ManagerWorker(BaseWorker):
     """Digital worker specialised in project management.
 
