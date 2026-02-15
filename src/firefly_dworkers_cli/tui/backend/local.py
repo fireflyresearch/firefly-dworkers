@@ -166,6 +166,7 @@ class LocalClient:
         attachments: list[FileAttachment] | None = None,
         tenant_id: str = "default",
         conversation_id: str | None = None,
+        message_history: list | None = None,
     ) -> AsyncIterator[StreamEvent]:
         try:
             self._ensure_workers_registered()
@@ -189,9 +190,14 @@ class LocalClient:
             # Prefer streaming when available.
             # FireflyAgent.run_stream() returns an async context manager
             # (not an async generator), so we use ``async with await ...``.
+            # Build run_stream kwargs, including conversation history when available.
+            stream_kwargs: dict[str, Any] = {"streaming_mode": "incremental"}
+            if message_history is not None:
+                stream_kwargs["message_history"] = message_history
+
             if hasattr(worker, "run_stream") and callable(worker.run_stream):
                 async with await worker.run_stream(
-                    input_content, streaming_mode="incremental",
+                    input_content, **stream_kwargs,
                 ) as stream:
                     async for token in stream.stream_tokens():
                         yield StreamEvent(type="token", content=token)

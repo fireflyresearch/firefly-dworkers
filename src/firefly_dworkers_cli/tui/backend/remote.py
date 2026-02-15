@@ -84,6 +84,7 @@ class RemoteClient:
         attachments: list[FileAttachment] | None = None,
         tenant_id: str = "default",
         conversation_id: str | None = None,
+        message_history: list | None = None,
     ) -> AsyncIterator[StreamEvent]:
         import base64
 

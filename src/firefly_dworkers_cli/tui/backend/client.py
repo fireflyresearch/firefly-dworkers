@@ -39,6 +39,7 @@ class DworkersClient(Protocol):
         attachments: list[FileAttachment] | None = None,
         tenant_id: str = "default",
         conversation_id: str | None = None,
+        message_history: list[Any] | None = None,
     ) -> AsyncIterator[StreamEvent]: ...
 
     async def run_project(

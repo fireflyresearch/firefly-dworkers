@@ -700,6 +700,43 @@ class DworkersApp(App):
         else:
             await self._send_message(text)
 
+    # ── Message history ─────────────────────────────────────
+
+    def _build_message_history(self) -> list | None:
+        """Build pydantic-ai message history from stored conversation messages.
+
+        Returns a list of ModelRequest/ModelResponse objects for all prior
+        messages in the current conversation, or None if no history exists.
+        """
+        if self._conversation is None:
+            return None
+        conv = self._store.get_conversation(self._conversation.id)
+        if conv is None or not conv.messages:
+            return None
+        try:
+            from pydantic_ai.messages import (
+                ModelRequest,
+                ModelResponse,
+                TextPart,
+                UserPromptPart,
+            )
+        except ImportError:
+            return None
+
+        history: list = []
+        for msg in conv.messages:
+            if not msg.content:
+                continue
+            if msg.is_ai:
+                history.append(
+                    ModelResponse(parts=[TextPart(content=msg.content)])
+                )
+            else:
+                history.append(
+                    ModelRequest(parts=[UserPromptPart(content=msg.content)])
+                )
+        return history if history else None
+
     # ── Message sending ──────────────────────────────────────
 
     async def _send_message(self, text: str) -> None:
@@ -776,13 +813,15 @@ class DworkersApp(App):
             if self._client is not None:
                 try:
                     async with asyncio.timeout(_STREAMING_TIMEOUT):
-                        # Pass pending attachments if any.
+                        # Pass pending attachments and conversation history.
                         send_attachments = self._attachments or None
+                        history = self._build_message_history()
                         async for event in self._client.run_worker(
                             role,
                             text,
                             attachments=send_attachments,
                             conversation_id=self._conversation.id,
+                            message_history=history,
                         ):
                             if self._cancel_streaming.is_set():
                                 tokens.append("\n\n_[Cancelled by user]_")
