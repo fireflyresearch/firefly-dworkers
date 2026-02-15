@@ -270,6 +270,54 @@ Screen {
     text-style: bold;
 }
 
+/* ── Task progress block ───────────────────── */
+
+.task-progress-block {
+    height: auto;
+    padding: 0 0 0 1;
+}
+
+.activity-line {
+    color: #d4d4d4;
+    height: 1;
+}
+
+.task-tree {
+    color: #999999;
+    height: auto;
+    padding: 0 0 0 2;
+}
+
+/* ── Interactive question ──────────────────── */
+
+.interactive-question {
+    height: auto;
+    padding: 0 1;
+    margin: 0 0 1 0;
+}
+
+.question-text {
+    color: #d4d4d4;
+    height: auto;
+    padding: 0 0 1 0;
+}
+
+.question-options {
+    color: #d4d4d4;
+    height: auto;
+}
+
+.question-hint {
+    color: #555555;
+    height: 1;
+    padding: 1 0 0 0;
+}
+
+.question-answered {
+    color: #10b981;
+    height: 1;
+}
+
 /* ── Attachment indicator ────────────────────── */
 
 #attachment-bar {
@@ -434,4 +482,19 @@ Screen {
 .avatar-cyan { color: #22d3ee; }
 .avatar-yellow { color: #fbbf24; }
 .avatar-magenta { color: #c084fc; }
+
+/* ── Status bar hints ──────────────────────── */
+
+#status-bar .status-spacer {
+    width: 1fr;
+}
+
+#status-bar .status-hints {
+    width: auto;
+    color: #555555;
+}
+
+#status-bar .status-agent {
+    color: #60a5fa;
+}
 """
