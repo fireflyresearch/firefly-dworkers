@@ -408,6 +408,7 @@ class TestModelText:
         assert "Switched" in text
 
 
+
 class TestWelcomeTextMinimal:
     def test_welcome_text_is_short(self):
         """Welcome text should be concise — 20 lines or fewer (including mascot)."""

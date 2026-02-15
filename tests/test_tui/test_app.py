@@ -93,6 +93,7 @@ class TestStreamingCancellation:
         assert not app._cancel_streaming.is_set()
 
 
+
 class TestWorkerAvatarDisplay:
     def test_get_worker_display_with_cache(self):
         from firefly_dworkers_cli.tui.backend.models import WorkerInfo
