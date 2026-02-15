@@ -62,7 +62,8 @@ _PALETTE_COMMANDS = [
     ("invite", "Invite a worker to the conversation"),
     ("private", "Start/end private conversation"),
     ("plan", "List or execute workflow plans"),
-    ("project", "Run a multi-worker project"),
+    ("project", "Manage projects (create, switch, info, pause, archive, resume)"),
+    ("projects", "List all projects"),
     ("attach", "Attach a file to the next message"),
     ("detach", "Clear file attachments"),
     ("status", "Show session status"),
@@ -1054,15 +1055,35 @@ class DworkersApp(App):
                 else:
                     await self._cmd_list_plans(message_list)
 
+            case "/projects":
+                await self._cmd_projects(message_list)
+
             case "/project":
-                if arg:
-                    await self._cmd_project(message_list, arg)
-                else:
-                    await self._add_system_message(
-                        message_list,
-                        "Usage: `/project <brief>`\n\n"
-                        "Example: `/project Analyze Q4 sales data and create a report`",
-                    )
+                parts = arg.split(maxsplit=1)
+                subcmd = parts[0] if parts else ""
+                subarg = parts[1] if len(parts) > 1 else ""
+                match subcmd:
+                    case "create":
+                        await self._cmd_project_create(message_list, subarg)
+                    case "switch":
+                        await self._cmd_project_switch(message_list, subarg)
+                    case "info":
+                        await self._cmd_project_info(message_list)
+                    case "pause":
+                        await self._cmd_project_pause(message_list)
+                    case "archive":
+                        await self._cmd_project_archive(message_list)
+                    case "resume":
+                        await self._cmd_project_resume(message_list, subarg)
+                    case _:
+                        if subcmd:
+                            # Legacy behavior: treat as project brief
+                            await self._cmd_project(message_list, arg)
+                        else:
+                            await self._add_system_message(
+                                message_list,
+                                "Usage: `/project <create|switch|info|pause|archive|resume> [arg]`"
+                            )
 
             case "/conversations":
                 await self._add_system_message(
@@ -1579,6 +1600,118 @@ class DworkersApp(App):
         )
         summary = Static(timer.format_summary(token_estimate), classes="response-summary")
         await msg_box.mount(summary)
+
+    # ── Project lifecycle commands ───────────────────────────
+
+    async def _cmd_projects(self, container) -> None:
+        """List all active projects."""
+        projects = self._project_store.list_projects()
+        if not projects:
+            await self._add_system_message(container, "No projects yet. Use `/project create <name>` to start one.")
+            return
+        lines = ["**Projects**\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"]
+        for p in projects[:20]:
+            active = " *" if self._active_project and p.id == self._active_project.id else ""
+            lines.append(f"  `{p.id[:16]}`  {p.name:<30}  {p.conversation_count} convs  {p.status}{active}")
+        lines.append("\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")
+        lines.append("`/project switch <id>` to switch \u00b7 `/project create <name>` to create")
+        await self._add_system_message(container, "\n".join(lines))
+
+    async def _cmd_project_create(self, container, name: str) -> None:
+        """Create a new project and make it active."""
+        if not name:
+            await self._add_system_message(container, "Usage: `/project create <name>`")
+            return
+        proj = self._project_store.create_project(name)
+        self._active_project = proj
+        if self._conversation:
+            self._conversation.project_id = proj.id
+            self._store._save_conversation(self._conversation)
+            self._project_store.link_conversation(proj.id, self._conversation.id)
+        self._update_project_display()
+        await self._add_system_message(container, f'Project created: **{proj.name}** (`{proj.id}`)')
+
+    async def _cmd_project_switch(self, container, id_or_name: str) -> None:
+        """Switch to an existing project by ID or name."""
+        if not id_or_name:
+            await self._add_system_message(container, "Usage: `/project switch <id or name>`")
+            return
+        proj = self._project_store.get_project(id_or_name)
+        if not proj:
+            results = self._project_store.search_projects(id_or_name)
+            if results:
+                proj = self._project_store.get_project(results[0].id)
+        if not proj:
+            await self._add_system_message(container, f'Project not found: "{id_or_name}"')
+            return
+        self._save_session_state()
+        self._active_project = proj
+        self._conversation = None
+        self._total_tokens = 0
+        if proj.conversation_ids:
+            last_conv = self._store.get_conversation(proj.conversation_ids[-1])
+            if last_conv:
+                self._conversation = last_conv
+        self._update_project_display()
+        await self._add_system_message(container, f'Switched to project: **{proj.name}**')
+
+    async def _cmd_project_info(self, container) -> None:
+        """Show detailed info about the active project."""
+        if not self._active_project:
+            await self._add_system_message(container, "No active project. Use `/project create <name>`.")
+            return
+        p = self._active_project
+        lines = [
+            "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+            f"Project: {p.name}",
+            f"ID:      {p.id}",
+            f"Status:  {p.status}",
+            f"Created: {p.created_at.strftime('%b %d, %Y')}",
+            "",
+        ]
+        if p.conversation_ids:
+            lines.append(f"Conversations ({len(p.conversation_ids)}):")
+            for cid in p.conversation_ids[-5:]:
+                conv = self._store.get_conversation(cid)
+                if conv:
+                    lines.append(f"  {cid[:12]}  {conv.title:<30}  {len(conv.messages)} msgs")
+        lines.append("\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")
+        await self._add_system_message(container, "\n".join(lines))
+
+    async def _cmd_project_pause(self, container) -> None:
+        """Pause the active project."""
+        if not self._active_project:
+            await self._add_system_message(container, "No active project.")
+            return
+        self._active_project.status = "paused"
+        self._project_store.update_project(self._active_project)
+        self._save_session_state()
+        name = self._active_project.name
+        self._active_project = None
+        self._update_project_display()
+        await self._add_system_message(container, f'Project "{name}" paused. Use `/project resume` to continue.')
+
+    async def _cmd_project_archive(self, container) -> None:
+        """Archive the active project."""
+        if not self._active_project:
+            await self._add_system_message(container, "No active project.")
+            return
+        name = self._active_project.name
+        self._project_store.archive_project(self._active_project.id)
+        self._active_project = None
+        self._update_project_display()
+        await self._add_system_message(container, f'Project "{name}" archived.')
+
+    async def _cmd_project_resume(self, container, id_or_name: str) -> None:
+        """Resume a paused project, or the most recently paused one."""
+        if not id_or_name:
+            paused = self._project_store.list_projects(status="paused")
+            if paused:
+                id_or_name = paused[0].id
+            else:
+                await self._add_system_message(container, "Usage: `/project resume <id or name>`")
+                return
+        await self._cmd_project_switch(container, id_or_name)
 
     # ── Messaging commands ────────────────────────────────────
 
