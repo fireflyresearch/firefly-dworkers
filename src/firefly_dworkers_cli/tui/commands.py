@@ -64,6 +64,8 @@ _HELP_TEXT = """\
 | `/clear` | Clear the chat display |
 | `/retry` | Retry the last message |
 | `/status` | Show session status |
+| `/context` | Show context dashboard (tokens, messages, status) |
+| `/compact` | Compact conversation context to save tokens |
 | `/config` | Show configuration |
 | `/connectors` | List connector statuses |
 | `/models` | Show available models |
@@ -124,6 +126,8 @@ _COMMANDS: set[str] = {
     "/search",
     "/rename",
     "/archive",
+    "/context",
+    "/compact",
 }
 
 

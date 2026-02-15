@@ -63,6 +63,8 @@ _PALETTE_COMMANDS = [
     ("attach", "Attach a file to the next message"),
     ("detach", "Clear file attachments"),
     ("status", "Show session status"),
+    ("context", "Show context dashboard (tokens, messages, status)"),
+    ("compact", "Compact conversation context to save tokens"),
     ("config", "Show current configuration"),
     ("new", "Start a new conversation"),
     ("conversations", "List saved conversations"),

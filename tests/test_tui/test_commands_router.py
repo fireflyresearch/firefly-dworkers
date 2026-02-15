@@ -504,6 +504,16 @@ class TestTeamDisplayWithIdentities:
         assert "dworkers" in WELCOME_TEXT
 
 
+class TestContextCommands:
+    def test_context_command_registered(self):
+        from firefly_dworkers_cli.tui.commands import _COMMANDS
+        assert "/context" in _COMMANDS
+
+    def test_compact_command_registered(self):
+        from firefly_dworkers_cli.tui.commands import _COMMANDS
+        assert "/compact" in _COMMANDS
+
+
 class TestConversationManagementCommands:
     def test_list_command_registered(self):
         from firefly_dworkers_cli.tui.commands import _COMMANDS
