@@ -104,12 +104,24 @@ class MentionPopup(Vertical):
         """Replace popup content with new matching items."""
         self._items = items
         self._selected = 0
+        self._render_items()
+
+    def _render_items(self) -> None:
+        """Rebuild child Static widgets to reflect current items + selection."""
+        try:
+            self.remove_children()
+            for i, (role, desc) in enumerate(self._items):
+                cls = "mention-item-selected" if i == self._selected else "mention-item"
+                self.mount(Static(f"@{role}  {desc}", classes=cls))
+        except Exception:
+            pass  # No active app — widget not yet mounted in DOM.
 
     def move(self, delta: int) -> None:
         """Move selection by *delta* (-1 = up, +1 = down)."""
         if not self._items:
             return
         self._selected = max(0, min(len(self._items) - 1, self._selected + delta))
+        self._render_items()
 
     @property
     def selected_role(self) -> str | None:
@@ -130,12 +142,24 @@ class CommandPopup(Vertical):
         """Replace popup content with new matching items."""
         self._items = items
         self._selected = 0
+        self._render_items()
+
+    def _render_items(self) -> None:
+        """Rebuild child Static widgets to reflect current items + selection."""
+        try:
+            self.remove_children()
+            for i, (cmd, desc) in enumerate(self._items):
+                cls = "command-item-selected" if i == self._selected else "command-item"
+                self.mount(Static(f"/{cmd}  {desc}", classes=cls))
+        except Exception:
+            pass  # No active app — widget not yet mounted in DOM.
 
     def move(self, delta: int) -> None:
         """Move selection by *delta* (-1 = up, +1 = down)."""
         if not self._items:
             return
         self._selected = max(0, min(len(self._items) - 1, self._selected + delta))
+        self._render_items()
 
     @property
     def selected_command(self) -> str | None:
@@ -334,6 +358,7 @@ class DworkersApp(App):
         self._active_project: Project | None = None
         self._intent_classifier = IntentClassifier()
         self._quick_chat_mode: bool = False
+        self._queued_message: str | None = None
         self._connecting_timer: asyncio.Task | None = None
         if self._autonomy_override:
             self._router.autonomy_level = self._autonomy_override
@@ -510,7 +535,8 @@ class DworkersApp(App):
             # Private mode indicator
             private_widget = self.query_one("#status-private", Static)
             if self._private_role:
-                private_widget.update(f" · [private: @{self._private_role}]")
+                name, avatar, _ = self._get_worker_display(self._private_role)
+                private_widget.update(f" · [private: {name}]")
             else:
                 private_widget.update("")
 
@@ -521,9 +547,12 @@ class DworkersApp(App):
                     p for p in self._conversation.participants if p != "user"
                 ]
                 if agent_roles:
-                    parts_widget.update(
-                        " · " + " ".join(f"@{r}" for r in agent_roles)
-                    )
+                    labels = []
+                    for r in agent_roles:
+                        name, avatar, _ = self._get_worker_display(r)
+                        prefix = f"({avatar}) " if avatar else ""
+                        labels.append(f"{prefix}{name}")
+                    parts_widget.update(" · " + " ".join(labels))
                 else:
                     parts_widget.update("")
             else:
@@ -536,9 +565,11 @@ class DworkersApp(App):
         except Exception:
             return
         if self._active_project:
-            indicator.update(f" [project] {self._active_project.name}")
+            indicator.update(f" · {self._active_project.name}")
+            indicator.remove_class("status-no-project")
+            indicator.add_class("status-has-project")
         else:
-            indicator.update(" No project")
+            indicator.update("")
 
     _CONNECTING_FRAMES = ["-", "\\", "|", "/"]
 
@@ -742,7 +773,10 @@ class DworkersApp(App):
 
     async def on_prompt_input_submitted(self, event: PromptInput.Submitted) -> None:
         """Handle Enter-to-submit from the chat input."""
-        if not self._is_streaming:
+        if self._is_streaming:
+            self._queued_message = event.text
+            self._update_input_hint_queued()
+        else:
             await self._handle_input(event.text)
 
     async def on_key(self, event: events.Key) -> None:
@@ -836,11 +870,8 @@ class DworkersApp(App):
             self._conversation.participants.append("user")
         await self._add_user_message(message_list, text)
 
-        # Determine target worker role (private mode overrides @mentions).
-        if self._private_role:
-            role = self._private_role
-        else:
-            role = self._extract_role(text) or "manager"
+        # Determine target worker role via smart routing.
+        role = self._resolve_target_role(text)
         display_name, avatar, avatar_color = self._get_worker_display(role)
         sender_name = display_name
         sender_label = f"({avatar}) {display_name}" if avatar else display_name
@@ -971,6 +1002,12 @@ class DworkersApp(App):
         if self._attachments:
             self._clear_attachments()
         self._update_input_hint()
+
+        # Drain queued message (user typed while streaming).
+        if self._queued_message:
+            queued = self._queued_message
+            self._queued_message = None
+            await self._handle_input(queued)
 
     async def _add_user_message(self, container: VerticalScroll, text: str) -> None:
         """Mount a user message into the message list."""
@@ -1122,6 +1159,30 @@ class DworkersApp(App):
                 return self._name_to_role.get(mention, mention)
         return None
 
+    def _resolve_target_role(self, text: str) -> str:
+        """Determine which agent should handle this message.
+
+        Priority:
+        1. Explicit @mention in text
+        2. Private mode target
+        3. Single invited agent (auto-route)
+        4. Multiple invited agents -> manager (delegates)
+        5. Default -> manager
+        """
+        role = self._extract_role(text)
+        if role:
+            return role
+        if self._private_role:
+            return self._private_role
+        if self._conversation and self._conversation.participants:
+            agents = [
+                p for p in self._conversation.participants
+                if p not in ("user", "manager")
+            ]
+            if len(agents) == 1:
+                return agents[0]
+        return "manager"
+
     def _hide_welcome(self) -> None:
         """Hide the welcome banner and show the message list."""
         welcome = self.query_one("#welcome", Vertical)
@@ -1166,6 +1227,13 @@ class DworkersApp(App):
                     hint = "Enter to send · Shift+Enter for newline · /help for commands"
         with contextlib.suppress(NoMatches):
             self.query_one("#input-hint", Static).update(hint)
+
+    def _update_input_hint_queued(self) -> None:
+        """Show a hint that a message is queued for after streaming."""
+        with contextlib.suppress(NoMatches):
+            self.query_one("#input-hint", Static).update(
+                "Message queued \u2014 will send when response completes"
+            )
 
     # ── File attachments ─────────────────────────────────────
 
@@ -1474,6 +1542,18 @@ class DworkersApp(App):
 
             case "/archive":
                 await self._cmd_archive(message_list)
+
+            case "/context":
+                await self._add_system_message(
+                    message_list,
+                    self._router.context_text(self._conversation, self._total_tokens),
+                )
+
+            case "/compact":
+                await self._add_system_message(
+                    message_list,
+                    self._router.compact_text(self._conversation),
+                )
 
             case _:
                 await self._add_system_message(
