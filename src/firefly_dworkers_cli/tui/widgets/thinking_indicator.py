@@ -11,31 +11,32 @@ from typing import Any, Protocol, runtime_checkable
 
 from textual.widgets import Static
 
-# (emoji, verb) pairs — rotate every ~3 seconds during inference.
-THINKING_VERBS: list[tuple[str, str]] = [
-    ("\U0001f9e0", "Thinking..."),
-    ("\u2615", "Brewing coffee..."),
-    ("\u26a1", "Herding electrons..."),
-    ("\U0001f41d", "Consulting the hive mind..."),
-    ("\U0001f9ec", "Summoning neurons..."),
-    ("\U0001f3af", "Calibrating intuition..."),
-    ("\u26cf\ufe0f", "Mining insights..."),
-    ("\U0001f468\u200d\U0001f4bb", "Asking the senior dev..."),
-    ("\U0001f375", "Reading the tea leaves..."),
-    ("\U0001f517", "Connecting the dots..."),
-    ("\u270f\ufe0f", "Sharpening pencils..."),
-    ("\U0001f525", "Warming up the GPU..."),
-    ("\U0001f52e", "Channeling wisdom..."),
-    ("\U0001f522", "Crunching numbers..."),
-    ("\U0001f4d0", "Drafting blueprints..."),
-    ("\U0001f634", "Waking up the intern..."),
-    ("\u2728", "Polishing pixels..."),
-    ("\U0001f986", "Consulting the rubber duck..."),
-    ("\U0001f35d", "Untangling spaghetti..."),
-    ("\U0001f439", "Feeding the hamsters..."),
+# Humorous verbs — rotate every ~3 seconds during inference.
+THINKING_VERBS: list[str] = [
+    "Thinking...",
+    "Brewing coffee...",
+    "Herding electrons...",
+    "Consulting the hive mind...",
+    "Summoning neurons...",
+    "Calibrating intuition...",
+    "Mining insights...",
+    "Asking the senior dev...",
+    "Reading the tea leaves...",
+    "Connecting the dots...",
+    "Sharpening pencils...",
+    "Warming up the GPU...",
+    "Channeling wisdom...",
+    "Crunching numbers...",
+    "Drafting blueprints...",
+    "Waking up the intern...",
+    "Polishing pixels...",
+    "Consulting the rubber duck...",
+    "Untangling spaghetti...",
+    "Feeding the hamsters...",
 ]
 
-SPINNER_FRAMES = ["\u280b", "\u2819", "\u2839", "\u2838", "\u283c", "\u2834", "\u2826", "\u2827", "\u2807", "\u280f"]
+# Animated asterisk — rotates through states to create a pulsing effect.
+SPINNER_FRAMES = ["*", " *", "  *", " *", "*", "* ", "*  ", "* "]
 
 
 @runtime_checkable
@@ -58,9 +59,9 @@ class ThinkingIndicator(Static):
         random.shuffle(self._verb_pool)
         self._verb_index: int = 0
         self._spinner_index: int = 0
-        emoji, verb = THINKING_VERBS[self._verb_pool[0]]
+        verb = THINKING_VERBS[self._verb_pool[0]]
         super().__init__(
-            f"  {emoji} {verb}",
+            f"  * {verb}",
             classes="streaming-indicator",
             **kwargs,
         )
@@ -81,9 +82,9 @@ class ThinkingIndicator(Static):
         if not self._is_thinking:
             return
         self._spinner_index = (self._spinner_index + 1) % len(SPINNER_FRAMES)
-        emoji, verb = THINKING_VERBS[self._verb_pool[self._verb_index]]
+        verb = THINKING_VERBS[self._verb_pool[self._verb_index]]
         frame = SPINNER_FRAMES[self._spinner_index]
-        self.update(f"  {frame} {emoji} {verb}")
+        self.update(f"  {frame} {verb}")
 
     def _rotate_verb(self) -> None:
         """Switch to the next verb in the shuffled pool."""

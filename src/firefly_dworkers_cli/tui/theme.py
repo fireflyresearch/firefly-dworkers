@@ -148,8 +148,8 @@ Screen {
 /* ── Streaming indicator ─────────────────────── */
 
 .streaming-indicator {
-    color: #666666;
-    text-style: italic;
+    color: #f59e0b;
+    text-style: bold;
     padding: 0 0 0 1;
 }
 
@@ -278,7 +278,8 @@ Screen {
 }
 
 .activity-line {
-    color: #d4d4d4;
+    color: #f59e0b;
+    text-style: bold;
     height: 1;
 }
 

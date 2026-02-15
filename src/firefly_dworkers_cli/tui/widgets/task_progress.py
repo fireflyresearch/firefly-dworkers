@@ -64,9 +64,9 @@ class TaskProgressBlock(Vertical):
 
     def _refresh_display(self) -> None:
         """Update the activity line and task tree."""
-        emoji, verb = THINKING_VERBS[self._verb_pool[self._verb_index]]
+        verb = THINKING_VERBS[self._verb_pool[self._verb_index]]
         frame = SPINNER_FRAMES[self._spinner_index]
-        activity = f"  {frame} {emoji} {verb}"
+        activity = f"  {frame} {verb}"
         try:
             self.query_one("#activity-line", Static).update(activity)
         except Exception:
