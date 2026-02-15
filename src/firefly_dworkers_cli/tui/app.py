@@ -386,6 +386,7 @@ class DworkersApp(App):
         # Welcome banner (shown initially, hidden once chat starts)
         with Vertical(id="welcome"):
             yield Static(CommandRouter.WELCOME_TEXT, classes="welcome-text")
+            yield Static("", id="connecting-indicator", classes="connecting-indicator")
 
         # Message list (hidden initially, shown once chat starts)
         yield VerticalScroll(id="message-list")
@@ -554,16 +555,19 @@ class DworkersApp(App):
             self.query_one("#input-hint").display = True
 
     def _show_connecting_status(self) -> None:
-        """Show an animated connecting indicator in the status bar."""
+        """Show an animated connecting indicator in the welcome area and status bar."""
         with contextlib.suppress(NoMatches):
             conn = self.query_one("#conn-status", Static)
             conn.update(f"{self._CONNECTING_FRAMES[0]} connecting...")
             conn.remove_class("status-connected")
             conn.remove_class("status-remote")
+        with contextlib.suppress(NoMatches):
+            indicator = self.query_one("#connecting-indicator", Static)
+            indicator.update(f"  {self._CONNECTING_FRAMES[0]} connecting...")
         self._connecting_timer = asyncio.create_task(self._animate_connecting())
 
     async def _animate_connecting(self) -> None:
-        """Animate the connecting spinner in the status bar."""
+        """Animate the connecting spinner in welcome area and status bar."""
         idx = 0
         try:
             while True:
@@ -573,6 +577,10 @@ class DworkersApp(App):
                 with contextlib.suppress(NoMatches):
                     self.query_one("#conn-status", Static).update(
                         f"{frame} connecting..."
+                    )
+                with contextlib.suppress(NoMatches):
+                    self.query_one("#connecting-indicator", Static).update(
+                        f"  {frame} connecting..."
                     )
         except asyncio.CancelledError:
             pass
@@ -586,10 +594,12 @@ class DworkersApp(App):
         )
         self._router.client = self._client
 
-        # Stop the connecting animation.
+        # Stop the connecting animation and hide the indicator.
         if self._connecting_timer is not None:
             self._connecting_timer.cancel()
             self._connecting_timer = None
+        with contextlib.suppress(NoMatches):
+            self.query_one("#connecting-indicator", Static).update("")
 
         # Update connection status — shows whether dworkers backend is local or remote.
         conn = self.query_one("#conn-status", Static)

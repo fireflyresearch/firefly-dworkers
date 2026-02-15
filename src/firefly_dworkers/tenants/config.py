@@ -339,6 +339,12 @@ class SecurityConfig(BaseModel):
     guards: GuardsConfig = Field(default_factory=GuardsConfig)
 
 
+class UserProfileConfig(BaseModel):
+    name: str = ""
+    role: str = ""
+    company: str = ""
+
+
 class TenantConfig(BaseModel):
     id: str
     name: str
@@ -350,3 +356,4 @@ class TenantConfig(BaseModel):
     branding: BrandingConfig = Field(default_factory=BrandingConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
+    user_profile: UserProfileConfig = Field(default_factory=UserProfileConfig)

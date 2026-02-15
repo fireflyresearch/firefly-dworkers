@@ -90,6 +90,7 @@ class DocumentDesignerWorker(BaseWorker):
                 logger.warning("Failed to load vertical '%s'", v_name, exc_info=True)
 
         settings = config.workers.settings_for("designer")
+        up = user_profile or {}
         return get_worker_prompt(
             "designer",
             company_name=config.branding.company_name,
@@ -97,7 +98,7 @@ class DocumentDesignerWorker(BaseWorker):
             custom_instructions=settings.custom_instructions,
             autonomy_level=settings.autonomy,
             worker_display_name="Noor",
-            user_name=(user_profile or {}).get("name", ""),
-            user_role=(user_profile or {}).get("role", ""),
-            user_company=(user_profile or {}).get("company", ""),
+            user_name=up.get("name", "") or config.user_profile.name,
+            user_role=up.get("role", "") or config.user_profile.role,
+            user_company=up.get("company", "") or config.user_profile.company,
         )

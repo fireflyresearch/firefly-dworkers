@@ -45,6 +45,15 @@ Screen {
     content-align: center middle;
 }
 
+.connecting-indicator {
+    color: #f59e0b;
+    text-align: center;
+    text-style: bold;
+    width: auto;
+    height: 1;
+    margin: 1 0 0 0;
+}
+
 /* ── Message list ────────────────────────────── */
 
 #message-list {
