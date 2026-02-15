@@ -497,4 +497,53 @@ Screen {
 #status-bar .status-agent {
     color: #60a5fa;
 }
+
+/* ── Rich response rendering ──────────────── */
+
+.msg-content MarkdownFence {
+    margin: 1 0;
+    padding: 0 1;
+    background: #1a1a1a;
+    border: solid #333333;
+    color: #d4d4d4;
+    overflow-x: auto;
+}
+
+.msg-content Markdown > MarkdownBlockQuote {
+    border-left: thick #444444;
+    padding: 0 1;
+    color: #999999;
+    margin: 0 0 1 0;
+}
+
+.msg-content MarkdownH1 {
+    text-style: bold;
+    color: #e5e5e5;
+    margin: 1 0 0 0;
+    padding: 0;
+}
+
+.msg-content MarkdownH2 {
+    text-style: bold;
+    color: #d4d4d4;
+    margin: 1 0 0 0;
+    padding: 0;
+}
+
+.msg-content MarkdownH3 {
+    text-style: bold;
+    color: #d4d4d4;
+    margin: 1 0 0 0;
+    padding: 0;
+}
+
+.msg-content MarkdownBulletList {
+    margin: 0 0 0 2;
+    padding: 0;
+}
+
+.msg-content MarkdownOrderedList {
+    margin: 0 0 0 2;
+    padding: 0;
+}
 """
