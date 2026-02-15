@@ -27,6 +27,7 @@ from textual.css.query import NoMatches
 from textual.message import Message
 from textual.widgets import Markdown, Static, TextArea
 
+from firefly_dworkers_cli.tui.widgets.rich_response import RichResponseMarkdown
 from firefly_dworkers_cli.config import ConfigManager
 from firefly_dworkers_cli.tui.backend.client import DworkersClient, create_client
 from firefly_dworkers_cli.tui.backend.intent import IntentClassifier
@@ -756,7 +757,7 @@ class DworkersApp(App):
         await msg_box.mount(ai_header)
 
         # Create streaming content
-        content_widget = Markdown("", classes="msg-content")
+        content_widget = RichResponseMarkdown("", classes="msg-content")
         await msg_box.mount(content_widget)
 
         indicator = TaskProgressBlock()
@@ -873,7 +874,7 @@ class DworkersApp(App):
     async def _add_system_message(self, container: VerticalScroll, text: str) -> None:
         """Mount a system message into the message list."""
         msg_box = Vertical(classes="cmd-output")
-        content = Markdown(text, classes="cmd-output-content")
+        content = RichResponseMarkdown(text, classes="cmd-output-content")
         await container.mount(msg_box)
         await msg_box.mount(content)
         container.scroll_end(animate=False)
@@ -1325,7 +1326,7 @@ class DworkersApp(App):
 
         await self._add_system_message(container, f"Executing plan: **{plan_name}**...")
 
-        content = Markdown("", classes="msg-content")
+        content = RichResponseMarkdown("", classes="msg-content")
         box = Vertical(classes="msg-box-ai")
         header = Static("Planner", classes="msg-sender msg-sender-ai")
         await container.mount(box)
@@ -1413,7 +1414,7 @@ class DworkersApp(App):
                     f"{msg.sender}",
                     classes="msg-sender msg-sender-ai",
                 )
-                content = Markdown(msg.content, classes="msg-content")
+                content = RichResponseMarkdown(msg.content, classes="msg-content")
                 await container.mount(msg_box)
                 await msg_box.mount(header)
                 await msg_box.mount(content)
@@ -1534,7 +1535,7 @@ class DworkersApp(App):
             f"Starting project: **{brief[:60]}{'...' if len(brief) > 60 else ''}**",
         )
 
-        content_widget = Markdown("", classes="msg-content")
+        content_widget = RichResponseMarkdown("", classes="msg-content")
         msg_box = Vertical(classes="msg-box-ai")
         header = Static(
             "Project Orchestrator",
