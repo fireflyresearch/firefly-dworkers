@@ -122,6 +122,23 @@ class TestWorkerInfoDescription:
         assert w.description == ""
 
 
+class TestWorkerInfoIdentity:
+    def test_tagline_field(self):
+        w = WorkerInfo(role="analyst", name="Leo", tagline="Strategic analysis")
+        assert w.tagline == "Strategic analysis"
+
+    def test_avatar_fields(self):
+        w = WorkerInfo(role="manager", name="Amara", avatar="A", avatar_color="green")
+        assert w.avatar == "A"
+        assert w.avatar_color == "green"
+
+    def test_identity_defaults_empty(self):
+        w = WorkerInfo(role="analyst", name="Analyst")
+        assert w.tagline == ""
+        assert w.avatar == ""
+        assert w.avatar_color == ""
+
+
 class TestConstants:
     def test_max_attachment_size(self):
         assert MAX_ATTACHMENT_SIZE == 10 * 1024 * 1024

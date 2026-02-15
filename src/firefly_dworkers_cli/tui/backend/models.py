@@ -12,6 +12,9 @@ class WorkerInfo(BaseModel):
     role: str
     name: str
     description: str = ""
+    tagline: str = ""
+    avatar: str = ""
+    avatar_color: str = ""
     enabled: bool = True
     autonomy: str = "semi_supervised"
     model: str = ""

@@ -78,17 +78,28 @@ class LocalClient:
             workers: list[WorkerInfo] = []
             for role in roles:
                 settings = config.workers.settings_for(role.value)
-                # Pull description from factory metadata (registered at import time).
+                # Pull description and identity from factory metadata (registered at import time).
                 try:
                     meta = worker_factory.get_metadata(role)
                     description = meta.description
+                    display_name = meta.display_name or role.value.replace("_", " ").title()
+                    tagline = meta.tagline
+                    avatar = meta.avatar
+                    avatar_color = meta.avatar_color
                 except KeyError:
                     description = ""
+                    display_name = role.value.replace("_", " ").title()
+                    tagline = ""
+                    avatar = ""
+                    avatar_color = ""
                 workers.append(
                     WorkerInfo(
                         role=role.value,
-                        name=role.value.replace("_", " ").title(),
+                        name=display_name,
                         description=description,
+                        tagline=tagline,
+                        avatar=avatar,
+                        avatar_color=avatar_color,
                         enabled=settings.enabled,
                         autonomy=settings.autonomy,
                         model=config.models.default,
@@ -98,11 +109,11 @@ class LocalClient:
         except Exception:
             logger.debug("list_workers failed, returning defaults", exc_info=True)
             return [
-                WorkerInfo(role="analyst", name="Analyst"),
-                WorkerInfo(role="researcher", name="Researcher"),
-                WorkerInfo(role="data_analyst", name="Data Analyst"),
-                WorkerInfo(role="manager", name="Manager"),
-                WorkerInfo(role="designer", name="Designer"),
+                WorkerInfo(role="manager", name="Amara", avatar="A", avatar_color="green", tagline="Your team lead"),
+                WorkerInfo(role="analyst", name="Leo", avatar="L", avatar_color="blue", tagline="Strategic analysis"),
+                WorkerInfo(role="researcher", name="Yuki", avatar="Y", avatar_color="cyan", tagline="Deep research"),
+                WorkerInfo(role="data_analyst", name="Kofi", avatar="K", avatar_color="yellow", tagline="Data processing"),
+                WorkerInfo(role="designer", name="Noor", avatar="N", avatar_color="magenta", tagline="Creative design"),
             ]
 
     @staticmethod
