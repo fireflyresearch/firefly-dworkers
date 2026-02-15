@@ -46,7 +46,7 @@ from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
 from firefly_dworkers_cli.tui.commands import CommandRouter
 from firefly_dworkers_cli.tui.response_timer import ResponseTimer
 from firefly_dworkers_cli.tui.theme import APP_CSS
-from firefly_dworkers_cli.tui.widgets.thinking_indicator import ThinkingIndicator
+from firefly_dworkers_cli.tui.widgets.task_progress import TaskProgressBlock
 
 # Fallback roles used before the backend has been queried.
 _FALLBACK_ROLES = {"analyst", "researcher", "data_analyst", "manager", "designer"}
@@ -759,7 +759,7 @@ class DworkersApp(App):
         content_widget = Markdown("", classes="msg-content")
         await msg_box.mount(content_widget)
 
-        indicator = ThinkingIndicator()
+        indicator = TaskProgressBlock()
         await msg_box.mount(indicator)
         message_list.scroll_end(animate=False)
 
@@ -1332,7 +1332,7 @@ class DworkersApp(App):
         await box.mount(header)
         await box.mount(content)
 
-        indicator = ThinkingIndicator()
+        indicator = TaskProgressBlock()
         await box.mount(indicator)
         container.scroll_end(animate=False)
 
@@ -1544,7 +1544,7 @@ class DworkersApp(App):
         await msg_box.mount(header)
         await msg_box.mount(content_widget)
 
-        indicator = ThinkingIndicator()
+        indicator = TaskProgressBlock()
         await msg_box.mount(indicator)
         container.scroll_end(animate=False)
 
@@ -2041,6 +2041,24 @@ class DworkersApp(App):
     def action_focus_input(self) -> None:
         """Focus the input area."""
         self.query_one("#prompt-input", PromptInput).focus()
+
+    async def _mount_question(
+        self,
+        container: VerticalScroll,
+        question: str,
+        options: list[str],
+    ) -> None:
+        """Mount an interactive question in the chat area."""
+        from firefly_dworkers_cli.tui.widgets.interactive_question import InteractiveQuestion
+        widget = InteractiveQuestion(question=question, options=options)
+        await container.mount(widget)
+        container.scroll_end(animate=False)
+        widget.focus()
+
+    async def on_interactive_question_answered(self, event) -> None:
+        """Handle the user's answer to an interactive question."""
+        # Send the chosen answer as the next user message
+        await self._handle_input(event.choice)
 
     @staticmethod
     def _format_status_hints(
