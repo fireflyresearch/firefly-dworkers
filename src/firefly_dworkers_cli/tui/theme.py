@@ -165,8 +165,8 @@ Screen {
 #input-area {
     dock: bottom;
     height: auto;
-    max-height: 10;
-    min-height: 3;
+    max-height: 6;
+    min-height: 2;
     border-top: solid #444444;
     padding: 0 1;
 }
@@ -174,7 +174,7 @@ Screen {
 #input-area #prompt-input {
     width: 1fr;
     min-height: 1;
-    max-height: 8;
+    max-height: 5;
     background: transparent;
     border: none;
     color: #d4d4d4;
