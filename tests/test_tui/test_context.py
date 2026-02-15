@@ -88,3 +88,32 @@ class TestConversationContextBuilder:
         context = builder.build(messages)
         assert "[You]" in context
         assert "[Amara]" in context
+
+
+class TestCompactionEngine:
+    def test_should_compact_under_threshold(self):
+        from firefly_dworkers_cli.tui.backend.context import CompactionEngine
+        engine = CompactionEngine()
+        assert engine.should_compact(token_count=5000, model_limit=128000) is False
+
+    def test_should_compact_over_threshold(self):
+        from firefly_dworkers_cli.tui.backend.context import CompactionEngine
+        engine = CompactionEngine()
+        assert engine.should_compact(token_count=90000, model_limit=128000) is True
+
+    def test_compact_returns_reduced_context(self):
+        from firefly_dworkers_cli.tui.backend.context import CompactionEngine, CONTEXT_RECENT_COUNT
+        engine = CompactionEngine()
+        messages = [_make_message(f"Message {i}", sender="You" if i % 2 == 0 else "Amara") for i in range(30)]
+        result = engine.compact(messages)
+        assert result.summary != ""
+        assert len(result.recent_messages) == CONTEXT_RECENT_COUNT
+        assert result.compacted_count == 30 - CONTEXT_RECENT_COUNT
+
+    def test_compact_small_conversation_noop(self):
+        from firefly_dworkers_cli.tui.backend.context import CompactionEngine
+        engine = CompactionEngine()
+        messages = [_make_message(f"Message {i}") for i in range(5)]
+        result = engine.compact(messages)
+        assert result.compacted_count == 0
+        assert len(result.recent_messages) == 5
