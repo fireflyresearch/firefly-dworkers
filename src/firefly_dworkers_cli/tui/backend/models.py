@@ -54,6 +54,36 @@ class Conversation(BaseModel):
     status: str = "active"
     tags: list[str] = Field(default_factory=list)
     tenant_id: str = "default"
+    project_id: str | None = None
+
+
+class Project(BaseModel):
+    """A project groups conversations, plans, agents, and shared memory."""
+
+    id: str
+    name: str
+    description: str = ""
+    created_at: datetime
+    updated_at: datetime
+    status: str = "active"
+    conversation_ids: list[str] = Field(default_factory=list)
+    plan_ids: list[str] = Field(default_factory=list)
+    custom_agents: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    participants: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProjectSummary(BaseModel):
+    """Lightweight project summary for listing."""
+
+    id: str
+    name: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    conversation_count: int = 0
+    participant_count: int = 0
 
 
 class PlanInfo(BaseModel):

@@ -145,3 +145,65 @@ class TestConstants:
 
     def test_max_attachments(self):
         assert MAX_ATTACHMENTS == 5
+
+
+class TestProjectModel:
+    def test_project_creation(self):
+        from datetime import datetime, timezone
+
+        from firefly_dworkers_cli.tui.backend.models import Project
+
+        proj = Project(
+            id="proj_abc123",
+            name="Q4 Market Analysis",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        assert proj.id == "proj_abc123"
+        assert proj.name == "Q4 Market Analysis"
+        assert proj.status == "active"
+        assert proj.conversation_ids == []
+        assert proj.custom_agents == []
+
+    def test_project_summary(self):
+        from datetime import datetime, timezone
+
+        from firefly_dworkers_cli.tui.backend.models import ProjectSummary
+
+        summary = ProjectSummary(
+            id="proj_abc123",
+            name="Q4 Analysis",
+            status="active",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            conversation_count=3,
+            participant_count=2,
+        )
+        assert summary.conversation_count == 3
+
+    def test_conversation_has_project_id(self):
+        from datetime import datetime, timezone
+
+        from firefly_dworkers_cli.tui.backend.models import Conversation
+
+        conv = Conversation(
+            id="conv_test",
+            title="Test",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+            project_id="proj_abc123",
+        )
+        assert conv.project_id == "proj_abc123"
+
+    def test_conversation_project_id_defaults_none(self):
+        from datetime import datetime, timezone
+
+        from firefly_dworkers_cli.tui.backend.models import Conversation
+
+        conv = Conversation(
+            id="conv_test",
+            title="Test",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+        assert conv.project_id is None
