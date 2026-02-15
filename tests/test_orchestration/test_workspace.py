@@ -40,3 +40,22 @@ class TestWorkspaceSnapshot:
         ws = ProjectWorkspace("test_project")
         ws.load_from_file(path)
         assert ws.get_fact("loaded") == "yes"
+
+
+class TestWorkspaceReuse:
+    def test_workspace_accepts_existing_facts(self):
+        from firefly_dworkers.orchestration.workspace import ProjectWorkspace
+        ws = ProjectWorkspace("test_reuse")
+        ws.restore({"facts": {"prior_result": "42%"}})
+        assert ws.get_fact("prior_result") == "42%"
+
+    def test_workspace_preserves_facts_across_operations(self):
+        from firefly_dworkers.orchestration.workspace import ProjectWorkspace
+        ws = ProjectWorkspace("test_persist")
+        ws.set_fact("finding_1", "Revenue grew 12%")
+        ws.set_fact("finding_2", "Market expanding")
+        snapshot = ws.snapshot()
+        ws2 = ProjectWorkspace("test_persist_2")
+        ws2.restore(snapshot)
+        assert ws2.get_fact("finding_1") == "Revenue grew 12%"
+        assert ws2.get_fact("finding_2") == "Market expanding"
