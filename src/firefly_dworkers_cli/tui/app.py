@@ -83,6 +83,8 @@ _PALETTE_COMMANDS = [
     ("archive", "Archive the current conversation"),
     ("clear", "Clear chat display"),
     ("setup", "Re-run setup wizard"),
+    ("exit", "Save session and exit with resume info"),
+    ("quick", "Send next message as quick chat (skip intent detection)"),
     ("quit", "Exit dworkers"),
 ]
 
@@ -340,6 +342,7 @@ class DworkersApp(App):
         self._project_store = ProjectStore()
         self._active_project: Project | None = None
         self._intent_classifier = IntentClassifier()
+        self._quick_chat_mode: bool = False
         if self._autonomy_override:
             self._router.autonomy_level = self._autonomy_override
 
@@ -352,6 +355,24 @@ class DworkersApp(App):
         if self._private_role:
             state["private_role"] = self._private_role
         self._store.save_session_state(state)
+
+    def _build_exit_banner(self) -> str:
+        """Build a resume-info banner shown on /exit."""
+        lines = ["\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500", "Session saved.", ""]
+        if self._active_project:
+            lines.append(f"  Project:      {self._active_project.name} ({self._active_project.id})")
+        if self._conversation:
+            msg_count = len(self._conversation.messages)
+            lines.append(f"  Conversation: {self._conversation.title} ({self._conversation.id})")
+            lines.append(f"  Messages:     {msg_count} \u00b7 ~{self._total_tokens:,} tokens")
+        lines.append("")
+        lines.append("  Resume with:")
+        if self._active_project:
+            lines.append(f"    dworkers --resume {self._active_project.id}")
+        if self._conversation:
+            lines.append(f"    dworkers -r {self._conversation.id}")
+        lines.append("\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500")
+        return "\n".join(lines)
 
     async def _restore_session_state(self) -> None:
         """Restore session state from SQLite."""
@@ -386,7 +407,7 @@ class DworkersApp(App):
             yield Static("Enter to send · Shift+Enter for newline · /help for commands",
                          classes="input-hint", id="input-hint")
 
-        # Status bar — model · model-location · autonomy · participants · tokens (right: connection)
+        # Status bar — model · model-location · autonomy · participants · project · tokens (right: connection)
         with Horizontal(id="status-bar"):
             yield Static("local", classes="status-item status-model", id="status-model")
             yield Static(" · ", classes="status-sep", id="sep-after-model")
@@ -396,6 +417,7 @@ class DworkersApp(App):
             yield Static(" semi-supervised", classes="status-item status-autonomy", id="status-autonomy")
             yield Static("", classes="status-item status-private", id="status-private")
             yield Static("", classes="status-item status-participants", id="status-participants")
+            yield Static("", id="project-indicator")
             yield Static("", classes="status-item status-tokens", id="token-count")
             yield Static("", classes="status-connection status-connected", id="conn-status")
 
@@ -506,6 +528,17 @@ class DworkersApp(App):
                     parts_widget.update("")
             else:
                 parts_widget.update("")
+
+    def _update_project_display(self) -> None:
+        """Update the project indicator widget with the active project name."""
+        try:
+            indicator = self.query_one("#project-indicator", Static)
+        except Exception:
+            return
+        if self._active_project:
+            indicator.update(f" [project] {self._active_project.name}")
+        else:
+            indicator.update(" No project")
 
     async def _connect_and_focus(self) -> None:
         """Connect to backend client and focus the input."""
@@ -1101,7 +1134,21 @@ class DworkersApp(App):
                 await self._cmd_setup()
 
             case "/quit":
+                self._save_session_state()
                 self.exit()
+
+            case "/exit":
+                self._save_session_state()
+                banner = self._build_exit_banner()
+                await self._add_system_message(message_list, banner)
+                await asyncio.sleep(1.5)
+                self.exit()
+
+            case "/quick":
+                self._quick_chat_mode = True
+                await self._add_system_message(
+                    message_list, "Quick chat mode \u2014 intent detection disabled for this message."
+                )
 
             case "/usage":
                 if self._client is not None:
@@ -1673,6 +1720,7 @@ class DworkersApp(App):
             return
         now = time.monotonic()
         if now - self._last_ctrl_c < 2.0:
+            self._save_session_state()
             self.exit()
         else:
             self._last_ctrl_c = now

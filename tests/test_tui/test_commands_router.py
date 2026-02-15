@@ -530,3 +530,32 @@ class TestConversationManagementCommands:
     def test_archive_command_registered(self):
         from firefly_dworkers_cli.tui.commands import _COMMANDS
         assert "/archive" in _COMMANDS
+
+
+class TestExitCommand:
+    def test_exit_registered(self):
+        from firefly_dworkers_cli.tui.commands import _COMMANDS
+        assert "/exit" in _COMMANDS
+
+    def test_quick_registered(self):
+        from firefly_dworkers_cli.tui.commands import _COMMANDS
+        assert "/quick" in _COMMANDS
+
+    def test_exit_in_help_text(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        assert "/exit" in router.help_text
+
+    def test_quick_in_help_text(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        assert "/quick" in router.help_text
+
+
+class TestProjectCommands:
+    @pytest.mark.parametrize("cmd", ["/projects"])
+    def test_project_commands_registered(self, cmd):
+        from firefly_dworkers_cli.tui.commands import _COMMANDS
+        assert cmd in _COMMANDS
+
+    def test_projects_in_help_text(self):
+        router = CommandRouter(client=None, store=_make_store(), config_mgr=_make_config_mgr())
+        assert "/projects" in router.help_text

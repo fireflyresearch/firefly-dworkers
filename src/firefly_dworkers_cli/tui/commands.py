@@ -50,7 +50,8 @@ _HELP_TEXT = """\
 | `/invite <role>` | Invite a worker to the conversation |
 | `/private [role]` | Start/end private conversation |
 | `/plan [name]` | List or execute workflow plans |
-| `/project <brief>` | Run a multi-worker project |
+| `/project <sub>` | Manage projects (create, switch, info, pause, archive, resume) |
+| `/projects` | List all projects |
 | `/attach <path>` | Attach a file to the next message |
 | `/detach` | Clear file attachments |
 | `/new` | Start a fresh conversation |
@@ -79,6 +80,8 @@ _HELP_TEXT = """\
 | `/approve <id>` | Approve a checkpoint |
 | `/reject <id>` | Reject a checkpoint |
 | `/setup` | Re-run setup wizard |
+| `/exit` | Save session and exit with resume info |
+| `/quick` | Send next message as quick chat (skip intent detection) |
 | `/quit` | Exit dworkers |
 
 **Tips**
@@ -128,6 +131,9 @@ _COMMANDS: set[str] = {
     "/archive",
     "/context",
     "/compact",
+    "/exit",
+    "/quick",
+    "/projects",
 }
 
 
