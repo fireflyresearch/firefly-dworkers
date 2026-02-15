@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
     WorkerRole.ANALYST,
     description="Consulting analyst — analysis & reporting",
     tags=["analyst", "consulting"],
+    display_name="Leo",
+    avatar="L",
+    avatar_color="blue",
+    tagline="Strategic analysis and actionable recommendations",
 )
 class AnalystWorker(BaseWorker):
     """Digital worker specialised in consulting analysis.

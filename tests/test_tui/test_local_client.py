@@ -161,3 +161,31 @@ class TestFactoryIdentityFields:
         assert meta.avatar == ""
         assert meta.avatar_color == ""
         assert meta.tagline == ""
+
+
+class TestRegisteredWorkerIdentities:
+    """Verify that all 5 built-in workers have identity metadata."""
+
+    @pytest.mark.parametrize(
+        "role_str,expected_name,expected_avatar,expected_color",
+        [
+            ("manager", "Amara", "A", "green"),
+            ("analyst", "Leo", "L", "blue"),
+            ("researcher", "Yuki", "Y", "cyan"),
+            ("data_analyst", "Kofi", "K", "yellow"),
+            ("designer", "Noor", "N", "magenta"),
+        ],
+    )
+    def test_worker_identity(self, role_str, expected_name, expected_avatar, expected_color):
+        from firefly_dworkers.types import WorkerRole
+        from firefly_dworkers.workers.factory import worker_factory
+
+        # Ensure workers are imported
+        import firefly_dworkers.workers  # noqa: F401
+
+        role = WorkerRole(role_str)
+        meta = worker_factory.get_metadata(role)
+        assert meta.display_name == expected_name
+        assert meta.avatar == expected_avatar
+        assert meta.avatar_color == expected_color
+        assert meta.tagline != ""

@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
     WorkerRole.DATA_ANALYST,
     description="Data analyst — data processing & visualization",
     tags=["data_analyst", "data"],
+    display_name="Kofi",
+    avatar="K",
+    avatar_color="yellow",
+    tagline="Data processing, queries, and visualization",
 )
 class DataAnalystWorker(BaseWorker):
     """Digital worker specialised in data analysis.

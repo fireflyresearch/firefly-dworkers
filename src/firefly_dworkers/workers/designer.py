@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
     WorkerRole.DESIGNER,
     description="Designer — document design & creative work",
     tags=["designer", "creative"],
+    display_name="Noor",
+    avatar="N",
+    avatar_color="magenta",
+    tagline="Document design and creative work",
 )
 class DocumentDesignerWorker(BaseWorker):
     """Digital worker specialised in document design and creative direction.

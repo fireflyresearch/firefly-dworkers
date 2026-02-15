@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
     WorkerRole.RESEARCHER,
     description="Researcher — deep research & analysis",
     tags=["researcher", "consulting"],
+    display_name="Yuki",
+    avatar="Y",
+    avatar_color="cyan",
+    tagline="Deep research and knowledge synthesis",
 )
 class ResearcherWorker(BaseWorker):
     """Digital worker specialised in research.

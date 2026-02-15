@@ -61,6 +61,10 @@ except ImportError:
     WorkerRole.MANAGER,
     description="Manager — team lead who routes tasks & launches plans",
     tags=["manager", "orchestration"],
+    display_name="Amara",
+    avatar="A",
+    avatar_color="green",
+    tagline="Your team lead — routes tasks and launches plans",
 )
 class ManagerWorker(BaseWorker):
     """Digital worker specialised in project management.
