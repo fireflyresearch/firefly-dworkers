@@ -252,7 +252,7 @@ class DworkersApp(App):
         self._last_ctrl_c: float = 0.0
         self._config_load_failed: bool = False
         # Dynamic worker cache — populated after backend connects.
-        self._workers: list[WorkerInfo] = []
+        self._worker_cache: list[WorkerInfo] = []
         self._known_roles: set[str] = set(_FALLBACK_ROLES)
         self._role_descriptions: dict[str, str] = {}
         # Private conversation mode — when set, all messages go to this role.
@@ -440,11 +440,11 @@ class DworkersApp(App):
         # Filter roles that match the typed fragment.
         matches = [
             (w.role, w.description)
-            for w in self._workers
+            for w in self._worker_cache
             if w.role.startswith(fragment)
         ]
         # Fallback if workers haven't loaded yet.
-        if not self._workers:
+        if not self._worker_cache:
             matches = [
                 (r, "") for r in sorted(_FALLBACK_ROLES) if r.startswith(fragment)
             ]
@@ -688,10 +688,10 @@ class DworkersApp(App):
         if self._client is None:
             return
         try:
-            self._workers = await self._client.list_workers()
-            self._known_roles = {w.role for w in self._workers}
+            self._worker_cache = await self._client.list_workers()
+            self._known_roles = {w.role for w in self._worker_cache}
             self._role_descriptions = {
-                w.role: w.description for w in self._workers if w.description
+                w.role: w.description for w in self._worker_cache if w.description
             }
         except Exception:
             # Keep fallback roles if the backend call fails.
