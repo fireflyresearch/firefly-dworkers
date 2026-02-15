@@ -110,6 +110,40 @@ class MentionPopup(Vertical):
         return None
 
 
+class CommandPopup(Vertical):
+    """Autocomplete popup for /slash commands."""
+
+    def __init__(self, items: list[tuple[str, str]]) -> None:
+        super().__init__(id="command-popup")
+        self._items = items
+        self._selected = 0
+
+    def compose(self) -> ComposeResult:
+        for i, (cmd, desc) in enumerate(self._items):
+            label = f"/{cmd}  {desc}"
+            cls = "command-item-selected" if i == 0 else "command-item"
+            yield Static(label, classes=cls, id=f"cmd-{i}")
+
+    def move(self, delta: int) -> None:
+        """Move selection by *delta* (-1 = up, +1 = down)."""
+        if not self._items:
+            return
+        old = self._selected
+        self._selected = max(0, min(len(self._items) - 1, self._selected + delta))
+        if old != self._selected:
+            with contextlib.suppress(NoMatches):
+                self.query_one(f"#cmd-{old}", Static).set_classes("command-item")
+                self.query_one(f"#cmd-{self._selected}", Static).set_classes(
+                    "command-item-selected"
+                )
+
+    @property
+    def selected_command(self) -> str | None:
+        if self._items:
+            return self._items[self._selected][0]
+        return None
+
+
 class PromptInput(TextArea):
     """Chat input — Enter submits, Shift+Enter inserts newline.
 
@@ -118,8 +152,9 @@ class PromptInput(TextArea):
     subclass intercepts Enter *before* the parent handler, posts a
     :class:`Submitted` message, and lets the App handle it.
 
-    Also provides @mention autocomplete when the user types ``@`` followed
-    by characters. The popup is managed by the parent :class:`DworkersApp`.
+    Also provides @mention and /command autocomplete when the user types
+    ``@`` or ``/`` followed by characters. The popups are managed by the
+    parent :class:`DworkersApp`.
     """
 
     class Submitted(Message):
@@ -130,6 +165,27 @@ class PromptInput(TextArea):
             self.text = text
 
     async def _on_key(self, event: events.Key) -> None:
+        # If command popup is visible, intercept navigation keys.
+        cmd_popup = self._get_command_popup()
+        if cmd_popup is not None:
+            if event.key == "escape":
+                self.app._dismiss_command_popup()
+                event.stop()
+                event.prevent_default()
+                return
+            if event.key in ("up", "down"):
+                cmd_popup.move(-1 if event.key == "up" else 1)
+                event.stop()
+                event.prevent_default()
+                return
+            if event.key in ("tab", "enter"):
+                cmd = cmd_popup.selected_command
+                if cmd:
+                    self.app._complete_command(cmd)
+                event.stop()
+                event.prevent_default()
+                return
+
         # If mention popup is visible, intercept navigation keys.
         popup = self._get_mention_popup()
         if popup is not None:
@@ -172,6 +228,13 @@ class PromptInput(TextArea):
         """Return the active mention popup, or None."""
         try:
             return self.app.query_one("#mention-popup", MentionPopup)
+        except NoMatches:
+            return None
+
+    def _get_command_popup(self) -> CommandPopup | None:
+        """Return the active command popup, or None."""
+        try:
+            return self.app.query_one("#command-popup", CommandPopup)
         except NoMatches:
             return None
 
@@ -448,12 +511,13 @@ class DworkersApp(App):
     _MENTION_PARTIAL_RE = re.compile(r"@(\w*)$")
 
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
-        """Update the input hint and manage @mention popup as the user types."""
+        """Update the input hint and manage popup autocomplete as the user types."""
         if event.text_area.id != "prompt-input":
             return
         text = event.text_area.text
         self._update_input_hint(text)
         self._update_mention_popup(text)
+        self._update_command_popup(text)
 
     def _update_mention_popup(self, text: str) -> None:
         """Show, update, or dismiss the @mention autocomplete popup."""
@@ -511,6 +575,48 @@ class DworkersApp(App):
             new_text = text[: match.start()] + f"@{role} "
             prompt.clear()
             prompt.insert(new_text)
+
+    # ── /command autocomplete ─────────────────────────────────
+
+    def _match_command_fragment(self, text: str) -> str | None:
+        """Return the command fragment if text starts with / and has no space."""
+        if not text.startswith("/"):
+            return None
+        if " " in text:
+            return None
+        return text[1:]
+
+    def _update_command_popup(self, text: str) -> None:
+        """Show, update, or dismiss the /command autocomplete popup."""
+        fragment = self._match_command_fragment(text)
+        if fragment is None:
+            self._dismiss_command_popup()
+            return
+
+        matches = [
+            (cmd, desc) for cmd, desc in _PALETTE_COMMANDS if cmd.startswith(fragment)
+        ]
+        if not matches:
+            self._dismiss_command_popup()
+            return
+
+        # Replace existing popup to reflect new filter.
+        self._dismiss_command_popup()
+        popup = CommandPopup(matches[:10])
+        input_area = self.query_one("#input-area", Vertical)
+        input_area.mount(popup, before=self.query_one("#input-row", Horizontal))
+
+    def _dismiss_command_popup(self) -> None:
+        """Remove the command popup if it exists."""
+        with contextlib.suppress(NoMatches):
+            self.query_one("#command-popup", CommandPopup).remove()
+
+    def _complete_command(self, cmd: str) -> None:
+        """Replace the partial /fragment with the completed /command."""
+        self._dismiss_command_popup()
+        prompt = self.query_one("#prompt-input", PromptInput)
+        prompt.clear()
+        prompt.insert(f"/{cmd} ")
 
     async def on_prompt_input_submitted(self, event: PromptInput.Submitted) -> None:
         """Handle Enter-to-submit from the chat input."""
@@ -787,7 +893,7 @@ class DworkersApp(App):
             role = self._extract_role(text)
             if role:
                 # Look up the worker for rich display.
-                worker_name, avatar, _ = self._worker_display(role)
+                worker_name, avatar, _ = self._get_worker_display(role)
                 avatar_prefix = f"({avatar}) " if avatar else ""
                 desc = self._role_descriptions.get(role, "")
                 if raw_mention and raw_mention != role:
