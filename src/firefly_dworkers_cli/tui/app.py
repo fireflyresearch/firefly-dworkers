@@ -380,6 +380,7 @@ class DworkersApp(App):
         Binding("ctrl+n", "new_conversation", "New Chat", show=False),
         Binding("ctrl+l", "clear_chat", "Clear", show=False),
         Binding("escape", "focus_input", "Focus Input", show=False),
+        Binding("ctrl+tab", "next_tab", "Next Tab", show=False),
     ]
 
     GREETING_PROMPT = (
@@ -433,6 +434,8 @@ class DworkersApp(App):
         self._quick_chat_mode: bool = False
         self._queued_message: str | None = None
         self._connecting_timer: asyncio.Task | None = None
+        self._tab_states: dict[str, dict] = {}
+        self._pending_plan: list[tuple[str, str]] | None = None
         if self._autonomy_override:
             self._router.autonomy_level = self._autonomy_override
 
@@ -445,6 +448,68 @@ class DworkersApp(App):
         if self._private_role:
             state["private_role"] = self._private_role
         self._store.save_session_state(state)
+
+    def _save_current_conversation_state(self) -> None:
+        """Save current conversation's ephemeral state for tab switching."""
+        if not self._conversation:
+            return
+        self._tab_states[self._conversation.id] = {
+            "private_role": self._private_role,
+            "total_tokens": self._total_tokens,
+            "participants": list(self._conversation.participants),
+        }
+
+    def _restore_conversation_state(self, conv_id: str) -> None:
+        """Restore ephemeral state for a conversation after tab switch."""
+        state = self._tab_states.get(conv_id, {})
+        self._private_role = state.get("private_role")
+        self._total_tokens = state.get("total_tokens", 0)
+
+    async def _switch_conversation(self, conv_id: str) -> None:
+        """Switch to a different conversation tab."""
+        if self._conversation and self._conversation.id == conv_id:
+            return
+
+        self._save_current_conversation_state()
+
+        loaded = self._store.get_conversation(conv_id)
+        if loaded is None:
+            return
+
+        self._conversation = loaded
+        self._restore_conversation_state(conv_id)
+
+        message_list = self.query_one("#message-list", VerticalScroll)
+        message_list.remove_children()
+
+        for msg in loaded.messages:
+            if msg.is_ai:
+                display_name, avatar, avatar_color = self._get_worker_display(msg.role)
+                sender_label = f"({avatar}) {display_name}" if avatar else display_name
+                avatar_cls = f" avatar-{avatar_color}" if avatar_color else ""
+                msg_box = Vertical(classes="msg-box-ai")
+                await message_list.mount(msg_box)
+                await msg_box.mount(
+                    Static(sender_label, classes=f"msg-sender msg-sender-ai{avatar_cls}")
+                )
+                content = RichResponseMarkdown(msg.content, classes="msg-content")
+                await msg_box.mount(content)
+            else:
+                await self._add_user_message(message_list, msg.content)
+
+        self._hide_welcome()
+        self._update_status_bar()
+        self._update_participants_display()
+        self._update_project_display()
+        self.query_one("#token-count", Static).update(
+            f" \u00b7 ~{self._total_tokens:,} tokens" if self._total_tokens else ""
+        )
+
+        with contextlib.suppress(NoMatches):
+            tab_bar = self.query_one("#tab-bar", ConversationTabBar)
+            tab_bar.set_active(conv_id)
+
+        message_list.scroll_end(animate=False)
 
     def _build_exit_banner(self) -> str:
         """Build a resume-info banner shown on /exit."""
@@ -919,6 +984,9 @@ class DworkersApp(App):
         if self._conversation is None:
             title = text[:50] + ("..." if len(text) > 50 else "")
             self._conversation = self._store.create_conversation(title)
+            with contextlib.suppress(NoMatches):
+                tab_bar = self.query_one("#tab-bar", ConversationTabBar)
+                tab_bar.add_tab(self._conversation.id, title)
 
         message_list = self.query_one("#message-list", VerticalScroll)
 
@@ -1277,6 +1345,12 @@ class DworkersApp(App):
         if welcome.display:
             welcome.display = False
             self.query_one("#message-list", VerticalScroll).display = True
+
+    def _show_welcome(self) -> None:
+        """Show the welcome banner and hide the message list."""
+        with contextlib.suppress(NoMatches):
+            self.query_one("#welcome", Vertical).display = True
+            self.query_one("#message-list", VerticalScroll).display = False
 
     def _update_input_hint(self, text: str = "") -> None:
         """Update the input hint to reflect the detected @role target."""
@@ -2389,16 +2463,19 @@ class DworkersApp(App):
     # ── Actions ──────────────────────────────────────────────
 
     async def action_new_conversation(self) -> None:
-        """Start a new conversation."""
+        """Start a new conversation (Ctrl+N)."""
+        self._save_current_conversation_state()
         self._conversation = None
         self._total_tokens = 0
-        self.query_one("#token-count", Static).update("")
-        message_list = self.query_one("#message-list", VerticalScroll)
-        message_list.remove_children()
-        await self._add_system_message(
-            message_list,
-            "New conversation. Type a message to begin.",
-        )
+        self._private_role = None
+        with contextlib.suppress(NoMatches):
+            self.query_one("#token-count", Static).update("")
+        with contextlib.suppress(NoMatches):
+            message_list = self.query_one("#message-list", VerticalScroll)
+            message_list.remove_children()
+        self._show_welcome()
+        self._update_status_bar()
+        self._update_participants_display()
 
     def action_cancel_or_quit(self) -> None:
         """Ctrl+C: cancel streaming, or double-press within 2s to quit."""
@@ -2437,6 +2514,22 @@ class DworkersApp(App):
     def action_focus_input(self) -> None:
         """Focus the input area."""
         self.query_one("#prompt-input", PromptInput).focus()
+
+    def action_next_tab(self) -> None:
+        """Switch to the next conversation tab."""
+        with contextlib.suppress(NoMatches):
+            tab_bar = self.query_one("#tab-bar", ConversationTabBar)
+            tab_bar.next_tab()
+            if tab_bar._active_id:
+                asyncio.create_task(self._switch_conversation(tab_bar._active_id))
+
+    async def on_conversation_tab_bar_tab_clicked(self, event: ConversationTabBar.TabClicked) -> None:
+        """Handle tab click."""
+        await self._switch_conversation(event.conv_id)
+
+    async def on_conversation_tab_bar_new_tab_clicked(self, event: ConversationTabBar.NewTabClicked) -> None:
+        """Handle new tab click."""
+        await self.action_new_conversation()
 
     async def _mount_question(
         self,
