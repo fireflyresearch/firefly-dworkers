@@ -315,6 +315,12 @@ class DworkersApp(App):
         Binding("escape", "focus_input", "Focus Input", show=False),
     ]
 
+    GREETING_PROMPT = (
+        "You've been invited to join this conversation. "
+        "Introduce yourself in 1-2 sentences — your name, what you do, "
+        "and what tools you have available. Be warm but brief."
+    )
+
     def __init__(
         self,
         *,
@@ -1247,6 +1253,41 @@ class DworkersApp(App):
                 "Message queued \u2014 will send when response completes"
             )
 
+    # ── Agent greeting ────────────────────────────────────────
+
+    async def _greet_agent(self, role: str) -> None:
+        """Send a greeting prompt to a newly invited agent and stream their intro."""
+        if self._client is None:
+            return
+        self._hide_welcome()
+        message_list = self.query_one("#message-list", VerticalScroll)
+
+        display_name, avatar, avatar_color = self._get_worker_display(role)
+        sender_label = f"({avatar}) {display_name}" if avatar else display_name
+        avatar_cls = f" avatar-{avatar_color}" if avatar_color else ""
+
+        msg_box = Vertical(classes="msg-box-ai")
+        ai_header = Static(
+            sender_label,
+            classes=f"msg-sender msg-sender-ai{avatar_cls}",
+        )
+        content_widget = RichResponseMarkdown("", classes="msg-content")
+        await message_list.mount(msg_box)
+        await msg_box.mount(ai_header)
+        await msg_box.mount(content_widget)
+
+        tokens: list[str] = []
+        try:
+            async for event in self._client.run_worker(role, self.GREETING_PROMPT):
+                if event.type in ("token", "complete"):
+                    tokens.append(event.content)
+                    await content_widget.update("".join(tokens))
+        except Exception:
+            tokens.append("(greeting unavailable)")
+            await content_widget.update("".join(tokens))
+
+        message_list.scroll_end(animate=False)
+
     # ── File attachments ─────────────────────────────────────
 
     def _attach_file(self, path_str: str) -> str:
@@ -1520,6 +1561,7 @@ class DworkersApp(App):
                     if role not in self._conversation.participants:
                         self._conversation.participants.append(role)
                     self._update_participants_display()
+                    await self._greet_agent(role)
 
             case "/private":
                 role = arg.strip().lstrip("@").lower() if arg.strip() else None
