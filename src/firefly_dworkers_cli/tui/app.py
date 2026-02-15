@@ -1944,7 +1944,10 @@ class DworkersApp(App):
             avatar = f"({w.avatar})" if w.avatar else ""
             name = w.name or w.role.replace("_", " ").title()
             tagline = w.tagline or w.description
-            lines.append(f"{avatar} **{name}** \u00b7 @{w.role} \u00b7 {tagline}")
+            line = f"{avatar} **{name}** \u00b7 @{w.role} \u00b7 {tagline}"
+            if w.tools:
+                line += f"\n    Tools: {', '.join(w.tools)}"
+            lines.append(line)
         await self._add_system_message(container, "\n".join(lines))
 
     async def _cmd_list_plans(self, container: VerticalScroll) -> None:

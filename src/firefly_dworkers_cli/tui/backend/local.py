@@ -113,6 +113,33 @@ class LocalClient:
                     tagline = ""
                     avatar = ""
                     avatar_color = ""
+                # Try to determine available tools from toolkit factory.
+                tool_names: list[str] = []
+                try:
+                    from firefly_dworkers.tools.toolkits import (
+                        analyst_toolkit,
+                        data_analyst_toolkit,
+                        designer_toolkit,
+                        manager_toolkit,
+                        researcher_toolkit,
+                    )
+
+                    toolkit_map = {
+                        "manager": manager_toolkit,
+                        "analyst": analyst_toolkit,
+                        "researcher": researcher_toolkit,
+                        "data_analyst": data_analyst_toolkit,
+                        "designer": designer_toolkit,
+                    }
+                    role_key = role.value if hasattr(role, "value") else role
+                    factory_fn = toolkit_map.get(role_key)
+                    if factory_fn:
+                        toolkit = factory_fn(config)
+                        if hasattr(toolkit, "tools"):
+                            tool_names = [t.name for t in toolkit.tools][:5]
+                except Exception:
+                    pass  # Tools are best-effort
+
                 workers.append(
                     WorkerInfo(
                         role=role.value,
@@ -124,6 +151,7 @@ class LocalClient:
                         enabled=settings.enabled,
                         autonomy=settings.autonomy,
                         model=config.models.default,
+                        tools=tool_names,
                     )
                 )
             return workers
