@@ -169,6 +169,24 @@ class TestNameBasedMentions:
         assert app._extract_role("@amara and @manager") == "manager"
 
 
+class TestProjectState:
+    def test_app_has_active_project(self):
+        from firefly_dworkers_cli.tui.app import DworkersApp
+        app = DworkersApp()
+        assert hasattr(app, "_active_project")
+        assert app._active_project is None
+
+    def test_app_has_project_store(self):
+        from firefly_dworkers_cli.tui.app import DworkersApp
+        app = DworkersApp()
+        assert hasattr(app, "_project_store")
+
+    def test_app_has_intent_classifier(self):
+        from firefly_dworkers_cli.tui.app import DworkersApp
+        app = DworkersApp()
+        assert hasattr(app, "_intent_classifier")
+
+
 class TestSessionState:
     def test_app_has_save_session_method(self):
         from firefly_dworkers_cli.tui.app import DworkersApp

@@ -29,6 +29,7 @@ from textual.widgets import Markdown, Static, TextArea
 
 from firefly_dworkers_cli.config import ConfigManager
 from firefly_dworkers_cli.tui.backend.client import DworkersClient, create_client
+from firefly_dworkers_cli.tui.backend.intent import IntentClassifier
 from firefly_dworkers_cli.tui.backend.models import (
     EXTENSION_MIME_MAP,
     MAX_ATTACHMENT_SIZE,
@@ -36,8 +37,10 @@ from firefly_dworkers_cli.tui.backend.models import (
     ChatMessage,
     Conversation,
     FileAttachment,
+    Project,
     WorkerInfo,
 )
+from firefly_dworkers_cli.tui.backend.project_store import ProjectStore
 from firefly_dworkers_cli.tui.backend.store import ConversationStore
 from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
 from firefly_dworkers_cli.tui.commands import CommandRouter
@@ -301,11 +304,15 @@ class DworkersApp(App):
         mode: str = "auto",
         autonomy_override: str | None = None,
         server_url: str | None = None,
+        resume_id: str | None = None,
+        project_id: str | None = None,
     ) -> None:
         super().__init__()
         self._mode = mode
         self._autonomy_override = autonomy_override
         self._server_url = server_url
+        self._resume_id = resume_id
+        self._project_id_arg = project_id
         self._config_mgr = ConfigManager()
         self._store = ConversationStore()
         self._client: DworkersClient | None = None
@@ -330,6 +337,9 @@ class DworkersApp(App):
         # File attachments for the next message.
         self._attachments: list[FileAttachment] = []
         self._compaction_summary: str = ""
+        self._project_store = ProjectStore()
+        self._active_project: Project | None = None
+        self._intent_classifier = IntentClassifier()
         if self._autonomy_override:
             self._router.autonomy_level = self._autonomy_override
 
