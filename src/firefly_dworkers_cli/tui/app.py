@@ -168,6 +168,73 @@ class CommandPopup(Vertical):
         return None
 
 
+class ConversationTabBar(Horizontal):
+    """Tab bar for switching between conversations."""
+
+    class TabClicked(Message):
+        """Posted when a tab is clicked."""
+        def __init__(self, conv_id: str) -> None:
+            super().__init__()
+            self.conv_id = conv_id
+
+    class NewTabClicked(Message):
+        """Posted when the + tab is clicked."""
+
+    def __init__(self) -> None:
+        super().__init__(id="tab-bar")
+        self._tabs: list[tuple[str, str]] = []  # (conv_id, title)
+        self._active_id: str | None = None
+
+    def add_tab(self, conv_id: str, title: str) -> None:
+        """Add a tab and make it active."""
+        if any(cid == conv_id for cid, _ in self._tabs):
+            self.set_active(conv_id)
+            return
+        self._tabs.append((conv_id, title))
+        self._active_id = conv_id
+        self._render_tabs()
+
+    def remove_tab(self, conv_id: str) -> None:
+        """Remove a tab. If active, switch to nearest."""
+        self._tabs = [(cid, t) for cid, t in self._tabs if cid != conv_id]
+        if self._active_id == conv_id:
+            self._active_id = self._tabs[0][0] if self._tabs else None
+        self._render_tabs()
+
+    def set_active(self, conv_id: str) -> None:
+        """Set the active tab."""
+        self._active_id = conv_id
+        self._render_tabs()
+
+    def next_tab(self) -> None:
+        """Cycle to the next tab."""
+        if len(self._tabs) < 2:
+            return
+        ids = [cid for cid, _ in self._tabs]
+        idx = ids.index(self._active_id) if self._active_id in ids else 0
+        self._active_id = ids[(idx + 1) % len(ids)]
+        self._render_tabs()
+
+    def tab_titles(self) -> list[tuple[str, str]]:
+        """Return (conv_id, truncated_title) pairs."""
+        return [
+            (cid, title[:20] + "\u2026" if len(title) > 20 else title)
+            for cid, title in self._tabs
+        ]
+
+    def _render_tabs(self) -> None:
+        """Rebuild tab widgets."""
+        try:
+            self.remove_children()
+            for conv_id, title in self._tabs:
+                truncated = title[:20] + ("\u2026" if len(title) > 20 else "")
+                cls = "conv-tab-active" if conv_id == self._active_id else "conv-tab"
+                self.mount(Static(f" {truncated} ", classes=cls, id=f"tab-{conv_id[:8]}"))
+            self.mount(Static(" + ", classes="conv-tab-new", id="tab-new"))
+        except Exception:
+            pass  # Not mounted in app yet
+
+
 class PromptInput(TextArea):
     """Chat input — Enter submits, Shift+Enter inserts newline.
 
@@ -413,6 +480,9 @@ class DworkersApp(App):
         with Horizontal(id="header-bar"):
             yield Static("dworkers", classes="header-title")
             yield Static("Ctrl+P commands · Ctrl+N new · Ctrl+L clear · Ctrl+Q quit", classes="header-hint")
+
+        # Conversation tab bar
+        yield ConversationTabBar()
 
         # Welcome banner (shown initially, hidden once chat starts)
         with Vertical(id="welcome"):

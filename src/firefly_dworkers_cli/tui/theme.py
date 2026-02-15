@@ -215,14 +215,14 @@ Screen {
 
 #mention-popup {
     display: none;
+    dock: bottom;
     height: auto;
     max-height: 8;
-    width: auto;
-    min-width: 24;
+    width: 1fr;
     padding: 0 1;
-    border: solid #444444;
+    border-top: solid #444444;
     color: #d4d4d4;
-    background: #1e1e1e;
+    background: transparent;
 }
 
 #mention-popup.visible {
@@ -249,14 +249,14 @@ Screen {
 
 #command-popup {
     display: none;
+    dock: bottom;
     height: auto;
     max-height: 10;
-    width: auto;
-    min-width: 32;
+    width: 1fr;
     padding: 0 1;
-    border: solid #444444;
+    border-top: solid #444444;
     color: #d4d4d4;
-    background: #1e1e1e;
+    background: transparent;
 }
 
 #command-popup.visible {
@@ -436,6 +436,10 @@ Screen {
     padding: 0 0;
 }
 
+#project-indicator.status-has-project {
+    color: #10b981;
+}
+
 /* ── Header ──────────────────────────────────── */
 
 #header-bar {
@@ -558,5 +562,35 @@ Screen {
 .msg-content MarkdownOrderedList {
     margin: 0 0 0 2;
     padding: 0;
+}
+
+/* -- Conversation tab bar ------------------- */
+
+#tab-bar {
+    dock: top;
+    height: 1;
+    width: 1fr;
+    padding: 0 1;
+    background: transparent;
+    color: #666666;
+}
+
+.conv-tab {
+    width: auto;
+    padding: 0 1;
+    color: #666666;
+}
+
+.conv-tab-active {
+    width: auto;
+    padding: 0 1;
+    color: #d4d4d4;
+    text-style: bold;
+}
+
+.conv-tab-new {
+    width: auto;
+    padding: 0 1;
+    color: #555555;
 }
 """
