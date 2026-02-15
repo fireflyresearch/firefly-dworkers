@@ -167,3 +167,17 @@ class TestNameBasedMentions:
         app._known_roles = {"manager", "amara"}
         app._name_to_role = {"amara": "manager"}
         assert app._extract_role("@amara and @manager") == "manager"
+
+
+class TestSessionState:
+    def test_app_has_save_session_method(self):
+        from firefly_dworkers_cli.tui.app import DworkersApp
+        app = DworkersApp()
+        assert hasattr(app, "_save_session_state")
+        assert callable(app._save_session_state)
+
+    def test_app_has_restore_session_method(self):
+        from firefly_dworkers_cli.tui.app import DworkersApp
+        app = DworkersApp()
+        assert hasattr(app, "_restore_session_state")
+        assert callable(app._restore_session_state)

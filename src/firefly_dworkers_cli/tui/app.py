@@ -323,8 +323,30 @@ class DworkersApp(App):
         self._private_role: str | None = None
         # File attachments for the next message.
         self._attachments: list[FileAttachment] = []
+        self._compaction_summary: str = ""
         if self._autonomy_override:
             self._router.autonomy_level = self._autonomy_override
+
+    def _save_session_state(self) -> None:
+        """Persist session state to SQLite for resumption."""
+        state: dict[str, str] = {}
+        if self._conversation:
+            state["active_conversation_id"] = self._conversation.id
+        state["total_tokens"] = str(self._total_tokens)
+        if self._private_role:
+            state["private_role"] = self._private_role
+        self._store.save_session_state(state)
+
+    async def _restore_session_state(self) -> None:
+        """Restore session state from SQLite."""
+        state = self._store.load_session_state()
+        conv_id = state.get("active_conversation_id", "")
+        if conv_id:
+            conv = self._store.get_conversation(conv_id)
+            if conv:
+                self._conversation = conv
+        self._total_tokens = int(state.get("total_tokens", "0"))
+        self._private_role = state.get("private_role") or None
 
     def compose(self) -> ComposeResult:
         # Header bar
