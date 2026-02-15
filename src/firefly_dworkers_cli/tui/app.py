@@ -72,6 +72,10 @@ _PALETTE_COMMANDS = [
     ("connectors", "List connector statuses"),
     ("usage", "Show usage statistics"),
     ("export", "Export conversation as markdown"),
+    ("list", "List recent conversations"),
+    ("search", "Search conversation messages"),
+    ("rename", "Rename the current conversation"),
+    ("archive", "Archive the current conversation"),
     ("clear", "Clear chat display"),
     ("setup", "Re-run setup wizard"),
     ("quit", "Exit dworkers"),
@@ -1180,6 +1184,18 @@ class DworkersApp(App):
                     message_list, self._router.detach_text(),
                 )
 
+            case "/list":
+                await self._cmd_list(message_list)
+
+            case "/search":
+                await self._cmd_search(message_list, arg)
+
+            case "/rename":
+                await self._cmd_rename(message_list, arg)
+
+            case "/archive":
+                await self._cmd_archive(message_list)
+
             case _:
                 await self._add_system_message(
                     message_list,
@@ -1332,6 +1348,65 @@ class DworkersApp(App):
             container,
             self._router.reject_text(checkpoint_id, reason=reason),
         )
+
+    async def _cmd_list(self, container) -> None:
+        """List recent conversations."""
+        convs = self._store.list_conversations()
+        if not convs:
+            await self._add_system_message(container, "No conversations yet.")
+            return
+        lines = ["**Recent Conversations**\n─────────────────────────────"]
+        for c in convs[:20]:
+            active = " *" if self._conversation and c.id == self._conversation.id else ""
+            lines.append(
+                f"  `{c.id[:12]}`  {c.title:<30}  {c.message_count} msgs{active}"
+            )
+        lines.append("─────────────────────────────")
+        lines.append("`/load <id>` to resume · `/search <query>` to find")
+        await self._add_system_message(container, "\n".join(lines))
+
+    async def _cmd_search(self, container, query: str) -> None:
+        """Search conversation messages."""
+        if not query:
+            await self._add_system_message(container, "Usage: `/search <query>`")
+            return
+        results = self._store.search(query)
+        if not results:
+            await self._add_system_message(container, f'No results for "{query}".')
+            return
+        lines = [f'**Search results for "{query}"**\n─────────────────────────────']
+        for r in results[:10]:
+            snippet = r["content"][:120]
+            lines.append(f"  `{r['conversation_id'][:12]}`  [{r['sender']}] {snippet}")
+        lines.append("─────────────────────────────")
+        await self._add_system_message(container, "\n".join(lines))
+
+    async def _cmd_rename(self, container, title: str) -> None:
+        """Rename the current conversation."""
+        if not self._conversation:
+            await self._add_system_message(container, "No active conversation.")
+            return
+        if not title:
+            await self._add_system_message(container, "Usage: `/rename <new title>`")
+            return
+        self._conversation.title = title
+        self._store._save_conversation(self._conversation)
+        self._store._update_index(self._conversation)
+        self._store._upsert_conversation_row(self._conversation)
+        await self._add_system_message(container, f'Conversation renamed to "{title}".')
+
+    async def _cmd_archive(self, container) -> None:
+        """Archive the current conversation."""
+        if not self._conversation:
+            await self._add_system_message(container, "No active conversation.")
+            return
+        self._conversation.status = "archived"
+        self._store._save_conversation(self._conversation)
+        self._store._update_index(self._conversation)
+        self._store._upsert_conversation_row(self._conversation)
+        title = self._conversation.title
+        self._conversation = None
+        await self._add_system_message(container, f'Conversation "{title}" archived.')
 
     async def _cmd_connectors(self, container: VerticalScroll) -> None:
         """List all connector statuses."""

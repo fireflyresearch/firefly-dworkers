@@ -502,3 +502,21 @@ class TestTeamDisplayWithIdentities:
     def test_welcome_text_has_mascot(self):
         from firefly_dworkers_cli.tui.commands import WELCOME_TEXT
         assert "dworkers" in WELCOME_TEXT
+
+
+class TestConversationManagementCommands:
+    def test_list_command_registered(self):
+        from firefly_dworkers_cli.tui.commands import _COMMANDS
+        assert "/list" in _COMMANDS
+
+    def test_search_command_registered(self):
+        from firefly_dworkers_cli.tui.commands import _COMMANDS
+        assert "/search" in _COMMANDS
+
+    def test_rename_command_registered(self):
+        from firefly_dworkers_cli.tui.commands import _COMMANDS
+        assert "/rename" in _COMMANDS
+
+    def test_archive_command_registered(self):
+        from firefly_dworkers_cli.tui.commands import _COMMANDS
+        assert "/archive" in _COMMANDS

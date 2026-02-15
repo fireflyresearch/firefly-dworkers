@@ -56,6 +56,10 @@ _HELP_TEXT = """\
 | `/new` | Start a fresh conversation |
 | `/conversations` | List saved conversations |
 | `/load <id>` | Load a saved conversation |
+| `/list` | List recent conversations |
+| `/search <query>` | Search conversation messages |
+| `/rename <title>` | Rename the current conversation |
+| `/archive` | Archive the current conversation |
 | `/delete <id>` | Delete a saved conversation |
 | `/clear` | Clear the chat display |
 | `/retry` | Retry the last message |
@@ -116,6 +120,10 @@ _COMMANDS: set[str] = {
     "/private",
     "/attach",
     "/detach",
+    "/list",
+    "/search",
+    "/rename",
+    "/archive",
 }
 
 
