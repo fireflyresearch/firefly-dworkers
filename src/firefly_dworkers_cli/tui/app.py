@@ -1712,7 +1712,11 @@ class DworkersApp(App):
         """Update the contextual toolbar based on current app state."""
         with contextlib.suppress(NoMatches):
             toolbar = self.query_one("#toolbar", Static)
-            if self._pending_plan is not None:
+            if self._plan_answer_event is not None:
+                toolbar.update("[\u2191\u2193] Navigate  [Enter] Select  [Tab] Free input  [Click] Choose")
+                toolbar.set_class(True, "toolbar-plan")
+                toolbar.set_class(False, "toolbar-streaming", "toolbar-default")
+            elif self._pending_plan is not None:
                 toolbar.update("[Enter] Approve  [m] Modify  [Esc] Skip")
                 toolbar.set_class(True, "toolbar-plan")
                 toolbar.set_class(False, "toolbar-streaming", "toolbar-default")
