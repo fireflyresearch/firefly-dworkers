@@ -58,3 +58,42 @@ I'll start executing once you approve."""
         assert result is not None
         assert result[0][0] == "researcher"
         assert result[1][0] == "analyst"
+
+
+class TestMultiWordRoles:
+    def test_detects_multi_word_role(self):
+        app = _make_app()
+        content = """Plan:
+1. [content writer] Draft the blog post
+2. [data analyst] Review the metrics
+"""
+        result = app._detect_plan(content)
+        assert result is not None
+        assert len(result) == 2
+        assert result[0] == ("content_writer", "Draft the blog post")
+        assert result[1] == ("data_analyst", "Review the metrics")
+
+    def test_normalizes_spaces_to_underscores(self):
+        app = _make_app()
+        content = """Plan:
+1. [Communications Specialist] Localize content
+2. [strategist] Define strategy
+"""
+        result = app._detect_plan(content)
+        assert result is not None
+        assert result[0][0] == "communications_specialist"
+        assert result[1][0] == "strategist"
+
+    def test_mixed_single_and_multi_word_roles(self):
+        app = _make_app()
+        content = """Plan:
+1. [researcher] Gather data
+2. [content writer] Draft content
+3. [manager] Review and approve
+"""
+        result = app._detect_plan(content)
+        assert result is not None
+        assert len(result) == 3
+        assert result[0][0] == "researcher"
+        assert result[1][0] == "content_writer"
+        assert result[2][0] == "manager"
