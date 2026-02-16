@@ -576,6 +576,27 @@ Screen {
     padding: 0;
 }
 
+/* -- Tool call blocks ----------------------- */
+
+.tool-block {
+    height: auto;
+    padding: 0 0 0 2;
+    margin: 0 2 0 2;
+    color: #888888;
+}
+
+.tool-block-status-running {
+    color: #f59e0b;
+}
+
+.tool-block-status-complete {
+    color: #666666;
+}
+
+.tool-block-status-error {
+    color: #ef4444;
+}
+
 /* -- Contextual toolbar --------------------- */
 
 #toolbar {

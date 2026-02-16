@@ -1165,13 +1165,29 @@ class DworkersApp(App):
                                     if self._is_near_bottom(message_list):
                                         message_list.scroll_end(animate=False)
                             elif event.type == "tool_call":
-                                tool_box = Vertical(classes="tool-call")
-                                await msg_box.mount(tool_box)
-                                await tool_box.mount(
-                                    Static(f"\u2699 {event.content}", classes="tool-call-header")
+                                from firefly_dworkers_cli.tui.widgets.tool_block import ToolBlock
+                                tool_name = event.metadata.get("tool_name", event.content)
+                                params = event.metadata.get("params", {})
+                                tb = ToolBlock(
+                                    tool_name=tool_name,
+                                    params=params,
+                                    verbose=getattr(self, "_verbose_mode", False),
+                                    classes="tool-block tool-block-status-running",
                                 )
+                                await msg_box.mount(tb)
                                 if self._is_near_bottom(message_list):
                                     message_list.scroll_end(animate=False)
+                            elif event.type == "tool_result":
+                                from firefly_dworkers_cli.tui.widgets.tool_block import ToolBlock
+                                tool_blocks = list(msg_box.query(ToolBlock))
+                                if tool_blocks:
+                                    last_tb = tool_blocks[-1]
+                                    duration = event.metadata.get("duration_ms")
+                                    preview = event.metadata.get("result_preview", "")
+                                    if event.metadata.get("status") == "error":
+                                        last_tb.mark_error(preview)
+                                    else:
+                                        last_tb.mark_complete(duration_ms=duration, result_preview=preview)
                             elif event.type == "error":
                                 tokens.append(f"\n\n**Error:** {event.content}")
                                 await content_widget.update("".join(tokens))
@@ -1451,13 +1467,29 @@ class DworkersApp(App):
                                     if self._is_near_bottom(message_list):
                                         message_list.scroll_end(animate=False)
                             elif event.type == "tool_call":
-                                tool_box = Vertical(classes="tool-call")
-                                await step_box.mount(tool_box, before=indicator)
-                                await tool_box.mount(
-                                    Static(f"\u2699 {event.content}", classes="tool-call-header")
+                                from firefly_dworkers_cli.tui.widgets.tool_block import ToolBlock
+                                tool_name = event.metadata.get("tool_name", event.content)
+                                params = event.metadata.get("params", {})
+                                tb = ToolBlock(
+                                    tool_name=tool_name,
+                                    params=params,
+                                    verbose=getattr(self, "_verbose_mode", False),
+                                    classes="tool-block tool-block-status-running",
                                 )
+                                await step_box.mount(tb, before=indicator)
                                 if self._is_near_bottom(message_list):
                                     message_list.scroll_end(animate=False)
+                            elif event.type == "tool_result":
+                                from firefly_dworkers_cli.tui.widgets.tool_block import ToolBlock
+                                tool_blocks = list(step_box.query(ToolBlock))
+                                if tool_blocks:
+                                    last_tb = tool_blocks[-1]
+                                    duration = event.metadata.get("duration_ms")
+                                    preview = event.metadata.get("result_preview", "")
+                                    if event.metadata.get("status") == "error":
+                                        last_tb.mark_error(preview)
+                                    else:
+                                        last_tb.mark_complete(duration_ms=duration, result_preview=preview)
                             elif event.type == "error":
                                 last_error_msg = event.content
                                 had_error = True
