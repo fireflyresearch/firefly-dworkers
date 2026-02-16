@@ -615,6 +615,10 @@ Screen {
     color: #e5c07b;
 }
 
+#toolbar.toolbar-question {
+    color: #60a5fa;
+}
+
 /* -- Conversation tab bar ------------------- */
 
 #tab-bar {

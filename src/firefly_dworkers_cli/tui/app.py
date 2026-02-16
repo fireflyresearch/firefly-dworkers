@@ -1814,24 +1814,30 @@ class DworkersApp(App):
             if self._plan_answer_event is not None:
                 toolbar.update("[\u2191\u2193] Navigate  [Enter] Select  [Tab] Free input  [Click] Choose")
                 toolbar.set_class(True, "toolbar-plan")
-                toolbar.set_class(False, "toolbar-streaming", "toolbar-default")
+                toolbar.set_class(False, "toolbar-streaming", "toolbar-default", "toolbar-question")
             elif self._pending_plan is not None:
                 toolbar.update("[Enter] Approve  [m] Modify  [Esc] Skip")
                 toolbar.set_class(True, "toolbar-plan")
-                toolbar.set_class(False, "toolbar-streaming", "toolbar-default")
+                toolbar.set_class(False, "toolbar-streaming", "toolbar-default", "toolbar-question")
+            elif self._question_queue is not None and self._question_queue.pending_count > 0:
+                count = self._question_queue.pending_count
+                label = f"{count} question{'s' if count > 1 else ''} pending"
+                toolbar.update(f"\u2191\u2193 navigate \u00b7 Enter select \u00b7 Tab text  |  {label}")
+                toolbar.set_class(True, "toolbar-question")
+                toolbar.set_class(False, "toolbar-plan", "toolbar-streaming", "toolbar-default")
             elif self._is_streaming:
                 toolbar.update("[Esc] Cancel")
                 toolbar.set_class(True, "toolbar-streaming")
-                toolbar.set_class(False, "toolbar-plan", "toolbar-default")
+                toolbar.set_class(False, "toolbar-plan", "toolbar-default", "toolbar-question")
             elif self._private_role:
                 name, _, _ = self._get_worker_display(self._private_role)
                 toolbar.update(f"Private: @{name} \u00b7 [Esc] Exit private")
                 toolbar.set_class(True, "toolbar-default")
-                toolbar.set_class(False, "toolbar-plan", "toolbar-streaming")
+                toolbar.set_class(False, "toolbar-plan", "toolbar-streaming", "toolbar-question")
             else:
                 toolbar.update("/plan \u00b7 /team \u00b7 /project \u00b7 /help \u00b7 Ctrl+P all commands")
                 toolbar.set_class(True, "toolbar-default")
-                toolbar.set_class(False, "toolbar-plan", "toolbar-streaming")
+                toolbar.set_class(False, "toolbar-plan", "toolbar-streaming", "toolbar-question")
 
     def _hide_welcome(self) -> None:
         """Hide the welcome banner and show the message list."""
