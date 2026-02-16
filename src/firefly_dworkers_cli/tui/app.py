@@ -408,6 +408,14 @@ class DworkersApp(App):
         Binding("escape", "focus_input", "Focus Input", show=False),
         Binding("ctrl+tab", "next_tab", "Next Tab", show=False),
         Binding("ctrl+o", "toggle_verbose", "Toggle verbose", show=False),
+        Binding("tab", "next_pane", "Next Pane", show=False),
+        Binding("shift+tab", "prev_pane", "Prev Pane", show=False),
+        Binding("1", "pane_1", "Pane 1", show=False),
+        Binding("2", "pane_2", "Pane 2", show=False),
+        Binding("3", "pane_3", "Pane 3", show=False),
+        Binding("4", "pane_4", "Pane 4", show=False),
+        Binding("5", "pane_5", "Pane 5", show=False),
+        Binding("6", "pane_6", "Pane 6", show=False),
     ]
 
     GREETING_PROMPT = (
@@ -1384,11 +1392,14 @@ class DworkersApp(App):
         retry_policy: RetryPolicy,
         participant_info: list[tuple[str, str, str]],
         cancel_event: asyncio.Event | None = None,
+        agent_lane: AgentLane | None = None,
     ) -> tuple[str, bool]:
         """Execute a single plan step with retry, tool display, and question detection.
 
         Returns (final_content, succeeded).
         """
+        if agent_lane is not None:
+            agent_lane.mark_running()
         name, avatar, avatar_color = self._get_worker_display(role)
         prefix = f"({avatar}) " if avatar else ""
         avatar_cls = f" avatar-{avatar_color}" if avatar_color else ""
@@ -1576,6 +1587,12 @@ class DworkersApp(App):
                     )
                     self._store.add_message(self._conversation.id, answer_msg)
 
+        if agent_lane is not None:
+            if step_succeeded:
+                agent_lane.mark_complete(tokens=0, duration_s=0.0)
+            else:
+                agent_lane.mark_error("Step failed")
+
         return final_content, step_succeeded
 
     async def _execute_approved_plan(self) -> None:
@@ -1618,13 +1635,52 @@ class DworkersApp(App):
         # Initialize question queue for parallel coordination
         self._question_queue = QuestionQueue()
 
-        # Mount all step containers upfront (preserves visual order)
+        # Mount all step containers upfront
         step_boxes: list[Vertical] = []
-        for _role, _task in steps_list:
-            step_box = Vertical(classes="msg-box-ai")
-            await message_list.mount(step_box)
-            step_boxes.append(step_box)
-        message_list.scroll_end(animate=False)
+        agent_lanes: list[AgentLane] = []
+
+        if self._split_pane_mode:
+            # Split-pane mode: create AgentLanes inside SplitPaneContainer
+            with contextlib.suppress(NoMatches):
+                split_pane = self.query_one("#split-pane-container", SplitPaneContainer)
+                # Remove old lanes if any
+                for old_lane in list(split_pane.query(AgentLane)):
+                    await old_lane.remove()
+                # Reconfigure grid for new agent count
+                from firefly_dworkers_cli.tui.widgets.split_pane import grid_dimensions
+                cols, rows = grid_dimensions(len(steps_list))
+                split_pane.styles.grid_size_columns = cols
+                split_pane.styles.grid_size_rows = rows
+                split_pane._agent_count = len(steps_list)
+                split_pane._focused_index = 0
+                # Create lanes
+                for i, (role, _task) in enumerate(steps_list, 1):
+                    lane = AgentLane(
+                        role=role,
+                        step_index=i,
+                        total_steps=len(steps_list),
+                        classes="agent-lane agent-lane-waiting",
+                    )
+                    await split_pane.mount(lane)
+                    agent_lanes.append(lane)
+                    step_box = Vertical(classes="msg-box-ai")
+                    step_boxes.append(step_box)
+                # Mount step boxes into lane bodies (must be after lane compose)
+                for lane, step_box in zip(agent_lanes, step_boxes):
+                    await lane.body.mount(step_box)
+                # Show split pane, hide message list
+                message_list.styles.display = "none"
+                split_pane.add_class("visible")
+                split_pane._apply_focus()
+            self._agent_lanes = agent_lanes
+        else:
+            # Inline mode: mount step boxes into message list (original behavior)
+            for _role, _task in steps_list:
+                step_box = Vertical(classes="msg-box-ai")
+                await message_list.mount(step_box)
+                step_boxes.append(step_box)
+            message_list.scroll_end(animate=False)
+            self._agent_lanes = []
 
         # Create per-step cancel events for future per-lane cancellation
         step_cancel_events: list[asyncio.Event] = [asyncio.Event() for _ in steps_list]
@@ -1636,6 +1692,7 @@ class DworkersApp(App):
                 for i, ((role, task), step_box) in enumerate(
                     zip(steps_list, step_boxes), 1
                 ):
+                    lane = agent_lanes[i - 1] if agent_lanes else None
                     tg.create_task(
                         self._run_single_plan_step(
                             step_index=i,
@@ -1647,6 +1704,7 @@ class DworkersApp(App):
                             retry_policy=retry_policy,
                             participant_info=participant_info,
                             cancel_event=step_cancel_events[i - 1],
+                            agent_lane=lane,
                         )
                     )
         except* Exception as eg:
@@ -1669,6 +1727,14 @@ class DworkersApp(App):
             self._question_queue = None
             self._plan_answer_event = None
             self._plan_answer_text = None
+            # Clean up split-pane state
+            self._agent_lanes = []
+            if self._split_pane_mode:
+                with contextlib.suppress(NoMatches):
+                    split_pane = self.query_one("#split-pane-container", SplitPaneContainer)
+                    split_pane.remove_class("visible")
+                    message_list.styles.display = "block"
+                self._split_pane_mode = False
             self._update_toolbar()
 
         message_list.scroll_end(animate=False)
@@ -3108,6 +3174,48 @@ class DworkersApp(App):
                     model_status.update(f"{current} [verbose]")
             else:
                 model_status.update(current.replace(" [verbose]", ""))
+
+    def action_next_pane(self) -> None:
+        """Focus the next agent pane in split mode."""
+        if not self._split_pane_mode:
+            return
+        with contextlib.suppress(NoMatches):
+            split_pane = self.query_one("#split-pane-container", SplitPaneContainer)
+            split_pane.focus_next_lane()
+
+    def action_prev_pane(self) -> None:
+        """Focus the previous agent pane in split mode."""
+        if not self._split_pane_mode:
+            return
+        with contextlib.suppress(NoMatches):
+            split_pane = self.query_one("#split-pane-container", SplitPaneContainer)
+            split_pane.focus_prev_lane()
+
+    def _action_pane_n(self, n: int) -> None:
+        """Focus pane N in split mode (1-indexed)."""
+        if not self._split_pane_mode:
+            return
+        with contextlib.suppress(NoMatches):
+            split_pane = self.query_one("#split-pane-container", SplitPaneContainer)
+            split_pane.focus_lane(n)
+
+    def action_pane_1(self) -> None:
+        self._action_pane_n(1)
+
+    def action_pane_2(self) -> None:
+        self._action_pane_n(2)
+
+    def action_pane_3(self) -> None:
+        self._action_pane_n(3)
+
+    def action_pane_4(self) -> None:
+        self._action_pane_n(4)
+
+    def action_pane_5(self) -> None:
+        self._action_pane_n(5)
+
+    def action_pane_6(self) -> None:
+        self._action_pane_n(6)
 
     async def on_conversation_tab_bar_tab_clicked(self, event: ConversationTabBar.TabClicked) -> None:
         """Handle tab click."""
