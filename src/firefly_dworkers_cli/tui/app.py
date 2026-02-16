@@ -465,6 +465,7 @@ class DworkersApp(App):
         self._plan_answer_text: str | None = None
         self._verbose_mode: bool = False
         self._question_queue: QuestionQueue | None = None
+        self._step_cancel_events: list[asyncio.Event] = []
         if self._autonomy_override:
             self._router.autonomy_level = self._autonomy_override
 
@@ -1374,6 +1375,7 @@ class DworkersApp(App):
         message_list: VerticalScroll,
         retry_policy: RetryPolicy,
         participant_info: list[tuple[str, str, str]],
+        cancel_event: asyncio.Event | None = None,
     ) -> tuple[str, bool]:
         """Execute a single plan step with retry, tool display, and question detection.
 
@@ -1424,8 +1426,8 @@ class DworkersApp(App):
                     message_history=history,
                     participants=participant_info,
                 ):
-                    if self._cancel_streaming.is_set():
-                        tokens.append("\n\n_[Plan cancelled]_")
+                    if self._cancel_streaming.is_set() or (cancel_event is not None and cancel_event.is_set()):
+                        tokens.append("\n\n_[Cancelled]_")
                         await content_widget.update("".join(tokens))
                         timer.stop()
                         indicator.stop()
@@ -1616,6 +1618,10 @@ class DworkersApp(App):
             step_boxes.append(step_box)
         message_list.scroll_end(animate=False)
 
+        # Create per-step cancel events for future per-lane cancellation
+        step_cancel_events: list[asyncio.Event] = [asyncio.Event() for _ in steps_list]
+        self._step_cancel_events = step_cancel_events
+
         try:
             # Run all steps in parallel
             async with asyncio.TaskGroup() as tg:
@@ -1632,6 +1638,7 @@ class DworkersApp(App):
                             message_list=message_list,
                             retry_policy=retry_policy,
                             participant_info=participant_info,
+                            cancel_event=step_cancel_events[i - 1],
                         )
                     )
         except* Exception as eg:
@@ -1648,6 +1655,7 @@ class DworkersApp(App):
         finally:
             self._is_streaming = False
             self._cancel_streaming.clear()
+            self._step_cancel_events = []
             if self._question_queue is not None:
                 self._question_queue.clear()
             self._question_queue = None
