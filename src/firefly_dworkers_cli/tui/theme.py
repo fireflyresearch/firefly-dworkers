@@ -683,4 +683,57 @@ Screen {
     color: #666666;
     width: auto;
 }
+
+/* ── Split-pane layout ────────────────────── */
+
+#split-pane-container {
+    height: 1fr;
+    display: none;
+}
+
+#split-pane-container.visible {
+    display: block;
+}
+
+.agent-lane {
+    border: solid #444444;
+    height: 1fr;
+    overflow: hidden;
+}
+
+.agent-lane-focused {
+    border: solid #d4d4d4;
+}
+
+.agent-lane-header {
+    height: 1;
+    background: #1a1a1a;
+    padding: 0 1;
+    width: 1fr;
+}
+
+.agent-lane-body {
+    height: 1fr;
+    padding: 0 1;
+    scrollbar-size: 1 1;
+    scrollbar-background: transparent;
+    scrollbar-color: #444444;
+}
+
+.agent-lane-waiting {
+    border: solid #f59e0b;
+}
+
+.agent-lane-running {
+    border: solid #60a5fa;
+}
+
+.agent-lane-complete {
+    height: 2;
+    border: solid #10b981;
+}
+
+.agent-lane-error {
+    border: solid #ef4444;
+}
 """
