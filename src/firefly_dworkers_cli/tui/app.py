@@ -404,6 +404,7 @@ class DworkersApp(App):
         Binding("ctrl+l", "clear_chat", "Clear", show=False),
         Binding("escape", "focus_input", "Focus Input", show=False),
         Binding("ctrl+tab", "next_tab", "Next Tab", show=False),
+        Binding("ctrl+o", "toggle_verbose", "Toggle verbose", show=False),
     ]
 
     GREETING_PROMPT = (
@@ -461,6 +462,7 @@ class DworkersApp(App):
         self._pending_plan: list[tuple[str, str]] | None = None
         self._plan_answer_event: asyncio.Event | None = None
         self._plan_answer_text: str | None = None
+        self._verbose_mode: bool = False
         if self._autonomy_override:
             self._router.autonomy_level = self._autonomy_override
 
@@ -2976,6 +2978,22 @@ class DworkersApp(App):
             tab_bar.next_tab()
             if tab_bar._active_id:
                 asyncio.create_task(self._switch_conversation(tab_bar._active_id))
+
+    def action_toggle_verbose(self) -> None:
+        """Toggle verbose mode for tool call display."""
+        self._verbose_mode = not self._verbose_mode
+        from firefly_dworkers_cli.tui.widgets.tool_block import ToolBlock
+        for tb in self.query(ToolBlock):
+            tb.set_verbose(self._verbose_mode)
+        # Update status bar hint
+        with contextlib.suppress(NoMatches):
+            model_status = self.query_one("#status-model", Static)
+            current = str(model_status.renderable)
+            if self._verbose_mode:
+                if "[verbose]" not in current:
+                    model_status.update(f"{current} [verbose]")
+            else:
+                model_status.update(current.replace(" [verbose]", ""))
 
     async def on_conversation_tab_bar_tab_clicked(self, event: ConversationTabBar.TabClicked) -> None:
         """Handle tab click."""
