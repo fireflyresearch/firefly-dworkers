@@ -298,8 +298,21 @@ class PromptInput(TextArea):
                 event.prevent_default()
                 return
 
+        # Plan skip: Escape dismisses pending plan
+        if event.key == "escape" and hasattr(self.app, '_pending_plan') and self.app._pending_plan is not None:
+            self.app.call_later(self.app._dismiss_pending_plan)
+            event.stop()
+            event.prevent_default()
+            return
+
         if event.key == "enter":
             text = self.text.strip()
+            # Plan approval: Enter on empty input approves the pending plan
+            if not text and hasattr(self.app, '_pending_plan') and self.app._pending_plan is not None:
+                self.app.call_later(self.app._execute_approved_plan)
+                event.stop()
+                event.prevent_default()
+                return
             if text:
                 self.post_message(self.Submitted(text))
                 self.clear()
@@ -931,10 +944,7 @@ class DworkersApp(App):
                 return
             elif event.key == "m":
                 # Modify: dismiss plan and let user type modification feedback
-                self._pending_plan = None
-                with contextlib.suppress(NoMatches):
-                    for w in self.query(".plan-approval"):
-                        w.remove()
+                self._dismiss_pending_plan()
                 try:
                     prompt_input = self.query_one("#prompt-input", PromptInput)
                     prompt_input.value = "Please revise the plan: "
@@ -945,10 +955,7 @@ class DworkersApp(App):
                 event.stop()
                 return
             elif event.key == "escape":
-                self._pending_plan = None
-                with contextlib.suppress(NoMatches):
-                    for w in self.query(".plan-approval"):
-                        w.remove()
+                self._dismiss_pending_plan()
                 event.prevent_default()
                 event.stop()
                 return
@@ -1281,10 +1288,24 @@ class DworkersApp(App):
         # Store plan for execution
         self._pending_plan = steps
 
+        # Update input hint to show plan approval shortcuts
+        with contextlib.suppress(NoMatches):
+            self.query_one("#input-hint", Static).update(
+                "Enter approve \u00b7 m modify \u00b7 Esc skip"
+            )
+
         message_list.scroll_end(animate=False)
 
+    def _dismiss_pending_plan(self) -> None:
+        """Dismiss pending plan approval without executing."""
+        self._pending_plan = None
+        with contextlib.suppress(NoMatches):
+            for w in self.query(".plan-approval"):
+                w.remove()
+        self._update_input_hint()
+
     async def _execute_approved_plan(self) -> None:
-        """Execute the approved plan steps sequentially."""
+        """Execute the approved plan steps sequentially with full progress feedback."""
         if not self._pending_plan or not self._client:
             return
 
@@ -1295,6 +1316,23 @@ class DworkersApp(App):
         with contextlib.suppress(NoMatches):
             for w in self.query(".plan-approval"):
                 w.remove()
+
+        # Auto-invite all plan agents to conversation participants
+        if self._conversation:
+            for role, _ in steps:
+                if role not in self._conversation.participants and role != "user":
+                    self._conversation.participants.append(role)
+            self._update_participants_display()
+
+        # Build participant info for context injection
+        participant_info: list[tuple[str, str, str]] = []
+        if self._conversation and self._conversation.participants:
+            for p in self._conversation.participants:
+                if p == "user":
+                    continue
+                pname, _avatar, _color = self._get_worker_display(p)
+                desc = self._role_descriptions.get(p, "")
+                participant_info.append((p, pname, desc))
 
         message_list = self.query_one("#message-list", VerticalScroll)
         self._is_streaming = True
@@ -1318,22 +1356,81 @@ class DworkersApp(App):
                 content_widget = RichResponseMarkdown("", classes="msg-content")
                 await step_box.mount(content_widget)
 
-                # Execute step
+                # Progress indicator (thinking spinner)
+                indicator = TaskProgressBlock()
+                await step_box.mount(indicator)
+                message_list.scroll_end(animate=False)
+
+                # Execute step with timing
+                timer = ResponseTimer()
+                timer.start()
                 tokens: list[str] = []
+                first_token_marked = False
+                last_render = 0.0
+
                 try:
-                    async for event in self._client.run_worker(role, task):
+                    history = self._build_message_history()
+                    async for event in self._client.run_worker(
+                        role,
+                        task,
+                        conversation_id=self._conversation.id if self._conversation else None,
+                        message_history=history,
+                        participants=participant_info,
+                    ):
                         if self._cancel_streaming.is_set():
                             tokens.append("\n\n_[Plan cancelled]_")
                             await content_widget.update("".join(tokens))
+                            timer.stop()
+                            indicator.stop()
+                            indicator.remove()
                             return
                         if event.type in ("token", "complete"):
+                            if not first_token_marked:
+                                first_token_marked = True
+                                timer.mark_first_token()
+                                indicator.set_streaming_mode(timer)
                             tokens.append(event.content)
-                            await content_widget.update("".join(tokens))
+                            # Throttle: render at most every 80ms
+                            now = time.monotonic()
+                            if event.type == "complete" or now - last_render >= 0.08:
+                                last_render = now
+                                await content_widget.update("".join(tokens))
+                                if self._is_near_bottom(message_list):
+                                    message_list.scroll_end(animate=False)
+                        elif event.type == "tool_call":
+                            tool_box = Vertical(classes="tool-call")
+                            await step_box.mount(tool_box, before=indicator)
+                            await tool_box.mount(
+                                Static(f"\u2699 {event.content}", classes="tool-call-header")
+                            )
                             if self._is_near_bottom(message_list):
                                 message_list.scroll_end(animate=False)
+                        elif event.type == "error":
+                            tokens.append(f"\n\n**Error:** {event.content}")
+                            await content_widget.update("".join(tokens))
                 except Exception as e:
                     tokens.append(f"\n\n**Error:** {e}")
                     await content_widget.update("".join(tokens))
+                finally:
+                    timer.stop()
+                    indicator.stop()
+                    indicator.remove()
+
+                # Final flush
+                final_content = "".join(tokens)
+                await content_widget.update(final_content)
+
+                # Token count update
+                token_estimate = self._estimate_tokens(final_content)
+                self._total_tokens += token_estimate
+                with contextlib.suppress(NoMatches):
+                    self.query_one("#token-count", Static).update(
+                        f" \u00b7 ~{self._total_tokens:,} tokens"
+                    )
+
+                # Response summary footer
+                summary = Static(timer.format_summary(token_estimate), classes="response-summary")
+                await step_box.mount(summary)
 
                 # Save step result
                 if self._conversation:
@@ -1342,7 +1439,7 @@ class DworkersApp(App):
                         conversation_id=self._conversation.id,
                         role=role,
                         sender=name,
-                        content="".join(tokens),
+                        content=final_content,
                         timestamp=datetime.now(UTC),
                         is_ai=True,
                     )
@@ -1352,6 +1449,13 @@ class DworkersApp(App):
             self._cancel_streaming.clear()
 
         message_list.scroll_end(animate=False)
+        self._update_input_hint()
+
+        # Drain queued message (user typed while streaming).
+        if self._queued_message:
+            queued = self._queued_message
+            self._queued_message = None
+            await self._handle_input(queued)
 
     @staticmethod
     def _detect_question(text: str) -> tuple[str, list[str]] | None:
