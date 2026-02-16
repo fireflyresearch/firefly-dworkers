@@ -4,6 +4,7 @@ import pytest
 
 from firefly_dworkers_cli.tui.widgets.interactive_question import (
     InteractiveQuestion,
+    OptionItem,
     QuestionInput,
 )
 
@@ -73,3 +74,14 @@ class TestInteractiveQuestion:
     def test_question_input_subclass(self):
         inp = QuestionInput(placeholder="Type...")
         assert isinstance(inp, QuestionInput)
+
+
+class TestClickableOptions:
+    def test_option_item_stores_index_and_text(self):
+        item = OptionItem("Alpha", 0)
+        assert item._option_text == "Alpha"
+        assert item._option_index == 0
+
+    def test_option_item_stores_different_index(self):
+        item = OptionItem("Beta", 1)
+        assert item._option_index == 1

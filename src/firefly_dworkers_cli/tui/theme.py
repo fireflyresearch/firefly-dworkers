@@ -320,6 +320,18 @@ Screen {
     height: auto;
 }
 
+.question-option {
+    height: 1;
+    width: 1fr;
+    padding: 0;
+    color: #d4d4d4;
+}
+
+.question-option:hover {
+    background: #333333;
+    color: #ffffff;
+}
+
 .question-hint {
     color: #555555;
     height: 1;
