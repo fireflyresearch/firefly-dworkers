@@ -46,6 +46,7 @@ from firefly_dworkers_cli.tui.backend.store import ConversationStore
 from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
 from firefly_dworkers_cli.tui.commands import CommandRouter
 from firefly_dworkers_cli.tui.response_timer import ResponseTimer
+from firefly_dworkers_cli.tui.retry_policy import RetryPolicy
 from firefly_dworkers_cli.tui.theme import APP_CSS
 from firefly_dworkers_cli.tui.widgets.task_progress import TaskProgressBlock
 
@@ -458,6 +459,8 @@ class DworkersApp(App):
         self._connecting_timer: asyncio.Task | None = None
         self._tab_states: dict[str, dict] = {}
         self._pending_plan: list[tuple[str, str]] | None = None
+        self._plan_answer_event: asyncio.Event | None = None
+        self._plan_answer_text: str | None = None
         if self._autonomy_override:
             self._router.autonomy_level = self._autonomy_override
 
@@ -1346,7 +1349,8 @@ class DworkersApp(App):
         if not self._pending_plan or not self._client:
             return
 
-        steps = self._pending_plan
+        # Convert to list-of-lists so we can mutate next-step tasks (question injection).
+        steps_list: list[list[str]] = [[role, task] for role, task in self._pending_plan]
         self._pending_plan = None
 
         # Remove approval widget
@@ -1356,7 +1360,7 @@ class DworkersApp(App):
 
         # Auto-invite all plan agents to conversation participants
         if self._conversation:
-            for role, _ in steps:
+            for role, _ in steps_list:
                 if role not in self._conversation.participants and role != "user":
                     self._conversation.participants.append(role)
             self._update_participants_display()
@@ -1375,8 +1379,10 @@ class DworkersApp(App):
         self._is_streaming = True
         self._update_toolbar()
 
+        retry_policy = RetryPolicy()
+
         try:
-            for i, (role, task) in enumerate(steps, 1):
+            for i, (role, task) in enumerate(steps_list, 1):
                 name, avatar, avatar_color = self._get_worker_display(role)
                 prefix = f"({avatar}) " if avatar else ""
                 avatar_cls = f" avatar-{avatar_color}" if avatar_color else ""
@@ -1386,7 +1392,7 @@ class DworkersApp(App):
                 await message_list.mount(step_box)
                 await step_box.mount(
                     Static(
-                        f"Step {i}/{len(steps)}: {prefix}{name}",
+                        f"Step {i}/{len(steps_list)}: {prefix}{name}",
                         classes=f"msg-sender msg-sender-ai{avatar_cls}",
                     )
                 )
@@ -1394,69 +1400,114 @@ class DworkersApp(App):
                 content_widget = RichResponseMarkdown("", classes="msg-content")
                 await step_box.mount(content_widget)
 
-                # Progress indicator (thinking spinner)
-                indicator = TaskProgressBlock()
-                await step_box.mount(indicator)
-                message_list.scroll_end(animate=False)
+                # Retry loop for this step
+                step_succeeded = False
+                attempt = 0
+                last_error_msg = ""
 
-                # Execute step with timing
-                timer = ResponseTimer()
-                timer.start()
-                tokens: list[str] = []
-                first_token_marked = False
-                last_render = 0.0
+                while not step_succeeded:
+                    attempt += 1
 
-                try:
-                    history = self._build_message_history()
-                    async for event in self._client.run_worker(
-                        role,
-                        task,
-                        conversation_id=self._conversation.id if self._conversation else None,
-                        message_history=history,
-                        participants=participant_info,
-                    ):
-                        if self._cancel_streaming.is_set():
-                            tokens.append("\n\n_[Plan cancelled]_")
-                            await content_widget.update("".join(tokens))
-                            timer.stop()
-                            indicator.stop()
-                            indicator.remove()
-                            return
-                        if event.type in ("token", "complete"):
-                            if not first_token_marked:
-                                first_token_marked = True
-                                timer.mark_first_token()
-                                indicator.set_streaming_mode(timer)
-                            tokens.append(event.content)
-                            # Throttle: render at most every 80ms
-                            now = time.monotonic()
-                            if event.type == "complete" or now - last_render >= 0.08:
-                                last_render = now
+                    # Progress indicator (thinking spinner) — fresh per attempt
+                    indicator = TaskProgressBlock()
+                    await step_box.mount(indicator)
+                    message_list.scroll_end(animate=False)
+
+                    # Execute step with timing — fresh per attempt
+                    timer = ResponseTimer()
+                    timer.start()
+                    tokens: list[str] = []
+                    first_token_marked = False
+                    last_render = 0.0
+                    had_error = False
+
+                    try:
+                        history = self._build_message_history()
+                        async for event in self._client.run_worker(
+                            role,
+                            task,
+                            conversation_id=self._conversation.id if self._conversation else None,
+                            message_history=history,
+                            participants=participant_info,
+                        ):
+                            if self._cancel_streaming.is_set():
+                                tokens.append("\n\n_[Plan cancelled]_")
                                 await content_widget.update("".join(tokens))
+                                timer.stop()
+                                indicator.stop()
+                                indicator.remove()
+                                return
+                            if event.type in ("token", "complete"):
+                                if not first_token_marked:
+                                    first_token_marked = True
+                                    timer.mark_first_token()
+                                    indicator.set_streaming_mode(timer)
+                                tokens.append(event.content)
+                                # Throttle: render at most every 80ms
+                                now = time.monotonic()
+                                if event.type == "complete" or now - last_render >= 0.08:
+                                    last_render = now
+                                    await content_widget.update("".join(tokens))
+                                    if self._is_near_bottom(message_list):
+                                        message_list.scroll_end(animate=False)
+                            elif event.type == "tool_call":
+                                tool_box = Vertical(classes="tool-call")
+                                await step_box.mount(tool_box, before=indicator)
+                                await tool_box.mount(
+                                    Static(f"\u2699 {event.content}", classes="tool-call-header")
+                                )
                                 if self._is_near_bottom(message_list):
                                     message_list.scroll_end(animate=False)
-                        elif event.type == "tool_call":
-                            tool_box = Vertical(classes="tool-call")
-                            await step_box.mount(tool_box, before=indicator)
-                            await tool_box.mount(
-                                Static(f"\u2699 {event.content}", classes="tool-call-header")
+                            elif event.type == "error":
+                                last_error_msg = event.content
+                                had_error = True
+                                if retry_policy.should_retry(attempt, event.content):
+                                    # Show retry message, then break inner loop to retry
+                                    retry_msg = retry_policy.format_retry_message(
+                                        name, i, len(steps_list), attempt
+                                    )
+                                    await content_widget.update(retry_msg)
+                                else:
+                                    # Not retryable or retries exhausted — show error
+                                    tokens.append(f"\n\n**Error:** {event.content}")
+                                    await content_widget.update("".join(tokens))
+                    except Exception as e:
+                        last_error_msg = str(e)
+                        had_error = True
+                        if retry_policy.should_retry(attempt, str(e)):
+                            retry_msg = retry_policy.format_retry_message(
+                                name, i, len(steps_list), attempt
                             )
-                            if self._is_near_bottom(message_list):
-                                message_list.scroll_end(animate=False)
-                        elif event.type == "error":
-                            tokens.append(f"\n\n**Error:** {event.content}")
+                            await content_widget.update(retry_msg)
+                        else:
+                            tokens.append(f"\n\n**Error:** {e}")
                             await content_widget.update("".join(tokens))
-                except Exception as e:
-                    tokens.append(f"\n\n**Error:** {e}")
-                    await content_widget.update("".join(tokens))
-                finally:
-                    timer.stop()
-                    indicator.stop()
-                    indicator.remove()
+                    finally:
+                        timer.stop()
+                        indicator.stop()
+                        indicator.remove()
+
+                    if had_error:
+                        if retry_policy.should_retry(attempt, last_error_msg):
+                            delay = retry_policy.delay_for_attempt(attempt)
+                            await asyncio.sleep(delay)
+                            continue  # retry the step
+                        else:
+                            # Show failure message if retries exhausted on a retryable error
+                            if retry_policy.is_retryable(last_error_msg) and attempt > 1:
+                                fail_msg = retry_policy.format_failure_message(
+                                    name, i, len(steps_list), last_error_msg
+                                )
+                                await content_widget.update(fail_msg)
+                            break  # move to next step
+
+                    # Success — no error
+                    step_succeeded = True
 
                 # Final flush
                 final_content = "".join(tokens)
-                await content_widget.update(final_content)
+                if step_succeeded:
+                    await content_widget.update(final_content)
 
                 # Token count update
                 token_estimate = self._estimate_tokens(final_content)
@@ -1482,9 +1533,27 @@ class DworkersApp(App):
                         is_ai=True,
                     )
                     self._store.add_message(self._conversation.id, step_msg)
+
+                # Detect question and pause for user answer before next step
+                if step_succeeded and i < len(steps_list):
+                    detected = self._detect_question(final_content)
+                    if detected is not None:
+                        question_text, options = detected
+                        self._plan_answer_event = asyncio.Event()
+                        self._plan_answer_text = None
+                        await self._mount_plan_question(step_box, question_text, options)
+                        await self._plan_answer_event.wait()
+                        if self._plan_answer_text:
+                            _next_role, next_task = steps_list[i]
+                            steps_list[i][1] = (
+                                f"Context: The user answered '{self._plan_answer_text}'"
+                                f" to the previous question.\n\n{next_task}"
+                            )
         finally:
             self._is_streaming = False
             self._cancel_streaming.clear()
+            self._plan_answer_event = None
+            self._plan_answer_text = None
             self._update_toolbar()
 
         message_list.scroll_end(animate=False)
@@ -2880,6 +2949,22 @@ class DworkersApp(App):
         """Handle new tab click."""
         await self.action_new_conversation()
 
+    async def _mount_plan_question(
+        self,
+        step_box: Vertical,
+        question: str,
+        options: list[str],
+    ) -> None:
+        """Mount an interactive question inside a plan step box."""
+        from firefly_dworkers_cli.tui.widgets.interactive_question import InteractiveQuestion
+
+        widget = InteractiveQuestion(question=question, options=options, id="plan-question")
+        await step_box.mount(widget)
+        widget.focus()
+        self._update_toolbar()
+        message_list = self.query_one("#message-list", VerticalScroll)
+        message_list.scroll_end(animate=False)
+
     async def _mount_question(
         self,
         question: str,
@@ -2904,6 +2989,25 @@ class DworkersApp(App):
     async def on_interactive_question_answered(self, event) -> None:
         """Handle the user's answer to an interactive question."""
         from firefly_dworkers_cli.tui.widgets.interactive_question import InteractiveQuestion
+
+        # Plan-mode question: signal the waiting coroutine instead of sending input
+        if self._plan_answer_event is not None:
+            self._plan_answer_text = event.choice
+            # Remove the plan question widget from the step box
+            with contextlib.suppress(NoMatches):
+                widget = self.query_one("#plan-question", InteractiveQuestion)
+                parent = widget.parent
+                await widget.remove()
+                # Show a confirmation label in the step box
+                if parent is not None:
+                    await parent.mount(
+                        Static(
+                            f"\u2714 You answered: {event.choice}",
+                            classes="msg-content",
+                        )
+                    )
+            self._plan_answer_event.set()
+            return
 
         # Remove the question widget from the input area
         for widget in self.query(InteractiveQuestion):
