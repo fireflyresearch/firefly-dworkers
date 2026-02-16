@@ -22,7 +22,7 @@ from textual import events
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.command import Hit, Hits, Provider
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Grid, Horizontal, Vertical, VerticalScroll
 from textual.css.query import NoMatches
 from textual.message import Message
 from textual.widgets import Markdown, Static, TextArea
@@ -49,6 +49,8 @@ from firefly_dworkers_cli.tui.commands import CommandRouter
 from firefly_dworkers_cli.tui.response_timer import ResponseTimer
 from firefly_dworkers_cli.tui.retry_policy import RetryPolicy
 from firefly_dworkers_cli.tui.theme import APP_CSS
+from firefly_dworkers_cli.tui.widgets.agent_lane import AgentLane
+from firefly_dworkers_cli.tui.widgets.split_pane import SplitPaneContainer
 from firefly_dworkers_cli.tui.widgets.task_progress import TaskProgressBlock
 
 # Fallback roles used before the backend has been queried.
@@ -402,7 +404,7 @@ class DworkersApp(App):
         Binding("ctrl+q", "quit", "Quit", show=False),
         Binding("ctrl+c", "cancel_or_quit", "Cancel/Quit", show=False),
         Binding("ctrl+n", "new_conversation", "New Chat", show=False),
-        Binding("ctrl+l", "clear_chat", "Clear", show=False),
+        Binding("ctrl+l", "toggle_layout", "Toggle Layout", show=False),
         Binding("escape", "focus_input", "Focus Input", show=False),
         Binding("ctrl+tab", "next_tab", "Next Tab", show=False),
         Binding("ctrl+o", "toggle_verbose", "Toggle verbose", show=False),
@@ -466,6 +468,9 @@ class DworkersApp(App):
         self._verbose_mode: bool = False
         self._question_queue: QuestionQueue | None = None
         self._step_cancel_events: list[asyncio.Event] = []
+        self._split_pane_mode: bool = False
+        self._split_pane_container: SplitPaneContainer | None = None
+        self._agent_lanes: list[AgentLane] = []
         if self._autonomy_override:
             self._router.autonomy_level = self._autonomy_override
 
@@ -590,6 +595,9 @@ class DworkersApp(App):
 
         # Message list (hidden initially, shown once chat starts)
         yield VerticalScroll(id="message-list")
+
+        # Split-pane container (hidden initially, shown in split mode during plan execution)
+        yield SplitPaneContainer(agent_count=1, id="split-pane-container")
 
         # Input area
         with Vertical(id="input-area"):
@@ -1834,7 +1842,8 @@ class DworkersApp(App):
                 toolbar.set_class(True, "toolbar-question")
                 toolbar.set_class(False, "toolbar-plan", "toolbar-streaming", "toolbar-default")
             elif self._is_streaming:
-                toolbar.update("[Esc] Cancel")
+                layout_hint = "Ctrl+L split" if not self._split_pane_mode else "Ctrl+L inline"
+                toolbar.update(f"[Esc] Cancel  ·  {layout_hint}")
                 toolbar.set_class(True, "toolbar-streaming")
                 toolbar.set_class(False, "toolbar-plan", "toolbar-default", "toolbar-question")
             elif self._private_role:
@@ -3057,6 +3066,32 @@ class DworkersApp(App):
             tab_bar.next_tab()
             if tab_bar._active_id:
                 asyncio.create_task(self._switch_conversation(tab_bar._active_id))
+
+    def action_toggle_layout(self) -> None:
+        """Toggle between inline and split-pane layout.
+
+        Only toggles during plan execution (when _is_streaming is True).
+        Outside plan execution, acts as clear chat.
+        """
+        if not self._is_streaming or self._pending_plan is not None:
+            # Not executing a plan — fall back to clear chat behavior
+            self.action_clear_chat()
+            return
+
+        self._split_pane_mode = not self._split_pane_mode
+
+        with contextlib.suppress(NoMatches):
+            message_list = self.query_one("#message-list", VerticalScroll)
+            split_pane = self.query_one("#split-pane-container", SplitPaneContainer)
+
+            if self._split_pane_mode:
+                # Hide inline message list, show split pane
+                message_list.styles.display = "none"
+                split_pane.add_class("visible")
+            else:
+                # Show inline message list, hide split pane
+                message_list.styles.display = "block"
+                split_pane.remove_class("visible")
 
     def action_toggle_verbose(self) -> None:
         """Toggle verbose mode for tool call display."""
