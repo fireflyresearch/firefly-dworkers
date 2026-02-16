@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import AsyncIterator
 from typing import Any
@@ -276,9 +277,62 @@ class LocalClient:
                 async with await worker.run_stream(
                     input_content, **stream_kwargs,
                 ) as stream:
-                    async for token in stream.stream_tokens():
-                        yield StreamEvent(type="token", content=token)
-                yield StreamEvent(type="complete", content="")
+                    # Attempt to capture tool events from underlying pydantic-ai stream.
+                    raw_stream = getattr(stream, "_stream", None)
+                    if raw_stream is not None and hasattr(raw_stream, "__aiter__"):
+                        try:
+                            async for event in raw_stream:
+                                ek = getattr(event, "event_kind", None)
+                                if ek == "part_delta":
+                                    delta = getattr(event, "delta", None)
+                                    if delta is not None:
+                                        content_delta = getattr(delta, "content_delta", None)
+                                        if content_delta:
+                                            yield StreamEvent(type="token", content=content_delta)
+                                elif ek == "part_start":
+                                    part = getattr(event, "part", None)
+                                    if part is not None:
+                                        tool_name = getattr(part, "tool_name", None)
+                                        if tool_name:
+                                            args: dict[str, Any] = {}
+                                            raw_args = getattr(part, "args", None)
+                                            if raw_args:
+                                                try:
+                                                    args = (
+                                                        json.loads(raw_args)
+                                                        if isinstance(raw_args, str)
+                                                        else (
+                                                            dict(raw_args)
+                                                            if hasattr(raw_args, "items")
+                                                            else {}
+                                                        )
+                                                    )
+                                                except Exception:
+                                                    args = {"raw": str(raw_args)}
+                                            yield StreamEvent(
+                                                type="tool_call",
+                                                content=tool_name,
+                                                metadata={
+                                                    "tool_name": tool_name,
+                                                    "params": args,
+                                                    "status": "running",
+                                                },
+                                            )
+                            yield StreamEvent(type="complete", content="")
+                        except Exception:
+                            # If raw stream iteration fails, fall back to stream_tokens.
+                            logger.debug(
+                                "Raw stream iteration failed, falling back to stream_tokens",
+                                exc_info=True,
+                            )
+                            async for token in stream.stream_tokens():
+                                yield StreamEvent(type="token", content=token)
+                            yield StreamEvent(type="complete", content="")
+                    else:
+                        # Standard path: stream_tokens only.
+                        async for token in stream.stream_tokens():
+                            yield StreamEvent(type="token", content=token)
+                        yield StreamEvent(type="complete", content="")
             else:
                 result = await worker.run(input_content)
                 output = str(result.output) if hasattr(result, "output") else str(result)
