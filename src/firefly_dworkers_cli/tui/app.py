@@ -44,6 +44,7 @@ from firefly_dworkers_cli.tui.backend.models import (
 from firefly_dworkers_cli.tui.backend.project_store import ProjectStore
 from firefly_dworkers_cli.tui.backend.store import ConversationStore
 from firefly_dworkers_cli.tui.checkpoint_handler import TUICheckpointHandler
+from firefly_dworkers_cli.tui.question_queue import QuestionQueue
 from firefly_dworkers_cli.tui.commands import CommandRouter
 from firefly_dworkers_cli.tui.response_timer import ResponseTimer
 from firefly_dworkers_cli.tui.retry_policy import RetryPolicy
@@ -463,6 +464,7 @@ class DworkersApp(App):
         self._plan_answer_event: asyncio.Event | None = None
         self._plan_answer_text: str | None = None
         self._verbose_mode: bool = False
+        self._question_queue: QuestionQueue | None = None
         if self._autonomy_override:
             self._router.autonomy_level = self._autonomy_override
 
@@ -1542,6 +1544,28 @@ class DworkersApp(App):
             )
             self._store.add_message(self._conversation.id, step_msg)
 
+        # Detect question — enqueue into QuestionQueue for parallel coordination
+        if step_succeeded and self._question_queue is not None:
+            detected = self._detect_question(final_content)
+            if detected is not None:
+                question_text, options = detected
+                entry = self._question_queue.enqueue(role, question_text, options)
+                await self._mount_plan_question(step_box, question_text, options)
+                # This blocks ONLY this step's task — others continue
+                await entry.wait()
+                # Store answer for conversation context
+                if entry.answer_text and self._conversation:
+                    answer_msg = ChatMessage(
+                        id=f"msg_{uuid.uuid4().hex[:12]}",
+                        conversation_id=self._conversation.id,
+                        role="user",
+                        sender="You",
+                        content=entry.answer_text,
+                        timestamp=datetime.now(UTC),
+                        is_ai=False,
+                    )
+                    self._store.add_message(self._conversation.id, answer_msg)
+
         return final_content, step_succeeded
 
     async def _execute_approved_plan(self) -> None:
@@ -1581,43 +1605,52 @@ class DworkersApp(App):
 
         retry_policy = RetryPolicy()
 
+        # Initialize question queue for parallel coordination
+        self._question_queue = QuestionQueue()
+
+        # Mount all step containers upfront (preserves visual order)
+        step_boxes: list[Vertical] = []
+        for _role, _task in steps_list:
+            step_box = Vertical(classes="msg-box-ai")
+            await message_list.mount(step_box)
+            step_boxes.append(step_box)
+        message_list.scroll_end(animate=False)
+
         try:
-            for i, (role, task) in enumerate(steps_list, 1):
-                step_box = Vertical(classes="msg-box-ai")
-                await message_list.mount(step_box)
-
-                final_content, step_succeeded = await self._run_single_plan_step(
-                    step_index=i,
-                    total_steps=len(steps_list),
-                    role=role,
-                    task=task,
-                    step_box=step_box,
-                    message_list=message_list,
-                    retry_policy=retry_policy,
-                    participant_info=participant_info,
-                )
-
-                if self._cancel_streaming.is_set():
-                    return
-
-                # Detect question and pause for user answer before next step
-                if step_succeeded and i < len(steps_list):
-                    detected = self._detect_question(final_content)
-                    if detected is not None:
-                        question_text, options = detected
-                        self._plan_answer_event = asyncio.Event()
-                        self._plan_answer_text = None
-                        await self._mount_plan_question(step_box, question_text, options)
-                        await self._plan_answer_event.wait()
-                        if self._plan_answer_text:
-                            _next_role, next_task = steps_list[i]
-                            steps_list[i][1] = (
-                                f"Context: The user answered '{self._plan_answer_text}'"
-                                f" to the previous question.\n\n{next_task}"
-                            )
+            # Run all steps in parallel
+            async with asyncio.TaskGroup() as tg:
+                for i, ((role, task), step_box) in enumerate(
+                    zip(steps_list, step_boxes), 1
+                ):
+                    tg.create_task(
+                        self._run_single_plan_step(
+                            step_index=i,
+                            total_steps=len(steps_list),
+                            role=role,
+                            task=task,
+                            step_box=step_box,
+                            message_list=message_list,
+                            retry_policy=retry_policy,
+                            participant_info=participant_info,
+                        )
+                    )
+        except* Exception as eg:
+            # TaskGroup raises ExceptionGroup on failures — log but don't crash
+            for exc in eg.exceptions:
+                try:
+                    last_box = step_boxes[-1] if step_boxes else None
+                    if last_box is not None:
+                        await last_box.mount(
+                            Static(f"\n\n**Error:** {exc}", classes="msg-content")
+                        )
+                except Exception:
+                    pass
         finally:
             self._is_streaming = False
             self._cancel_streaming.clear()
+            if self._question_queue is not None:
+                self._question_queue.clear()
+            self._question_queue = None
             self._plan_answer_event = None
             self._plan_answer_text = None
             self._update_toolbar()
@@ -3044,7 +3077,9 @@ class DworkersApp(App):
         """Mount an interactive question inside a plan step box."""
         from firefly_dworkers_cli.tui.widgets.interactive_question import InteractiveQuestion
 
-        widget = InteractiveQuestion(question=question, options=options, id="plan-question")
+        qid = f"plan-question-{uuid.uuid4().hex[:6]}"
+        widget = InteractiveQuestion(question=question, options=options, id=qid)
+        widget.add_class("plan-question")
         await step_box.mount(widget)
         widget.focus()
         self._update_toolbar()
@@ -3076,15 +3111,14 @@ class DworkersApp(App):
         """Handle the user's answer to an interactive question."""
         from firefly_dworkers_cli.tui.widgets.interactive_question import InteractiveQuestion
 
-        # Plan-mode question: signal the waiting coroutine instead of sending input
-        if self._plan_answer_event is not None:
-            self._plan_answer_text = event.choice
-            # Remove the plan question widget from the step box
-            with contextlib.suppress(NoMatches):
-                widget = self.query_one("#plan-question", InteractiveQuestion)
+        # QuestionQueue mode: answer via queue (parallel plan execution)
+        if self._question_queue is not None and self._question_queue.pending_count > 0:
+            # Remove the first plan-question widget found
+            plan_questions = list(self.query(".plan-question"))
+            if plan_questions:
+                widget = plan_questions[0]
                 parent = widget.parent
                 await widget.remove()
-                # Show a confirmation label in the step box
                 if parent is not None:
                     await parent.mount(
                         Static(
@@ -3092,6 +3126,29 @@ class DworkersApp(App):
                             classes="msg-content",
                         )
                     )
+            # Answer the first pending question in the queue
+            entry = self._question_queue.next_unanswered()
+            if entry is not None:
+                self._question_queue.answer(entry.id, event.choice)
+            self._update_toolbar()
+            return
+
+        # Legacy single-event mode (fallback for non-parallel mode)
+        if self._plan_answer_event is not None:
+            self._plan_answer_text = event.choice
+            with contextlib.suppress(NoMatches):
+                plan_questions = list(self.query(".plan-question"))
+                if plan_questions:
+                    widget = plan_questions[0]
+                    parent = widget.parent
+                    await widget.remove()
+                    if parent is not None:
+                        await parent.mount(
+                            Static(
+                                f"\u2714 You answered: {event.choice}",
+                                classes="msg-content",
+                            )
+                        )
             self._plan_answer_event.set()
             return
 
