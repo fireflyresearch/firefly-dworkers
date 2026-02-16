@@ -225,7 +225,11 @@ class LocalClient:
             from firefly_dworkers.workers.factory import worker_factory
 
             config = tenant_registry.get(tenant_id)
-            worker_role = WorkerRole(role)
+            try:
+                worker_role = WorkerRole(role)
+            except ValueError:
+                worker_role = WorkerRole.ANALYST  # fallback for unknown roles
+                logger.info("Unknown role %r, falling back to analyst", role)
             worker = worker_factory.create(
                 worker_role, config, name=f"{role}-tui"
             )

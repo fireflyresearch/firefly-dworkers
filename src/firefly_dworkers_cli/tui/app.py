@@ -305,6 +305,15 @@ class PromptInput(TextArea):
             event.prevent_default()
             return
 
+        # Plan modify: "m" on empty input modifies pending plan
+        if event.key == "m" and not self.text.strip() and hasattr(self.app, '_pending_plan') and self.app._pending_plan is not None:
+            self.app._dismiss_pending_plan()
+            self.value = "Please revise the plan: "
+            self.focus()
+            event.stop()
+            event.prevent_default()
+            return
+
         if event.key == "enter":
             text = self.text.strip()
             # Plan approval: Enter on empty input approves the pending plan
@@ -561,6 +570,10 @@ class DworkersApp(App):
 
         # Conversation tab bar
         yield ConversationTabBar()
+
+        # Contextual toolbar
+        yield Static("/plan \u00b7 /team \u00b7 /project \u00b7 /help \u00b7 Ctrl+P all commands",
+                     id="toolbar", classes="toolbar-default")
 
         # Welcome banner (shown initially, hidden once chat starts)
         with Vertical(id="welcome"):
@@ -971,6 +984,25 @@ class DworkersApp(App):
 
     async def _handle_input(self, text: str) -> None:
         """Route input to slash commands or message sending."""
+        # Plan approval: intercept text commands when a plan is pending
+        if self._pending_plan is not None:
+            lower = text.strip().lower()
+            if lower in ("approve", "yes", "go", "ok", "y"):
+                await self._execute_approved_plan()
+                return
+            elif lower in ("modify", "revise", "edit", "change"):
+                self._dismiss_pending_plan()
+                try:
+                    prompt_input = self.query_one("#prompt-input", PromptInput)
+                    prompt_input.value = "Please revise the plan: "
+                    prompt_input.focus()
+                except NoMatches:
+                    pass
+                return
+            elif lower in ("skip", "reject", "no", "cancel", "n"):
+                self._dismiss_pending_plan()
+                return
+
         if text.startswith("/"):
             await self._handle_command(text)
         else:
@@ -1081,6 +1113,7 @@ class DworkersApp(App):
         timer = ResponseTimer()
         timer.start()
         self._is_streaming = True
+        self._update_toolbar()
         tokens: list[str] = []
         first_token_marked = False
         last_render = 0.0
@@ -1149,6 +1182,7 @@ class DworkersApp(App):
             timer.stop()
             self._is_streaming = False
             self._cancel_streaming.clear()
+            self._update_toolbar()
             indicator.stop()
             indicator.remove()
 
@@ -1240,9 +1274,9 @@ class DworkersApp(App):
     # Numbered option pattern: "1. Option text" or "1) Option text"
     _NUMBERED_OPTION_RE = re.compile(r"^\s*(\d+)[.)]\s+(.+)", re.MULTILINE)
 
-    # Plan step pattern: "1. [role] Task description"
+    # Plan step pattern: "1. [role] Task description" (supports multi-word roles)
     _PLAN_STEP_RE = re.compile(
-        r"^\s*(\d+)\.\s+\[(\w+)\]\s+(.+)",
+        r"^\s*(\d+)\.\s+\[([^\]]+)\]\s+(.+)",
         re.MULTILINE,
     )
 
@@ -1255,7 +1289,8 @@ class DworkersApp(App):
         matches = self._PLAN_STEP_RE.findall(content)
         if len(matches) < 2:
             return None
-        return [(role.lower(), task.strip()) for _, role, task in matches]
+        # Normalize: "content writer" → "content_writer" for WorkerRole compatibility
+        return [(role.strip().lower().replace(" ", "_"), task.strip()) for _, role, task in matches]
 
     async def _mount_plan_approval(self, steps: list[tuple[str, str]]) -> None:
         """Show an approval widget for a detected plan."""
@@ -1294,6 +1329,7 @@ class DworkersApp(App):
                 "Enter approve \u00b7 m modify \u00b7 Esc skip"
             )
 
+        self._update_toolbar()
         message_list.scroll_end(animate=False)
 
     def _dismiss_pending_plan(self) -> None:
@@ -1303,6 +1339,7 @@ class DworkersApp(App):
             for w in self.query(".plan-approval"):
                 w.remove()
         self._update_input_hint()
+        self._update_toolbar()
 
     async def _execute_approved_plan(self) -> None:
         """Execute the approved plan steps sequentially with full progress feedback."""
@@ -1336,6 +1373,7 @@ class DworkersApp(App):
 
         message_list = self.query_one("#message-list", VerticalScroll)
         self._is_streaming = True
+        self._update_toolbar()
 
         try:
             for i, (role, task) in enumerate(steps, 1):
@@ -1447,6 +1485,7 @@ class DworkersApp(App):
         finally:
             self._is_streaming = False
             self._cancel_streaming.clear()
+            self._update_toolbar()
 
         message_list.scroll_end(animate=False)
         self._update_input_hint()
@@ -1600,6 +1639,28 @@ class DworkersApp(App):
                 return agents[0]
         return "manager"
 
+    def _update_toolbar(self) -> None:
+        """Update the contextual toolbar based on current app state."""
+        with contextlib.suppress(NoMatches):
+            toolbar = self.query_one("#toolbar", Static)
+            if self._pending_plan is not None:
+                toolbar.update("[Enter] Approve  [m] Modify  [Esc] Skip")
+                toolbar.set_class(True, "toolbar-plan")
+                toolbar.set_class(False, "toolbar-streaming", "toolbar-default")
+            elif self._is_streaming:
+                toolbar.update("[Esc] Cancel")
+                toolbar.set_class(True, "toolbar-streaming")
+                toolbar.set_class(False, "toolbar-plan", "toolbar-default")
+            elif self._private_role:
+                name, _, _ = self._get_worker_display(self._private_role)
+                toolbar.update(f"Private: @{name} \u00b7 [Esc] Exit private")
+                toolbar.set_class(True, "toolbar-default")
+                toolbar.set_class(False, "toolbar-plan", "toolbar-streaming")
+            else:
+                toolbar.update("/plan \u00b7 /team \u00b7 /project \u00b7 /help \u00b7 Ctrl+P all commands")
+                toolbar.set_class(True, "toolbar-default")
+                toolbar.set_class(False, "toolbar-plan", "toolbar-streaming")
+
     def _hide_welcome(self) -> None:
         """Hide the welcome banner and show the message list."""
         welcome = self.query_one("#welcome", Vertical)
@@ -1615,6 +1676,12 @@ class DworkersApp(App):
 
     def _update_input_hint(self, text: str = "") -> None:
         """Update the input hint to reflect the detected @role target."""
+        if self._pending_plan is not None:
+            with contextlib.suppress(NoMatches):
+                self.query_one("#input-hint", Static).update(
+                    "Enter approve \u00b7 m modify \u00b7 Esc skip  (or type: approve / modify / skip)"
+                )
+            return
         if self._private_role:
             hint = f"Private chat with @{self._private_role} · Enter to send"
         elif not text:

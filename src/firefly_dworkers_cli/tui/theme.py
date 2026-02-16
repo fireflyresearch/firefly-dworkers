@@ -564,6 +564,24 @@ Screen {
     padding: 0;
 }
 
+/* -- Contextual toolbar --------------------- */
+
+#toolbar {
+    dock: top;
+    height: 1;
+    background: #1e1e1e;
+    color: #888888;
+    padding: 0 1;
+}
+
+#toolbar.toolbar-plan {
+    color: #4ec9b0;
+}
+
+#toolbar.toolbar-streaming {
+    color: #e5c07b;
+}
+
 /* -- Conversation tab bar ------------------- */
 
 #tab-bar {
